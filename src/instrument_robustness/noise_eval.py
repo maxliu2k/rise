@@ -28,30 +28,51 @@ import torch
 from sklearn.metrics import balanced_accuracy_score, confusion_matrix, matthews_corrcoef
 
 from .config import (
-    BATCH_SIZE, CLASSES, NOISE_SEED, OUTPUTS, SEED, SEEDS, SNR_LEVELS_DB, WAVE_DIR,
+    BATCH_SIZE, CLASSES, IN_BAND_HZ, NOISE_COLORS, NOISE_SEED, OUTPUTS, SEED, SEEDS,
+    SNR_LEVELS_DB, SR, WAVE_DIR,
 )
 from .prep_data import wav_to_logmel
 from .train import agg, get_device, load_manifest, MediumCNN, set_seed
 
 
-def add_noise_at_snr(y, snr_db, rng):
-    """Additive white Gaussian noise at `snr_db`, measured over the whole clip.
+def colored_noise(n, exponent, rng):
+    """Unit-variance noise with power spectral density ~ 1/f**exponent.
+    exponent 0 = white, 1 = pink, 2 = brown. Built in the rfft domain, then inverted."""
+    f = np.fft.rfftfreq(n, d=1.0 / SR)
+    scale = np.ones_like(f)
+    scale[1:] = 1.0 / (f[1:] ** (exponent / 2.0))
+    scale[0] = scale[1] if scale.size > 1 else 1.0  # DC: avoid divide-by-zero blowup
+    spec = (rng.normal(size=f.size) + 1j * rng.normal(size=f.size)) * scale
+    x = np.fft.irfft(spec, n=n).astype(np.float32)
+    return x / (x.std() + 1e-12)
 
-    Returns (noisy waveform, achieved SNR in dB).
-    """
+
+def _inband_snr(y, noise):
+    """SNR measured only over IN_BAND_HZ — the honest figure for coloured noise, whose
+    energy may sit largely outside the band where the music lives."""
+    f = np.fft.rfftfreq(y.size, d=1.0 / SR)
+    band = (f >= IN_BAND_HZ[0]) & (f <= IN_BAND_HZ[1])
+    ps = float((np.abs(np.fft.rfft(y)) ** 2)[band].sum())
+    pn = float((np.abs(np.fft.rfft(noise)) ** 2)[band].sum())
+    return 10.0 * np.log10(ps / pn) if pn > 0 else float("nan")
+
+
+def add_noise_at_snr(y, snr_db, rng, exponent=0.0):
+    """Additive noise at `snr_db` over total clip power. exponent selects the colour
+    (0=white, 1=pink, 2=brown). Returns (noisy waveform, achieved nominal dB, in-band dB)."""
     p_sig = float(np.mean(y ** 2))
     if p_sig <= 0:
-        return y.copy(), float("nan")
-    p_noise = p_sig / (10 ** (snr_db / 10.0))
-    noise = rng.normal(0.0, np.sqrt(p_noise), size=y.shape).astype(np.float32)
-    achieved = 10.0 * np.log10(p_sig / float(np.mean(noise ** 2)))
-    return (y + noise).astype(np.float32), achieved
+        return y.copy(), float("nan"), float("nan")
+    noise = colored_noise(y.size, exponent, rng)          # unit variance
+    noise = noise * np.sqrt(p_sig / (10 ** (snr_db / 10.0)))  # scale to total-power SNR
+    nominal = 10.0 * np.log10(p_sig / float(np.mean(noise ** 2)))
+    return (y + noise).astype(np.float32), nominal, _inband_snr(y, noise)
 
 
-def build_specs(records, snr_db, cond_idx):
+def build_specs(records, snr_db, cond_idx, exponent):
     """Spectrograms for one condition, built once and shared across all seed models.
-    snr_db=None means clean. Returns (specs, achieved_snr_list)."""
-    specs, achieved = [], []
+    snr_db=None means clean. Returns (specs, nominal_snr_list, inband_snr_list)."""
+    specs, nominal, inband = [], [], []
     for clip_idx, r in enumerate(records):
         y = np.load(WAVE_DIR / f"{r['id']}.npy")
         if snr_db is None:
@@ -60,10 +81,11 @@ def build_specs(records, snr_db, cond_idx):
         # seeded per (condition, clip), independent of model seed, so every model sees the
         # same corrupted inputs and the seed spread is pure model variance
         rng = np.random.default_rng([NOISE_SEED, cond_idx, clip_idx])
-        y_noisy, ach = add_noise_at_snr(y, snr_db, rng)
+        y_noisy, nom, ib = add_noise_at_snr(y, snr_db, rng, exponent)
         specs.append(wav_to_logmel(y_noisy))
-        achieved.append(ach)
-    return specs, achieved
+        nominal.append(nom)
+        inband.append(ib)
+    return specs, nominal, inband
 
 
 @torch.no_grad()
@@ -98,15 +120,14 @@ def score(preds, targets):
     }
 
 
-def run_condition(models, records, targets, snr_db, cond_idx, device):
+def run_condition(models, records, targets, snr_db, cond_idx, exponent, device):
     """Build this condition's spectrograms once, evaluate every seed model, aggregate."""
-    specs, achieved = build_specs(records, snr_db, cond_idx)
+    specs, nominal, inband = build_specs(records, snr_db, cond_idx, exponent)
     per_seed = {seed: score(predict(m, specs, device), targets) for seed, m in models.items()}
 
     baccs = [s["balanced_accuracy"] for s in per_seed.values()]
     mccs = [s["mcc"] for s in per_seed.values()]
     cm_sum = np.sum([s["confusion_matrix"] for s in per_seed.values()], axis=0)
-    # per-class recall averaged across seeds — names which instruments fall first
     recall = {c: agg([per_seed[s]["per_class_recall"][c] for s in per_seed
                       if per_seed[s]["per_class_recall"][c] is not None])
               for c in CLASSES}
@@ -118,59 +139,41 @@ def run_condition(models, records, targets, snr_db, cond_idx, device):
         "mcc": agg(mccs),
         "per_class_recall": recall,
         "confusion_matrix_summed": cm_sum.tolist(),
-        "achieved_snr_db_mean": float(np.mean(achieved)) if achieved else None,
-        "achieved_snr_db_std": float(np.std(achieved)) if achieved else None,
+        "nominal_snr_db": float(np.mean(nominal)) if nominal else None,
+        "inband_snr_db": float(np.nanmean(inband)) if inband else None,
         "per_seed": {seed: {"balanced_accuracy": s["balanced_accuracy"], "mcc": s["mcc"]}
                      for seed, s in per_seed.items()},
     }
 
 
-def plot_sweep(results, path):
-    """Left: balanced accuracy vs SNR, mean line + per-seed spread, with the clean and chance
-    references. Right: per-class recall for all 12, so you can see which instruments the noise
-    takes down first (legend ordered by how far each falls from clean to the noisiest level)."""
-    noisy = [r for r in results if r["snr_db"] is not None]
-    clean = next(r for r in results if r["snr_db"] is None)
-    xs = [r["snr_db"] for r in noisy]
+def plot_colors(by_color, clean_bacc, path):
+    """Two panels, both plotting balanced accuracy vs SNR with one line per noise colour.
+    LEFT uses NOMINAL SNR (total power), RIGHT uses IN-BAND SNR (200Hz-8kHz). The whole
+    point: if the colours separate on the left but collapse onto one curve on the right, the
+    'colour matters' effect was an artifact of measuring SNR over total power. If they stay
+    apart on the right, spectral shape has a real effect beyond where the energy sits."""
     chance = 1.0 / len(CLASSES)
+    cols = {"white": "#444444", "pink": "#e377c2", "brown": "#8c564b"}
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5.2), sharey=True)
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12.5, 5.0))
+    for color, results in by_color.items():
+        noisy = [r for r in results if r["snr_db"] is not None]
+        y = [r["balanced_accuracy"]["mean"] for r in noisy]
+        c = cols.get(color, None)
+        ax1.plot([r["nominal_snr_db"] for r in noisy], y, "o-", color=c, lw=2, ms=5, label=color)
+        ax2.plot([r["inband_snr_db"] for r in noisy], y, "o-", color=c, lw=2, ms=5, label=color)
 
-    ys = [r["balanced_accuracy"]["mean"] for r in noisy]
-    lo = [r["balanced_accuracy"]["min"] for r in noisy]
-    hi = [r["balanced_accuracy"]["max"] for r in noisy]
-    ax1.fill_between(xs, lo, hi, color="#1f77b4", alpha=0.18, label="seed min–max")
-    ax1.plot(xs, ys, "o-", color="#1f77b4", lw=2, ms=6, label="balanced accuracy")
-    for x, y in zip(xs, ys):
-        ax1.annotate(f"{y:.2f}", (x, y), textcoords="offset points", xytext=(0, 8),
-                     ha="center", fontsize=7)
-    ax1.axhline(clean["balanced_accuracy"]["mean"], ls="--", color="#2ca02c", lw=1.5,
-                label=f"clean ({clean['balanced_accuracy']['mean']:.3f})")
-    ax1.axhline(chance, ls=":", color="#d62728", lw=1.5,
-                label=f"chance / collapsed ({chance:.3f})")
-    ax1.set(xlabel="SNR (dB)", ylabel="balanced accuracy", title="Balanced accuracy vs. SNR")
-
-    cmap = plt.get_cmap("turbo")
-    fall = sorted(CLASSES,
-                  key=lambda c: clean["per_class_recall"][c]["mean"]
-                  - noisy[-1]["per_class_recall"][c]["mean"], reverse=True)
-    for rank, c in enumerate(fall):
-        col = cmap(rank / max(len(CLASSES) - 1, 1))
-        ax2.plot(xs, [r["per_class_recall"][c]["mean"] for r in noisy], "o-",
-                 color=col, lw=1.3, ms=3, label=c)
-    ax2.axhline(chance, ls=":", color="#888", lw=1)
-    ax2.set(xlabel="SNR (dB)", ylabel="recall (mean over seeds)",
-            title="Per-class recall — legend ordered by how far each falls")
-
-    for ax in (ax1, ax2):
-        ax.set_xticks(xs)
-        ax.set_ylim(-0.03, 1.05)
-        ax.invert_xaxis()  # left-to-right = cleaner-to-noisier
+    for ax, lab in ((ax1, "nominal SNR (total power)"), (ax2, "in-band SNR (200Hz–8kHz)")):
+        ax.axhline(clean_bacc, ls="--", color="#2ca02c", lw=1.3, label=f"clean ({clean_bacc:.3f})")
+        ax.axhline(chance, ls=":", color="#d62728", lw=1.3, label=f"chance ({chance:.3f})")
+        ax.set(xlabel=lab, ylabel="balanced accuracy", ylim=(-0.03, 1.02))
+        ax.invert_xaxis()
         ax.grid(alpha=0.3)
-    ax1.legend(loc="lower left", fontsize=8)
-    ax2.legend(loc="lower left", fontsize=6, ncol=2)
-    fig.suptitle(f"{len(CLASSES)}-class instrument ID — robustness to additive white noise "
-                 f"({len(clean['per_seed'])} seeds)")
+        ax.legend(loc="lower left", fontsize=8)
+    ax1.set_title("vs nominal SNR — colours look different")
+    ax2.set_title("vs in-band SNR — the honest comparison")
+    fig.suptitle(f"{len(CLASSES)}-class instrument ID — white / pink / brown noise "
+                 f"({len(next(iter(by_color.values()))[0]['per_seed'])} seeds)")
     fig.tight_layout()
     fig.savefig(path, dpi=150)
     plt.close(fig)
@@ -194,79 +197,73 @@ def main():
     manifest, splits, by_id = load_manifest()
     records = [by_id[i] for i in sorted(splits["test"])]
     targets = np.array([r["label"] for r in records])
-    print(f"device: {device} | {len(CLASSES)} classes | {len(records)} test clips | "
-          f"{len(models)} seeds {list(models)}\n")
-
-    conditions = [None] + list(SNR_LEVELS_DB)
-    results = []
-    for i, snr in enumerate(conditions):
-        r = run_condition(models, records, targets, snr, i, device)
-        results.append(r)
-        ba, mc = r["balanced_accuracy"], r["mcc"]
-        ach = "     clean" if r["achieved_snr_db_mean"] is None else f"{r['achieved_snr_db_mean']:6.2f}dB"
-        print(f"  {r['condition']:<7} | bal acc {ba['mean']:.4f} +/- {ba['std']:.4f} | "
-              f"MCC {mc['mean']:.4f} | achieved {ach}")
-
     chance = 1.0 / len(CLASSES)
-    print("\n" + "=" * 74)
-    print(f"SNR SWEEP — {len(CLASSES)} classes, {len(models)} seeds")
-    print("=" * 74)
-    print(f"balanced accuracy: chance = 1/{len(CLASSES)} = {chance:.4f} | MCC: 0.0 = no information\n")
-    print(f"{'condition':<10}{'bal acc':>9}{'std':>8}{'MCC':>9}{'vs clean':>10}{'achieved SNR':>16}")
-    clean_bacc = results[0]["balanced_accuracy"]["mean"]
-    for r in results:
-        ba = r["balanced_accuracy"]
-        ach = "clean" if r["achieved_snr_db_mean"] is None else f"{r['achieved_snr_db_mean']:.2f}dB"
-        drop = "" if r["snr_db"] is None else f"{ba['mean'] - clean_bacc:+.4f}"
-        print(f"{r['condition']:<10}{ba['mean']:>9.4f}{ba['std']:>8.4f}{r['mcc']['mean']:>9.4f}"
-              f"{drop:>10}{ach:>16}")
+    print(f"device: {device} | {len(CLASSES)} classes | {len(records)} test clips | "
+          f"{len(models)} seeds {list(models)}")
+    print(f"colours: {', '.join(NOISE_COLORS)} | chance = {chance:.4f}\n")
 
-    # where does "minimal noise" start to bite? first condition losing >2% and >5% of clean
-    print("\nDEGRADATION ONSET (how little noise it takes):")
-    for thresh in (0.02, 0.05, 0.10):
-        hit = next((r for r in results[1:]
-                    if clean_bacc - r["balanced_accuracy"]["mean"] >= thresh), None)
-        if hit:
-            print(f"  first drop of {thresh:.0%}+: at {hit['condition']} "
-                  f"(bal acc {hit['balanced_accuracy']['mean']:.4f})")
-        else:
-            print(f"  first drop of {thresh:.0%}+: never within the swept range")
+    # clean once (colour-independent); then each colour's noisy sweep. Distinct cond_idx per
+    # (colour, level) keeps the noise realisations independent across the whole run.
+    clean = run_condition(models, records, targets, None, 0, 0.0, device)
+    clean_bacc = clean["balanced_accuracy"]["mean"]
+    print(f"clean: balanced acc {clean_bacc:.4f} +/- {clean['balanced_accuracy']['std']:.4f}\n")
 
-    # which classes fall first — recall at the mildest noise level vs clean
-    mild = results[1]  # highest SNR
-    print(f"\nMOST FRAGILE CLASSES at {mild['condition']} (mildest noise), recall drop from clean:")
-    drops = sorted(CLASSES, key=lambda c: mild["per_class_recall"][c]["mean"]
-                   - results[0]["per_class_recall"][c]["mean"])
-    for c in drops[:5]:
-        d = mild["per_class_recall"][c]["mean"] - results[0]["per_class_recall"][c]["mean"]
-        print(f"  {c:<13} {results[0]['per_class_recall'][c]['mean']:.3f} -> "
-              f"{mild['per_class_recall'][c]['mean']:.3f}  ({d:+.3f})")
+    by_color = {}
+    cond_idx = 1
+    for color, exponent in NOISE_COLORS.items():
+        results = [clean]
+        for snr in SNR_LEVELS_DB:
+            r = run_condition(models, records, targets, snr, cond_idx, exponent, device)
+            results.append(r)
+            cond_idx += 1
+            ba = r["balanced_accuracy"]
+            print(f"  {color:<6} {r['condition']:<6} | bal acc {ba['mean']:.4f} | "
+                  f"nominal {r['nominal_snr_db']:6.2f}dB | in-band {r['inband_snr_db']:6.2f}dB")
+        by_color[color] = results
+        print()
+
+    # --- comparison table: balanced accuracy at each NOMINAL level, per colour
+    print("=" * 78)
+    print(f"NOISE-COLOUR COMPARISON — {len(CLASSES)} classes, {len(models)} seeds")
+    print("=" * 78)
+    print(f"balanced accuracy (chance {chance:.4f}). clean = {clean_bacc:.4f}\n")
+    print(f"{'nominal':<9}" + "".join(f"{c:>10}" for c in NOISE_COLORS))
+    for i, snr in enumerate(SNR_LEVELS_DB):
+        row = f"{str(snr) + 'dB':<9}"
+        for color in NOISE_COLORS:
+            row += f"{by_color[color][i + 1]['balanced_accuracy']['mean']:>10.4f}"
+        print(row)
+
+    # the honest cut: at a fixed IN-BAND SNR, are the colours still different?
+    print(f"\nsame data, but showing IN-BAND SNR per cell (nominal -> in-band):")
+    print(f"{'nominal':<9}" + "".join(f"{c:>12}" for c in NOISE_COLORS))
+    for i, snr in enumerate(SNR_LEVELS_DB):
+        row = f"{str(snr) + 'dB':<9}"
+        for color in NOISE_COLORS:
+            row += f"{by_color[color][i + 1]['inband_snr_db']:>11.1f} "
+        print(row)
+    print("\nread: if brown's column above is shifted ~+20dB, its apparent robustness is just")
+    print("that a 'nominal 0dB' brown clip is really ~+20dB where the music actually is.")
 
     # --- correctness checks
     metrics = json.loads((OUTPUTS / "metrics.json").read_text())
     ref = {s["seed"]: s["test_balanced_accuracy"] for s in metrics["per_seed"]}
-    print("\nclean-path check (noise_eval clean vs train.py test, per seed):")
-    ok = True
-    for seed, s in results[0]["per_seed"].items():
-        match = abs(s["balanced_accuracy"] - ref[seed]) < 1e-9
-        ok &= match
-        print(f"  seed {seed}: {s['balanced_accuracy']:.4f} vs {ref[seed]:.4f} "
-              f"{'match' if match else 'MISMATCH — spectrogram path diverged'}")
-
-    achieved_ok = all(abs(r["achieved_snr_db_mean"] - r["snr_db"]) < 0.5 for r in results[1:])
-    baccs = [r["balanced_accuracy"]["mean"] for r in results[1:]]
-    monotone = all(a >= b - 1e-9 for a, b in zip(baccs, baccs[1:]))
-    print(f"achieved SNR on target (<0.5dB): {achieved_ok} | monotone degradation: {monotone}")
+    ok = all(abs(clean["per_seed"][seed]["balanced_accuracy"] - ref[seed]) < 1e-9 for seed in ref)
+    print(f"\nclean-path check vs train.py (all seeds match): {ok}")
+    for color in NOISE_COLORS:
+        errs = [abs(by_color[color][i + 1]["nominal_snr_db"] - snr)
+                for i, snr in enumerate(SNR_LEVELS_DB)]
+        print(f"  {color:<6}: nominal SNR on target (<0.5dB): {all(e < 0.5 for e in errs)}")
 
     (OUTPUTS / "snr_results.json").write_text(json.dumps({
         "classes": list(CLASSES), "n_classes": len(CLASSES),
-        "chance_balanced_accuracy": chance,
-        "seeds": list(models), "noise_seed": NOISE_SEED, "device": str(device),
-        "n_test": len(records), "clean_path_check_passed": bool(ok),
-        "results": results,
+        "chance_balanced_accuracy": chance, "clean_balanced_accuracy": clean["balanced_accuracy"],
+        "seeds": list(models), "noise_seed": NOISE_SEED, "in_band_hz": list(IN_BAND_HZ),
+        "device": str(device), "n_test": len(records), "clean_path_check_passed": bool(ok),
+        "by_color": by_color,
     }, indent=2))
-    plot_sweep(results, OUTPUTS / "acc_vs_snr.png")
-    print(f"\nwrote {OUTPUTS / 'snr_results.json'} and {OUTPUTS / 'acc_vs_snr.png'}")
+    plot_colors(by_color, clean_bacc, OUTPUTS / "noise_colors.png")
+    print(f"\nwrote {OUTPUTS / 'snr_results.json'} and {OUTPUTS / 'noise_colors.png'}")
 
 
 if __name__ == "__main__":

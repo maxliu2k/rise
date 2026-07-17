@@ -161,3 +161,13 @@ DROPOUT = 0.4
 # kept only to confirm the floor, not to resolve it.
 SNR_LEVELS_DB = (60, 50, 45, 40, 35, 30, 20, 10, 0)
 NOISE_SEED = 1234
+
+# Noise colours as 1/f**exponent power spectra: 0 = white (flat), 1 = pink (-3dB/oct,
+# equal power per octave, ~natural ambient noise), 2 = brown (-6dB/oct, mostly rumble).
+NOISE_COLORS = {"white": 0.0, "pink": 1.0, "brown": 2.0}
+
+# The band where the music actually lives. SNR set over total power is misleading for
+# coloured noise — brown noise at a nominal 0dB is ~+20dB *in this band* because almost all
+# its energy sits below it. Reporting in-band SNR makes the colours comparable on an honest
+# axis. (200Hz-8kHz spans the fundamentals and the harmonics that carry timbre.)
+IN_BAND_HZ = (200, 8000)
