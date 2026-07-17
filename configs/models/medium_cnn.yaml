@@ -1,0 +1,44 @@
+# Medium CNN — the pilot's model.
+#
+# NOTE: this file DOCUMENTS the settings; the code reads them from
+# src/instrument_robustness/config.py, which is the single source of truth. Written to match
+# the configs/ layout on main (alongside the empty svm.yaml).
+
+architecture:
+  # 3 conv blocks -> global average pool -> dense head. 109,666 params.
+  # AdaptiveAvgPool2d is load-bearing: it collapses ANY time axis, which is what makes
+  # variable-length clips possible (verified from 12 to 500 frames).
+  blocks:
+    - {conv: 32, kernel: 3, bn: true, act: relu, pool: 2}
+    - {conv: 64, kernel: 3, bn: true, act: relu, pool: 2}
+    - {conv: 128, kernel: 3, bn: true, act: relu, pool: 2}
+  head:
+    global_pool: adaptive_avg
+    dense: 128
+    dropout: 0.4
+
+training:
+  optimizer: adam
+  learning_rate: 1.0e-3
+  # NOTE: 1e-4 was measured to eliminate the val-loss spikes (4 -> 0; worst val 0.677 ->
+  # 0.962) at the cost of convergence at epoch 11 instead of 4. All tested settings reach
+  # the same test score, so this is stability, not accuracy. NOT applied — see FINDINGS.md.
+  # Gradient clipping does NOT help: Adam's update is scale-invariant in the gradient.
+  batch_size: 32
+  max_epochs: 40
+  early_stopping: {monitor: val_loss, patience: 8}
+  lr_schedule: {type: reduce_on_plateau, monitor: val_loss, factor: 0.5, patience: 4}
+  class_weights: auto      # applied when the train imbalance exceeds 1.5:1
+  # Batches are grouped by exact frame count, so every batch is uniform with zero padding.
+  # Padding to a batch max would reintroduce the digital silence that breaks the noise sweep
+  # and would contaminate BatchNorm statistics.
+  batching: length_bucketed
+
+evaluation:
+  # Accuracy and F1 are deliberately EXCLUDED. Both pay a collapsed classifier the class
+  # prior, and both have floors that drift with the split — macro F1's floor rises from 0.33
+  # to 0.47 as imbalance goes 50/50 -> 90/10, so a dead model scores BETTER on more
+  # imbalanced data. Balanced accuracy (chance = 1/n_classes) and MCC (0.0 = no information)
+  # have fixed floors and are comparable across configurations.
+  metrics: [balanced_accuracy, mcc, per_class_precision, per_class_recall]
+  seeds: [42, 43, 44]      # single-seed numbers were misleading; report mean +/- std

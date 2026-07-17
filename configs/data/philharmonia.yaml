@@ -1,0 +1,75 @@
+# Philharmonia dataset settings, as established by the pilot.
+#
+# NOTE: this file DOCUMENTS the settings; the code reads them from
+# src/instrument_robustness/config.py, which is the single source of truth. It is written
+# to match the configs/ layout on main (alongside the empty irmas.yaml) so the intended
+# config surface is visible. Wiring the code to read YAML is a separate change.
+
+source:
+  # The official philharmonia.co.uk/assets/audio/samples/... URLs predate their site
+  # redesign and no longer resolve. This mirror works. CC Attribution-ShareAlike 4.0.
+  archive_base: https://archive.org/download/philharmonicorchestrasamples
+  # The zip/dir name is NOT the instrument field in the filenames: zips use spaces where
+  # filenames use hyphens, and `cor anglais.zip` contains `english-horn_*.mp3`.
+  zip_name_overrides:
+    double-bass: double bass
+    french-horn: french horn
+    bass-clarinet: bass clarinet
+    english-horn: cor anglais
+
+# 4 strings, 4 woodwinds, 4 brass. Every class has >=433 clips after strict filtering.
+# tuba earns its place beyond family balance: at As0-F4 it overlaps double-bass (C1-G4)
+# almost exactly, giving one same-register / different-family pair. Measured: both score
+# >0.99 recall, which is evidence the model learned timbre rather than pitch.
+classes:
+  - bassoon
+  - cello
+  - clarinet
+  - double-bass
+  - flute
+  - french-horn
+  - oboe
+  - trombone
+  - trumpet
+  - tuba
+  - viola
+  - violin
+
+articulation:
+  # One articulation per instrument: the plain, sustained, ordinary tone. Bowed strings
+  # call it arco-normal; everything else calls it normal. This DOMINATES the library
+  # (84-89% of files) rather than being a slice, so filtering costs almost nothing.
+  # Matches all-samples/manifest.py's PLAIN = {normal, arco-normal}.
+  mode: strict
+  min_strict_n: 200        # per-class floor below which the set widens to the sustained family
+
+audio:
+  # LOAD-BEARING for reasons unrelated to why it was chosen. Classes are encoded at three
+  # bitrates (64/80/96 kbps) that cut across instrument families, so the MP3 encoder leaves
+  # a class-correlated spectral edge. Measured: every codec brick wall is above 19 kHz, and
+  # the class-correlated difference above ~14 kHz. At 22050 the Nyquist is 11025 Hz and all
+  # of it is discarded. Raising toward 44100 puts the encoder INSIDE the analysis band and
+  # hands the model a free 3-way shortcut. prep_data.check_bitrates() enforces this.
+  sample_rate: 22050
+  max_clip_seconds: 2.0    # a MAXIMUM, not a fixed length — clips are variable length
+  trim_top_db: 30
+  max_chunks_per_file: 4   # one 70.66s tuba/trumpet recording would otherwise yield 35
+  # Nothing is padded or tiled. Short notes keep their true length; long files are cut into
+  # chunks. Every sample the model sees is real recorded audio. Zero-padding in particular
+  # BREAKS the noise sweep — power_to_db clamps digital silence to the -80dB floor, noise
+  # fills it, and the clip lands outside the training distribution.
+  variable_length: true
+
+spectrogram:
+  n_mels: 128
+  n_fft: 2048
+  hop_length: 512
+  normalization: per_spectrogram_standardize
+
+split:
+  # Grouped by pitch: the same note never spans train and test. Same-note/different-dynamic
+  # clips are near-duplicates; a naive random split inflates the test score.
+  group_by: instrument_note
+  train: 0.70
+  val: 0.15
+  test: 0.15
