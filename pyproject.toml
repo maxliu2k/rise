@@ -18,6 +18,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+ast = [
+    "torch",
+    "transformers",
+]
 # Pretrained branches (install when training PANNs / AST / MERT):
 pretrained = [
     "torch",

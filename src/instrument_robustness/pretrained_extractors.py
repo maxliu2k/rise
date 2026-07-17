@@ -15,14 +15,21 @@ Deps (install only when training these branches):
     pip install torch torchaudio transformers          # AST, MERT
     pip install panns-inference torchlibrosa            # PANNs CNN14
 """
-import numpy as np, librosa
+from math import gcd
+
+import numpy as np
+from scipy.signal import resample_poly
+
 from instrument_robustness.config import SR, AST_SR, AST_MODEL, MERT_SR, MERT_MODEL, TARGET_LABELS
 
 N_CLASSES = len(TARGET_LABELS)
 
 
 def _resample(y, target_sr):
-    return librosa.resample(y, orig_sr=SR, target_sr=target_sr) if target_sr != SR else y
+    if target_sr == SR:
+        return y
+    divisor = gcd(SR, target_sr)
+    return resample_poly(y, target_sr // divisor, SR // divisor)
 
 
 # ----------------------------------------------------------------------------- PANNs CNN14
@@ -52,13 +59,24 @@ def build_ast_extractor():
 
 def ast_input(y, extractor):
     """22050 window -> AST input_values (1, 1024, 128) via AST's own extractor @ 16 kHz."""
-    y16 = _resample(y, AST_SR)
+    y16 = _resample(np.asarray(y, dtype=np.float32), AST_SR).astype(np.float32, copy=False)
+    if y16.ndim != 1:
+        raise ValueError(f"AST expects a mono waveform, got shape {y16.shape}")
     return extractor(y16, sampling_rate=AST_SR, return_tensors="pt")["input_values"]
 
 def build_ast_model():
-    from transformers import ASTForAudioClassification
+    from transformers import ASTConfig, ASTForAudioClassification
+    label2id = {label: index for index, label in enumerate(TARGET_LABELS)}
+    id2label = {index: label for label, index in label2id.items()}
+    config = ASTConfig.from_pretrained(AST_MODEL)
+    config.num_labels = N_CLASSES
+    config.label2id = label2id
+    config.id2label = id2label
     return ASTForAudioClassification.from_pretrained(
-        AST_MODEL, num_labels=N_CLASSES, ignore_mismatched_sizes=True)  # fine-tune, not from scratch
+        AST_MODEL,
+        config=config,
+        ignore_mismatched_sizes=True,
+    )
 
 
 # ----------------------------------------------------------------------------- MERT
