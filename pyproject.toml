@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "instrument-robustness"
+version = "0.1.0"
+description = "Instrument-classification robustness pipeline (Philharmonia / IRMAS): preprocessing, featurization, and model branches (SVM, CNN, CRNN, PANNs CNN14, AST, MERT)."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "pandas",
+    "scipy",
+    "scikit-learn",
+    "librosa",
+    "soundfile",
+]
+
+[project.optional-dependencies]
+# Pretrained branches (install when training PANNs / AST / MERT):
+pretrained = [
+    "torch",
+    "torchaudio",
+    "transformers",
+    "torchlibrosa",
+    "panns-inference",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

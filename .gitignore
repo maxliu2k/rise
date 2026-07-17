@@ -216,3 +216,44 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ===== Project data (too large for Git — share via Drive/HuggingFace) =====
+
+# Ignore the CONTENTS of all-samples/, but let git descend into the paths we re-include
+# below. (Git cannot un-ignore a file whose parent directory is excluded, so we glob
+# contents rather than ignoring the directory outright.)
+all-samples/*
+
+# Keep large / binary / generated data ignored everywhere
+work/
+features/
+*.npz
+*.mp3
+*.wav
+*.zip
+.venv/
+*.egg-info/
+.DS_Store
+
+# --- Re-include: small pipeline artifacts under all-samples/pipeline/ ---
+!all-samples/pipeline/
+all-samples/pipeline/*
+!all-samples/pipeline/manifest_9.csv
+!all-samples/pipeline/splits.csv
+!all-samples/pipeline/windows.csv
+!all-samples/pipeline/norm_stats.json
+!all-samples/pipeline/pipeline_report.txt
+
+# --- Re-include: extraction plan docs under all-samples/features/ (docs only, never arrays) ---
+!all-samples/features/
+all-samples/features/*
+!all-samples/features/ast/
+!all-samples/features/mert/
+!all-samples/features/panns/
+all-samples/features/ast/*
+all-samples/features/mert/*
+all-samples/features/panns/*
+!all-samples/features/ast/EXTRACTION_PLAN.md
+!all-samples/features/mert/EXTRACTION_PLAN.md
+!all-samples/features/panns/EXTRACTION_PLAN.md
+

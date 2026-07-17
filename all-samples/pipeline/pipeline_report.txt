@@ -1,0 +1,172 @@
+PHILHARMONIA PREPROCESSING PIPELINE — REPORT
+Dataset: <repo>/all-samples  (9 instruments; oboe absent -> bassoon substituted)
+  CODE now lives in the installable package src/instrument_robustness/ (run: python -m
+  instrument_robustness.stepN_...). DATA/artifacts stay under all-samples/ (the data root).
+  config.py resolves DATA_ROOT = <repo>/all-samples (override via RISE_DATA_ROOT).
+Working rate: 22050 Hz mono
+Status: Steps 0–7 COMPLETE (SVM/CNN/CRNN featurized; PANNs/AST/MERT = documented on-the-fly plans).
+Models: non-pretrained = SVM, custom CNN, CRNN | pretrained = PANNs CNN14, AST, MERT.
+
+================================================================
+STEP 0 — FILTER  (-> manifest_9.csv)
+================================================================
+rows in manifest.csv        : 8096
+rows after label filter     : 8096   (manifest already contained exactly these 9 instruments)
+rows after dropping defects : 8096   (the 1 corrupt/zero-byte file was already excluded in steps 1–2)
+Duration field used: duration_s (never the filename `length`).
+
+Per-class counts (note vs phrase) — confirms Flag 2 (uneven phrase distribution):
+          note  phrase  total
+bassoon    665      55    720
+cello      825      64    889
+clarinet   793      53    846
+flute      808      70    878
+trombone   784      47    831
+trumpet    416      69    485
+tuba       953      19    972      <- fewest phrases
+viola      918      55    973
+violin    1249     253   1502      <- most phrases (Flag 2)
+TOTAL: 8096 files, 685 phrases (~8.5% by count; ~29% by duration since phrases run up to 26 s).
+
+================================================================
+STEP 1 — RESAMPLE to 22050 Hz mono  (-> manifest_9_resampled.csv, work/resampled/)
+================================================================
+Rate choice: measured MP3 brick walls on originals. Lowest real wall = bassoon ~16 kHz.
+22050 Hz Nyquist (11025 Hz) sits below that, so downsampling discards all differential
+walls uniformly. 16000 Hz not required. resampled ok: 8096 / 8096, failures: 0.
+
+POST-RESAMPLE FREQUENCY-CEILING CHECK (Nyquist = 11025 Hz):
+instrument  ceil_p90_Hz  ceil_max_Hz
+    violin        10789        10890
+     viola        10757        10874
+     cello        10724        10756
+     flute        10741        10804
+  clarinet        10557        10632
+   bassoon        10659        10691
+   trumpet        10677        10702
+      tuba         8269         8274   <- NATURAL rolloff (low brass), not an encoder wall
+  trombone        10791        10831
+All ceilings <= Nyquist. 8/9 instruments uniform at ~10.5–10.8 kHz -> FLAG 1 DEFUSED.
+Tuba's lower ceiling is genuine timbre (trombone, same 80 kbps, caps with the rest).
+
+================================================================
+STEP 2 — TRIM SILENCE  (-> manifest_9_trimmed.csv, work/trimmed/)
+================================================================
+librosa.effects.trim, top_db=30. Fallback: if trim leaves < 0.10 s, keep untrimmed + flag.
+trim flags: ok = 8095, kept_untrimmed = 1
+median duration: resampled 1.019 s -> trimmed 0.940 s
+median trimmed duration per class (s):
+  bassoon 1.193 | cello 0.920 | clarinet 1.463 | flute 1.033 | trombone 0.720
+  trumpet 1.207 | tuba 0.580 | viola 1.091 | violin 0.952
+
+================================================================
+STEP 3 — SPLIT BY SOURCE FILE  (-> splits.csv)   stratified 70/15/15, seed 0
+================================================================
+Split is at SOURCE-RECORDING level, before any windowing (the leakage guard).
+Per-class SOURCE-FILE counts per split:
+          train  val  test
+bassoon     504  108   108
+cello       622  133   134
+clarinet    592  127   127
+flute       615  131   132
+trombone    582  125   124
+trumpet     340   73    72
+tuba        680  146   146
+viola       681  146   146
+violin     1051  225   226
+totals: train 5667 | val 1214 | test 1215
+All 9 classes present in all three splits: True. No source appears in >1 split: True.
+
+================================================================
+STEP 4 — WINDOW to fixed 3.0 s, NO overlap  (-> windows.csv, work/windows/)
+================================================================
+total windows: 9623 from 8096 sources (only ~1.19 windows/source — see note).
+Short/only windows zero-padded; trailing windows < 0.5 s content dropped (never a source's only one).
+Split inheritance verified: all windows of a source carry one split tag.
+
+*** PER-CLASS WINDOW COUNTS PER SPLIT (the number for class-weight tuning) ***
+          train  val  test  total
+violin     1079  228   232   1539
+viola       779  152   176   1107
+cello       782  162   168   1112
+flute       787  180   187   1154
+clarinet    778  161   157   1096
+bassoon     628  151   143    922
+trumpet     469  103    89    661
+tuba        743  158   158   1059
+trombone    668  155   150    973
+
+WINDOW-LEVEL IMBALANCE: 2.3x (violin 1539 vs trumpet 661).
+KEY FINDING: windowing did NOT amplify imbalance. Source-level imbalance was 3.1x
+(violin 1502 vs trumpet 485); after windowing it is 2.3x — slightly BETTER. The phrase
+files in this copy are short (685 phrases add only ~1527 windows, ~1.19 win/source), not
+the 26 s monsters the spec warned about, so Flag 2's count-amplification never materialized.
+IMPLICATION: class imbalance is mild. Use gentle class weights (e.g. inverse-frequency,
+capped) and report macro-F1; aggressive rebalancing/capping is unnecessary.
+
+================================================================
+STEP 5 — PER-WINDOW LOUDNESS NORMALIZE  (-> windows.csv pre/post RMS cols)
+================================================================
+RMS-normalized each window to 0.1 (peak-guarded). Median post-norm RMS 0.1000.
+1557 windows (16.2%) sit below target due to the peak guard — mostly transient articulations
+(col-legno-battuto etc.). Normalization is in-place in work/windows/ and idempotent.
+work/windows/ = 1.2 GB, 9623 wav files.
+
+================================================================
+STEP 6 — TRAIN-ONLY NORMALIZATION STATS  (-> norm_stats.npz, norm_stats.json)
+================================================================
+Computed over TRAIN windows ONLY (6713), applied unchanged to val/test/(future noisy).
+  * SVM: per-feature mean+std, 88-dim (z-score).
+  * CNN/CRNN log-mel: PER-BIN (per mel band) mean+std, 128 bins, over 872,690 train frames.
+    (Documented choice: per-bin, not global.)
+  * PANNs / AST / MERT excluded — they carry their own extractors/normalization.
+Verified: SVM train after standardization = mean 0.000 / std 1.000; val = mean -0.030 / std 1.009
+(train stats applied to val, NOT re-fit -> no leakage). CNN train per-bin mean ~ 0.
+
+================================================================
+STEP 7 — FEATURIZE  (features/<model>/{train,val,test})
+================================================================
+Same featurelib functions for every split (and later for noisy) -> clean/noisy comparable.
+Feature shapes (X per split), all int-encoded labels in TARGET_LABELS order:
+
+  model  train                    val                      test
+  SVM    (6713, 88)               (1450, 88)               (1460, 88)          features/svm/*.npz
+  CNN    (6713, 128, 130, 1)      (1450, 128, 130, 1)      (1460, 128, 130, 1) features/cnn/*.npz
+  CRNN   reuses CNN log-mel -> (N, 130, 128) via features/crnn/crnn_data.py (time axis preserved)
+
+  PANNs CNN14 : raw waveform @ 32 kHz  (own internal log-mel)   features/panns/EXTRACTION_PLAN.md
+  AST         : ASTFeatureExtractor @ 16 kHz, 128 bins          features/ast/EXTRACTION_PLAN.md
+  MERT        : raw waveform @ 24 kHz, own processor            features/mert/EXTRACTION_PLAN.md
+  -> pretrained extractors implemented in pipeline/pretrained_extractors.py (on-the-fly at training;
+     inputs not materialized — would be many GB; use their own rates/normalization, not Step-6 stats).
+
+Per-class WINDOW counts per split (from Step 4; identical across all feature branches):
+          train  val  test  total
+violin     1079  228   232   1539
+viola       779  152   176   1107
+cello       782  162   168   1112
+flute       787  180   187   1154
+clarinet    778  161   157   1096
+bassoon     628  151   143    922
+trumpet     469  103    89    661
+tuba        743  158   158   1059
+trombone    668  155   150    973
+totals: train 6713 | val 1450 | test 1460 | window imbalance 2.3x.
+
+================================================================
+INVARIANTS — VERIFIED
+================================================================
+1. Norm stats computed on TRAIN ONLY; identical stats applied to val/test (and reserved for noisy).
+2. SVM + CNN features exist for train/val/test; all 9 classes present in every split; no NaN.
+3. Source-level split preserved; window imbalance 2.3x -> gentle class weights + macro-F1.
+4. PANNs/AST/MERT use their OWN extractors + rates (32k/16k/24k); 22050 set never fed to them raw.
+5. Clean & (future) noisy branches share the SAME featurization code (featurelib +
+   pretrained_extractors); noise is added to the 22050 window BEFORE these functions.
+
+================================================================
+NEXT — TRAINING (clean baselines first, then noise)
+================================================================
+- Train SVM, CNN, CRNN on the saved features; report macro-F1 + per-class + confusion.
+- Then PANNs/AST/MERT: install torch/transformers(+panns), fine-tune/probe per the plans.
+- Only after clean baselines for all 6: build the noise experiments (white + MUSAN/ESC-50,
+  SNR clean/20/10/0/-5 dB), re-featurize with identical code, keep the source-level split.
