@@ -1,14 +1,19 @@
-"""SNR sweep: evaluate the trained CNN on the test split under additive white Gaussian noise.
+"""SNR sweep: how fast does 12-class instrument ID fall apart under additive white noise?
 
 Noise is injected at the **waveform** level, before spectrogram generation, and the
-spectrogram is then regenerated through prep_data.wav_to_logmel — the exact function that
-built the training cache. Reimplementing it here would mean the sweep tests a different
-pipeline than the one that was trained, which is the bug this pilot exists to rule out.
+spectrogram is regenerated through prep_data.wav_to_logmel — the exact function that built
+the training cache. Reimplementing it here would test a different pipeline than the one that
+was trained, which is the bug this sweep exists to rule out (the clean condition is checked
+against train.py's per-seed test score each run).
 
-SNR is measured over each clip's **active span** rather than the whole 2s clip. Median
-active fraction is ~0.47, so whole-clip power would size the noise against a mostly-silent
-signal and deliver a true SNR at the note roughly 3dB higher than requested — which shows
-up as a suspiciously flat degradation curve.
+Multi-seed: the sweep runs against every model_s{seed}.pt and reports mean +/- std, matching
+train.py. The noise is seeded per (condition, clip) and is IDENTICAL across model seeds, so
+the reported spread is model variance, not noise variance. Each condition's noisy
+spectrograms are built once and reused across all seed models — spectrogram generation is
+the expensive step.
+
+SNR is measured over the whole clip: clips are variable length and contain no padding, so
+every sample is real audio and whole-clip power is the true signal power.
 """
 
 import json
@@ -20,23 +25,17 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from sklearn.metrics import (balanced_accuracy_score, classification_report,
-                             confusion_matrix, matthews_corrcoef)
+from sklearn.metrics import balanced_accuracy_score, confusion_matrix, matthews_corrcoef
 
 from .config import (
-    BATCH_SIZE, CLASSES, MODEL_PATH, NOISE_SEED, OUTPUTS, SNR_LEVELS_DB, WAVE_DIR,
+    BATCH_SIZE, CLASSES, NOISE_SEED, OUTPUTS, SEED, SEEDS, SNR_LEVELS_DB, WAVE_DIR,
 )
 from .prep_data import wav_to_logmel
-from .train import get_device, load_manifest, MediumCNN, set_seed
-from .config import SEED
+from .train import agg, get_device, load_manifest, MediumCNN, set_seed
 
 
 def add_noise_at_snr(y, snr_db, rng):
     """Additive white Gaussian noise at `snr_db`, measured over the whole clip.
-
-    Whole-clip power is the true signal power here: clips are variable length and contain
-    no padding, so every sample is real audio. (Under the old fixed-length zero-padding this
-    was not true, and whole-clip power overstated the SNR at the note by ~3dB.)
 
     Returns (noisy waveform, achieved SNR in dB).
     """
@@ -47,6 +46,24 @@ def add_noise_at_snr(y, snr_db, rng):
     noise = rng.normal(0.0, np.sqrt(p_noise), size=y.shape).astype(np.float32)
     achieved = 10.0 * np.log10(p_sig / float(np.mean(noise ** 2)))
     return (y + noise).astype(np.float32), achieved
+
+
+def build_specs(records, snr_db, cond_idx):
+    """Spectrograms for one condition, built once and shared across all seed models.
+    snr_db=None means clean. Returns (specs, achieved_snr_list)."""
+    specs, achieved = [], []
+    for clip_idx, r in enumerate(records):
+        y = np.load(WAVE_DIR / f"{r['id']}.npy")
+        if snr_db is None:
+            specs.append(wav_to_logmel(y))
+            continue
+        # seeded per (condition, clip), independent of model seed, so every model sees the
+        # same corrupted inputs and the seed spread is pure model variance
+        rng = np.random.default_rng([NOISE_SEED, cond_idx, clip_idx])
+        y_noisy, ach = add_noise_at_snr(y, snr_db, rng)
+        specs.append(wav_to_logmel(y_noisy))
+        achieved.append(ach)
+    return specs, achieved
 
 
 @torch.no_grad()
@@ -66,208 +83,189 @@ def predict(model, specs, device):
     return out
 
 
-def run_condition(model, records, snr_db, device, cond_idx):
-    """One sweep condition. snr_db=None means clean (no noise added)."""
-    specs, achieved = [], []
-    for clip_idx, r in enumerate(records):
-        y = np.load(WAVE_DIR / f"{r['id']}.npy")
-        if snr_db is None:
-            specs.append(wav_to_logmel(y))
-            continue
-        # seeded per (condition, clip) so the sweep is bit-for-bit reproducible
-        rng = np.random.default_rng([NOISE_SEED, cond_idx, clip_idx])
-        y_noisy, ach = add_noise_at_snr(y, snr_db, rng)
-        specs.append(wav_to_logmel(y_noisy))
-        achieved.append(ach)
-
-    targets = np.array([r["label"] for r in records])
-    preds = predict(model, specs, device)
-    # full per-class precision/recall/F1: accuracy and F1 alone cannot distinguish "degraded
-    # evenly" from "collapsed to one class", which is exactly the distinction this sweep exists
-    # to make. A collapse reads as minority recall -> 0 with majority precision -> the class prior.
-    rep = classification_report(targets, preds, labels=list(range(len(CLASSES))),
-                                target_names=list(CLASSES), output_dict=True, zero_division=0)
+def score(preds, targets):
+    """Per-seed metrics for one condition. Balanced accuracy and MCC only — accuracy and F1
+    both pay a collapsed classifier the class prior (see train.py / FINDINGS §7)."""
     return {
-        "condition": "clean" if snr_db is None else f"{snr_db}dB",
-        "snr_db": snr_db,
-        # Raw accuracy is deliberately absent. A model predicting 'cello' unconditionally
-        # scores 0.62 on this split — it looks like a result and is a collapsed classifier
-        # being paid the class prior. It also drifts with the split (0.65 before chunking),
-        # so the apparent "floor" moves for reasons unrelated to the model.
-        # balanced accuracy: 0.5 = chance at any imbalance. MCC: 0.0 = no information.
-        #
-        # F1 is deliberately absent, for the same reason accuracy is. Macro F1's floor
-        # tracks the class prior (0.33 at 50/50, 0.47 at 90/10), so a collapsed model scores
-        # HIGHER the more imbalanced the data — and our own two splits scored the identical
-        # collapse at 0.3941 then 0.3844. F1 also discards true negatives by construction:
-        # that is sound for retrieval, where a TN is one of a billion documents you rightly
-        # ignored, but here a TN is a correctly identified cello. Precision and recall below
-        # say everything F1 would, without averaging it into a respectable-looking number.
         "balanced_accuracy": float(balanced_accuracy_score(targets, preds)),
         "mcc": float(matthews_corrcoef(targets, preds)),
-        "macro_precision": float(rep["macro avg"]["precision"]),
-        "macro_recall": float(rep["macro avg"]["recall"]),
-        "per_class": {
-            c: {"precision": float(rep[c]["precision"]),
-                "recall": float(rep[c]["recall"]),
-                "support": int(rep[c]["support"])}
-            for c in CLASSES
+        "per_class_recall": {
+            c: float((preds[targets == i] == i).mean()) if (targets == i).any() else None
+            for i, c in enumerate(CLASSES)
         },
         "confusion_matrix": confusion_matrix(
-            targets, preds, labels=list(range(len(CLASSES)))).tolist(),
-        "achieved_snr_db_mean": float(np.mean(achieved)) if achieved else None,
-        "achieved_snr_db_std": float(np.std(achieved)) if achieved else None,
-        # Clips are variable length, so a short clip carries less evidence than a long one
-        # at the same SNR. Without this breakdown, that difference would be invisible inside
-        # the headline accuracy and could masquerade as a noise effect.
-        "by_length": length_breakdown(records, preds, targets),
+            targets, preds, labels=list(range(len(CLASSES)))),
     }
 
 
-def length_breakdown(records, preds, targets):
-    """Balanced accuracy per clip-length bucket, so length is not confounded with the SNR
-    effect. Buckets containing only one class report None — balanced accuracy is undefined
-    there, and raw accuracy would be actively misleading."""
-    edges = [(0, 0.5), (0.5, 1.0), (1.0, 1.5), (1.5, 2.01)]
-    out = {}
-    lens = np.array([r["clip_seconds"] for r in records])
-    for lo, hi in edges:
-        mask = (lens >= lo) & (lens < hi)
-        if not mask.sum():
-            continue
-        both = len(np.unique(targets[mask])) == len(CLASSES)
-        out[f"{lo:.1f}-{hi:.1f}s"] = {
-            "n": int(mask.sum()),
-            "balanced_accuracy": (float(balanced_accuracy_score(targets[mask], preds[mask]))
-                                  if both else None),
-        }
-    return out
+def run_condition(models, records, targets, snr_db, cond_idx, device):
+    """Build this condition's spectrograms once, evaluate every seed model, aggregate."""
+    specs, achieved = build_specs(records, snr_db, cond_idx)
+    per_seed = {seed: score(predict(m, specs, device), targets) for seed, m in models.items()}
+
+    baccs = [s["balanced_accuracy"] for s in per_seed.values()]
+    mccs = [s["mcc"] for s in per_seed.values()]
+    cm_sum = np.sum([s["confusion_matrix"] for s in per_seed.values()], axis=0)
+    # per-class recall averaged across seeds — names which instruments fall first
+    recall = {c: agg([per_seed[s]["per_class_recall"][c] for s in per_seed
+                      if per_seed[s]["per_class_recall"][c] is not None])
+              for c in CLASSES}
+
+    return {
+        "condition": "clean" if snr_db is None else f"{snr_db}dB",
+        "snr_db": snr_db,
+        "balanced_accuracy": agg(baccs),
+        "mcc": agg(mccs),
+        "per_class_recall": recall,
+        "confusion_matrix_summed": cm_sum.tolist(),
+        "achieved_snr_db_mean": float(np.mean(achieved)) if achieved else None,
+        "achieved_snr_db_std": float(np.std(achieved)) if achieved else None,
+        "per_seed": {seed: {"balanced_accuracy": s["balanced_accuracy"], "mcc": s["mcc"]}
+                     for seed, s in per_seed.items()},
+    }
 
 
-def plot_acc_vs_snr(results, path):
-    """Two panels. Left: balanced accuracy, where 0.5 is chance no matter the imbalance —
-    a collapsed model lands on the chance line instead of at a flattering 0.62. Right:
-    per-class precision/recall, which names which class was abandoned."""
+def plot_sweep(results, path):
+    """Left: balanced accuracy vs SNR, mean line + per-seed spread, with the clean and chance
+    references. Right: per-class recall for all 12, so you can see which instruments the noise
+    takes down first (legend ordered by how far each falls from clean to the noisiest level)."""
     noisy = [r for r in results if r["snr_db"] is not None]
     clean = next(r for r in results if r["snr_db"] is None)
     xs = [r["snr_db"] for r in noisy]
+    chance = 1.0 / len(CLASSES)
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11.5, 4.4))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12.5, 5.0))
 
-    ys = [r["balanced_accuracy"] for r in noisy]
-    ax1.plot(xs, ys, "o-", color="#1f77b4", lw=2, ms=7, label="additive white noise")
+    ys = [r["balanced_accuracy"]["mean"] for r in noisy]
+    lo = [r["balanced_accuracy"]["min"] for r in noisy]
+    hi = [r["balanced_accuracy"]["max"] for r in noisy]
+    ax1.fill_between(xs, lo, hi, color="#1f77b4", alpha=0.18, label="seed min–max")
+    ax1.plot(xs, ys, "o-", color="#1f77b4", lw=2, ms=6, label="balanced accuracy")
     for x, y in zip(xs, ys):
-        ax1.annotate(f"{y:.3f}", (x, y), textcoords="offset points", xytext=(0, 9),
-                     ha="center", fontsize=8)
-    # clean is not an SNR value, so it gets a reference line rather than an x position
-    ax1.axhline(clean["balanced_accuracy"], ls="--", color="#2ca02c", lw=1.5,
-                label=f"clean ({clean['balanced_accuracy']:.3f})")
-    ax1.axhline(0.5, ls=":", color="#d62728", lw=1.5, label="chance / collapsed (0.50)")
-    ax1.set(xlabel="SNR (dB)", ylabel="balanced accuracy",
-            title="Balanced accuracy vs. SNR")
+        ax1.annotate(f"{y:.2f}", (x, y), textcoords="offset points", xytext=(0, 8),
+                     ha="center", fontsize=7)
+    ax1.axhline(clean["balanced_accuracy"]["mean"], ls="--", color="#2ca02c", lw=1.5,
+                label=f"clean ({clean['balanced_accuracy']['mean']:.3f})")
+    ax1.axhline(chance, ls=":", color="#d62728", lw=1.5,
+                label=f"chance / collapsed ({chance:.3f})")
+    ax1.set(xlabel="SNR (dB)", ylabel="balanced accuracy", title="Balanced accuracy vs. SNR")
 
-    for c, col in zip(CLASSES, ("#1f77b4", "#d62728")):
-        ax2.plot(xs, [r["per_class"][c]["recall"] for r in noisy], "o-", color=col,
-                 lw=2, ms=6, label=f"{c} recall")
-        ax2.plot(xs, [r["per_class"][c]["precision"] for r in noisy], "s--", color=col,
-                 lw=1.2, ms=4, alpha=0.6, label=f"{c} precision")
-    ax2.set(xlabel="SNR (dB)", ylabel="score", title="Per-class precision / recall")
+    cmap = plt.get_cmap("turbo")
+    fall = sorted(CLASSES,
+                  key=lambda c: clean["per_class_recall"][c]["mean"]
+                  - noisy[-1]["per_class_recall"][c]["mean"], reverse=True)
+    for rank, c in enumerate(fall):
+        col = cmap(rank / max(len(CLASSES) - 1, 1))
+        ax2.plot(xs, [r["per_class_recall"][c]["mean"] for r in noisy], "o-",
+                 color=col, lw=1.3, ms=3, label=c)
+    ax2.axhline(chance, ls=":", color="#888", lw=1)
+    ax2.set(xlabel="SNR (dB)", ylabel="recall (mean over seeds)",
+            title="Per-class recall — legend ordered by how far each falls")
 
     for ax in (ax1, ax2):
         ax.set_xticks(xs)
         ax.set_ylim(-0.03, 1.05)
-        ax.invert_xaxis()  # left-to-right = cleaner-to-noisier reads naturally
+        ax.invert_xaxis()  # left-to-right = cleaner-to-noisier
         ax.grid(alpha=0.3)
-        ax.legend(loc="lower left", fontsize=8)
-    fig.suptitle("Trumpet vs. cello, medium CNN — robustness to additive white noise")
+    ax1.legend(loc="lower left", fontsize=8)
+    ax2.legend(loc="lower left", fontsize=6, ncol=2)
+    fig.suptitle(f"{len(CLASSES)}-class instrument ID — robustness to additive white noise "
+                 f"({len(clean['per_seed'])} seeds)")
     fig.tight_layout()
     fig.savefig(path, dpi=150)
     plt.close(fig)
 
 
 def main():
-    if not MODEL_PATH.exists():
-        sys.exit("ERROR: no trained model — run `python train.py` first.")
     set_seed(SEED)
     device = get_device()
 
+    models = {}
+    for seed in SEEDS:
+        p = OUTPUTS / f"model_s{seed}.pt"
+        if not p.exists():
+            continue
+        m = MediumCNN().to(device)
+        m.load_state_dict(torch.load(p, map_location=device)["state_dict"])
+        models[seed] = m
+    if not models:
+        sys.exit("ERROR: no model_s*.pt in outputs/ — run `python -m instrument_robustness.train` first.")
+
     manifest, splits, by_id = load_manifest()
     records = [by_id[i] for i in sorted(splits["test"])]
-    print(f"device: {device} | test clips: {len(records)}\n")
-
-    ckpt = torch.load(MODEL_PATH, map_location=device)
-    model = MediumCNN().to(device)
-    model.load_state_dict(ckpt["state_dict"])
+    targets = np.array([r["label"] for r in records])
+    print(f"device: {device} | {len(CLASSES)} classes | {len(records)} test clips | "
+          f"{len(models)} seeds {list(models)}\n")
 
     conditions = [None] + list(SNR_LEVELS_DB)
-    results = [run_condition(model, records, snr, device, i)
-               for i, snr in enumerate(conditions)]
+    results = []
+    for i, snr in enumerate(conditions):
+        r = run_condition(models, records, targets, snr, i, device)
+        results.append(r)
+        ba, mc = r["balanced_accuracy"], r["mcc"]
+        ach = "     clean" if r["achieved_snr_db_mean"] is None else f"{r['achieved_snr_db_mean']:6.2f}dB"
+        print(f"  {r['condition']:<7} | bal acc {ba['mean']:.4f} +/- {ba['std']:.4f} | "
+              f"MCC {mc['mean']:.4f} | achieved {ach}")
 
-    print("=" * 78)
-    print("SNR SWEEP")
-    print("=" * 78)
-    print("balanced accuracy: 0.5 = chance at any class imbalance | MCC: 0.0 = no information")
-    print("(accuracy and F1 are not reported — both pay a collapsed classifier for the")
-    print(" class prior, and both have floors that drift with the split)\n")
-    print(f"{'condition':<11}{'bal acc':>9}{'MCC':>8}{'macro P':>9}{'macro R':>9}"
-          f"{'achieved SNR':>18}")
+    chance = 1.0 / len(CLASSES)
+    print("\n" + "=" * 74)
+    print(f"SNR SWEEP — {len(CLASSES)} classes, {len(models)} seeds")
+    print("=" * 74)
+    print(f"balanced accuracy: chance = 1/{len(CLASSES)} = {chance:.4f} | MCC: 0.0 = no information\n")
+    print(f"{'condition':<10}{'bal acc':>9}{'std':>8}{'MCC':>9}{'vs clean':>10}{'achieved SNR':>16}")
+    clean_bacc = results[0]["balanced_accuracy"]["mean"]
     for r in results:
-        ach = ("clean" if r["achieved_snr_db_mean"] is None
-               else f"{r['achieved_snr_db_mean']:.2f} ± {r['achieved_snr_db_std']:.2f} dB")
-        print(f"{r['condition']:<11}{r['balanced_accuracy']:>9.4f}{r['mcc']:>8.4f}"
-              f"{r['macro_precision']:>9.4f}{r['macro_recall']:>9.4f}{ach:>18}")
+        ba = r["balanced_accuracy"]
+        ach = "clean" if r["achieved_snr_db_mean"] is None else f"{r['achieved_snr_db_mean']:.2f}dB"
+        drop = "" if r["snr_db"] is None else f"{ba['mean'] - clean_bacc:+.4f}"
+        print(f"{r['condition']:<10}{ba['mean']:>9.4f}{ba['std']:>8.4f}{r['mcc']['mean']:>9.4f}"
+              f"{drop:>10}{ach:>16}")
 
-    print(f"\nper-class breakdown (recall -> 0 for one class is the collapse signature):")
-    print(f"{'condition':<11}{'class':<10}{'precision':>11}{'recall':>9}{'support':>9}")
-    for r in results:
-        for i, c in enumerate(CLASSES):
-            p = r["per_class"][c]
-            print(f"{r['condition'] if i == 0 else '':<11}{c:<10}{p['precision']:>11.4f}"
-                  f"{p['recall']:>9.4f}{p['support']:>9}")
+    # where does "minimal noise" start to bite? first condition losing >2% and >5% of clean
+    print("\nDEGRADATION ONSET (how little noise it takes):")
+    for thresh in (0.02, 0.05, 0.10):
+        hit = next((r for r in results[1:]
+                    if clean_bacc - r["balanced_accuracy"]["mean"] >= thresh), None)
+        if hit:
+            print(f"  first drop of {thresh:.0%}+: at {hit['condition']} "
+                  f"(bal acc {hit['balanced_accuracy']['mean']:.4f})")
+        else:
+            print(f"  first drop of {thresh:.0%}+: never within the swept range")
 
-    buckets = list(results[0]["by_length"])
-    print(f"\nbalanced accuracy by clip length:")
-    print(f"{'condition':<11}" + "".join(f"{b:>12}" for b in buckets))
-    print(f"{'':<11}" + "".join(f"{'n=' + str(results[0]['by_length'][b]['n']):>12}"
-                                for b in buckets))
-    for r in results:
-        row = f"{r['condition']:<11}"
-        for b in buckets:
-            v = r["by_length"].get(b, {}).get("balanced_accuracy")
-            row += f"{v:>12.4f}" if v is not None else f"{'—':>12}"
-        print(row)
+    # which classes fall first — recall at the mildest noise level vs clean
+    mild = results[1]  # highest SNR
+    print(f"\nMOST FRAGILE CLASSES at {mild['condition']} (mildest noise), recall drop from clean:")
+    drops = sorted(CLASSES, key=lambda c: mild["per_class_recall"][c]["mean"]
+                   - results[0]["per_class_recall"][c]["mean"])
+    for c in drops[:5]:
+        d = mild["per_class_recall"][c]["mean"] - results[0]["per_class_recall"][c]["mean"]
+        print(f"  {c:<13} {results[0]['per_class_recall'][c]['mean']:.3f} -> "
+              f"{mild['per_class_recall'][c]['mean']:.3f}  ({d:+.3f})")
 
-    # --- correctness checks on the hook itself
-    clean_bacc = results[0]["balanced_accuracy"]
-    ref = json.loads((OUTPUTS / "metrics.json").read_text())["test_balanced_accuracy"]
-    print(f"\nclean path check: noise_eval {clean_bacc:.4f} vs train.py {ref:.4f}", end=" ")
-    print("— match" if abs(clean_bacc - ref) < 1e-9
-          else "— MISMATCH: the spectrogram path diverged between training and eval")
+    # --- correctness checks
+    metrics = json.loads((OUTPUTS / "metrics.json").read_text())
+    ref = {s["seed"]: s["test_balanced_accuracy"] for s in metrics["per_seed"]}
+    print("\nclean-path check (noise_eval clean vs train.py test, per seed):")
+    ok = True
+    for seed, s in results[0]["per_seed"].items():
+        match = abs(s["balanced_accuracy"] - ref[seed]) < 1e-9
+        ok &= match
+        print(f"  seed {seed}: {s['balanced_accuracy']:.4f} vs {ref[seed]:.4f} "
+              f"{'match' if match else 'MISMATCH — spectrogram path diverged'}")
 
-    for r in results[1:]:
-        err = abs(r["achieved_snr_db_mean"] - r["snr_db"])
-        status = "ok" if err < 0.5 else "OFF TARGET"
-        print(f"achieved SNR at {r['snr_db']:>2}dB target: "
-              f"{r['achieved_snr_db_mean']:.2f}dB (err {err:.3f}) — {status}")
-
-    accs = [r["balanced_accuracy"] for r in results[1:]]
-    monotone = all(a >= b - 1e-9 for a, b in zip(accs, accs[1:]))
-    print(f"\ndegradation monotone as SNR falls: {monotone}")
-    print(f"drop from clean to {results[-1]['condition']}: "
-          f"{clean_bacc - accs[-1]:+.4f} balanced accuracy")
-
-    # A collapse is not the same failure as even degradation, and accuracy alone hides it.
-    for r in results[1:]:
-        dead = [c for c in CLASSES if r["per_class"][c]["recall"] == 0.0]
-        if dead:
-            print(f"  COLLAPSE at {r['condition']}: recall 0.00 for {', '.join(dead)} "
-                  f"— predicting one class regardless of input")
+    achieved_ok = all(abs(r["achieved_snr_db_mean"] - r["snr_db"]) < 0.5 for r in results[1:])
+    baccs = [r["balanced_accuracy"]["mean"] for r in results[1:]]
+    monotone = all(a >= b - 1e-9 for a, b in zip(baccs, baccs[1:]))
+    print(f"achieved SNR on target (<0.5dB): {achieved_ok} | monotone degradation: {monotone}")
 
     (OUTPUTS / "snr_results.json").write_text(json.dumps({
-        "seed": SEED, "noise_seed": NOISE_SEED, "device": str(device),
-        "n_test": len(records), "results": results,
+        "classes": list(CLASSES), "n_classes": len(CLASSES),
+        "chance_balanced_accuracy": chance,
+        "seeds": list(models), "noise_seed": NOISE_SEED, "device": str(device),
+        "n_test": len(records), "clean_path_check_passed": bool(ok),
+        "results": results,
     }, indent=2))
-    plot_acc_vs_snr(results, OUTPUTS / "acc_vs_snr.png")
+    plot_sweep(results, OUTPUTS / "acc_vs_snr.png")
     print(f"\nwrote {OUTPUTS / 'snr_results.json'} and {OUTPUTS / 'acc_vs_snr.png'}")
 
 

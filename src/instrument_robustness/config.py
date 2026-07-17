@@ -155,5 +155,9 @@ DROPOUT = 0.4
 # a clean-trained model already pinned to the majority class by 15dB: the entire 20/10/0
 # band sits in a dead zone, and every interesting transition happens between 60 and 25dB.
 # Keeping the full range makes the knee visible instead of plotting three identical points.
-SNR_LEVELS_DB = (60, 50, 40, 30, 20, 10, 0)
+# Weighted toward the HIGH-SNR (minimal-noise) end, because that is where instrument ID
+# breaks: the 2-class pilot's knee was 40-50dB — inaudible noise — and 12 confusable classes
+# fail even earlier. Below ~20dB everything has long since collapsed, so the low levels are
+# kept only to confirm the floor, not to resolve it.
+SNR_LEVELS_DB = (60, 50, 45, 40, 35, 30, 20, 10, 0)
 NOISE_SEED = 1234
