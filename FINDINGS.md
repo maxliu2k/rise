@@ -125,44 +125,72 @@ Caveat: "above ~14 kHz" comes from an 80-file-per-class sample using a −60 dB-
 The margin plus the three checks make it robust, but it is not a hard bound on every file.
 Re-measure before raising SR.
 
-## 5. Noise (from the 2-class pilot — NOT yet re-run at 12 classes)
+## 5. Noise robustness (12 classes, 3 seeds, additive noise, clean-trained model)
 
-**The specced 20/10/0 dB sweep measures nothing.** A clean-trained model collapses to the majority
-class long before 20 dB; every interesting transition is between 60 and 30 dB.
+Run with `python -m instrument_robustness.noise_eval`. Two findings: the specced sweep measures
+nothing, and noise *colour* is a non-result once measured honestly.
 
-| SNR | balanced acc | MCC | trumpet recall |
+### 5a. The specced 20/10/0 dB sweep is a dead zone
+
+A clean-trained model falls apart at inaudible noise. White noise, balanced accuracy vs nominal SNR
+(chance = 0.0833, clean = 0.9234):
+
+| SNR | balanced acc | MCC | vs clean |
 |---|---|---|---|
-| clean | 1.0000 | 1.0000 | 1.0000 |
-| 50 dB | 1.0000 | 1.0000 | 1.0000 |
-| 40 dB | 0.8581 | 0.7822 | 0.7162 |
-| 30 dB | 0.5811 | 0.3284 | 0.1622 |
-| **20 dB** | 0.5203 | 0.1603 | 0.0405 |
-| **10 dB** | **0.5000** | **0.0000** | **0.0000** |
-| **0 dB** | **0.5000** | **0.0000** | **0.0000** |
+| 60 dB | 0.9224 | 0.9200 | −0.001 |
+| 50 dB | 0.9094 | 0.9071 | −0.014 |
+| **45 dB** | 0.8664 | 0.8648 | −0.057 |
+| **40 dB** | 0.7882 | 0.7895 | −0.135 |
+| 35 dB | 0.6765 | 0.6758 | −0.247 |
+| 30 dB | 0.5415 | 0.5374 | −0.382 |
+| **20 dB** | 0.3191 | 0.3024 | −0.604 |
+| 10 dB | 0.1709 | 0.1232 | −0.753 |
+| 0 dB | 0.1207 | 0.0514 | −0.803 |
 
-MCC 0.0000 = the predictions contain zero information. Run at 20/10/0 as specced, all six models
-pin to this floor and the comparison is vacuous.
+The knee is at **45–40 dB** — noise at ~1% of the signal amplitude, quieter than a recording studio.
+By 20 dB (audible room noise) it's at a third of clean. **All three specced levels (20/10/0) sit
+well past the knee**, so six models run there would be near-indistinguishable — the comparison is
+close to vacuous. All the resolving power is between 60 and 30 dB. Degradation is graceful (a steady
+slide, not the majority-class collapse the 2-class model showed), but it starts absurdly early.
 
-**Not a bug**: achieved SNR is exact to 0.008 dB; the clean path matches training bit-for-bit; and
-the same noise code produces a textbook curve on a noise-aware model (0.9892 clean → 0.8925 at
-0 dB, a gradual ~10-point drop).
+Worse than the 2-class pilot, as expected: more confusable neighbours means less noise is needed to
+push a clip across a boundary. **Not a bug** — achieved SNR is exact to <0.01 dB, the clean path
+matches train.py to 1e-9 on all 3 seeds, and degradation is monotone.
 
-**Cause**: white noise is spectrally flat, music is not. At 20 dB it lifts the loudest low mel bin
-by +0.1 dB and the quiet 7.3 kHz band by +24.9 dB, compressing the spectrum from 49.4 dB of range
-to 22.4 dB — erasing exactly the high-harmonic detail that carries timbre.
+This is a clean-trained model meeting noise it never saw, so it measures brittleness to distribution
+shift, not achievable robustness. The 2-class probe showed noise-aware training turns the cliff into
+a gentle slope (0.99 → 0.89 at 0 dB); **expected to hold at 12 classes but not yet measured here.**
+That experiment is the natural next step and the one that turns this into the study's actual result.
 
-**Also: SNR is the wrong knob.** Equal SNR constrains total power and says nothing about where it
-sits. Brown noise puts 99.7% of its energy below 100 Hz where 0.2% of the music lives — at a
-nominal 0 dB its in-band (200 Hz–8 kHz) SNR is **+19.8 dB**, a ~20 dB lie. White noise errs the
-other way: **−5.0 dB** in-band at a nominal 0 dB. **Report in-band SNR alongside nominal SNR**
-whatever else is decided.
+### 5b. Noise colour is a non-result — only in-band energy matters
 
-**Open decision**: (a) noise-aware/multi-condition training, keep 20/10/0 — proven to give a usable
-curve; (b) keep clean training, re-centre to 50/40/30 — measures brittleness instead, harder to
-defend at near-inaudible levels; (c) both, as matched vs. mismatched conditions.
+Swept white / pink (1/f) / brown (1/f²) at matched *nominal* SNR. On that axis the colours look
+wildly different — at 30 dB, brown 0.9086 vs white 0.5415, a 37-point gap that would tempt the
+conclusion "brown noise is gentler." **It's an artifact of the SNR definition.** Nominal SNR fixes
+total power and ignores *where* the power sits:
 
-`noise_eval.py` still targets the 2-class-era `model.pt` and needs updating for the multi-seed
-`model_s{seed}.pt` outputs before it will run at 12 classes.
+| noise | energy <100 Hz | in-band SNR at nominal 0 dB |
+|---|---|---|
+| white | 0.8% | −0.4 dB (honest) |
+| pink | 51.7% | +2.3 dB |
+| brown | 99.7% | **+22.2 dB** |
+
+Brown dumps 99.7% of its energy below 100 Hz, under the music, so a "nominal 0 dB" brown clip is
+really +22 dB in the 200 Hz–8 kHz band where the notes live. It didn't survive the noise — it was
+never given it. Re-plot the *same* balanced-accuracy numbers against **in-band SNR** and the three
+colours collapse to within **~0.03–0.05** (the seed noise floor). See `outputs/noise_colors.png` —
+left panel (nominal) shows the illusion, right panel (in-band) shows the collapse.
+
+**Takeaway: colour is irrelevant to robustness; only in-band energy is.** Sweeping white alone (the
+honest colour) captures everything — the colour axis can be dropped. And **report in-band SNR
+alongside nominal** whatever else is decided, or the x-axis lies by up to 22 dB.
+
+### 5c. Open decision (unchanged)
+
+(a) noise-aware / multi-condition training, keep 20/10/0 — proven at 2 classes to give a usable
+curve; (b) keep clean training, re-centre the sweep to the 60–30 dB band where the action is —
+measures brittleness, but at near-inaudible noise levels; (c) both, as matched vs. mismatched
+conditions. Still yours to make.
 
 ## 6. Dataset notes
 

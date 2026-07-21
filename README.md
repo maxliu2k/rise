@@ -37,7 +37,8 @@ python -m instrument_robustness.train --seeds 42             # single seed      
 | `src/instrument_robustness/config.py` | every tunable constant. **Change `CLASSES` to rescope the study**; nothing else should need editing. |
 | `src/instrument_robustness/prep_data.py` | download, inventory gate, codec check, filter, cache, pitch-grouped split. Owns the canonical `wav_to_logmel`. |
 | `src/instrument_robustness/train.py` | medium CNN (3 conv blocks → GAP → dense), multi-seed training, evaluation, plots. Owns `MediumCNN`. |
-| `src/instrument_robustness/noise_eval.py` | waveform-level AWGN at controlled SNR. **Stale** — still targets the 2-class-era `model.pt`; needs updating for `model_s{seed}.pt`. |
+| `src/instrument_robustness/noise_eval.py` | waveform-level noise (white/pink/brown) at controlled SNR over all seed models; reports in-band SNR. See FINDINGS §5. |
+| `src/instrument_robustness/audio_demo.py` | renders test clips at each SNR level to WAV, so the degradation is audible |
 | `configs/data/philharmonia.yaml` | documents the data settings (code reads `config.py` — that is the source of truth) |
 | `configs/models/medium_cnn.yaml` | documents the model settings |
 | `all-samples/` | inventory/manifest CSVs + scripts (from `main`) |
