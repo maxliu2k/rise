@@ -12,7 +12,7 @@ eval is deterministic.
 CAVEAT (see config.MIX_*): summed studio notes are not real polyphony. This validates the
 multi-label machinery and lets mixing be studied cleanly; it is not a substitute for IRMAS.
 
-    python -m instrument_robustness.multilabel [--seeds 42 43 44]
+    python -m instrument_robustness.multi.train [--seeds 42 43 44]
 """
 
 import argparse
@@ -30,13 +30,13 @@ import torch
 import torch.nn as nn
 from sklearn.metrics import average_precision_score, f1_score
 
-from .config import (
+from ..config import (
     BATCH_SIZE, CLASSES, CLASS_TO_IDX, EARLY_STOP_PATIENCE, LEARNING_RATE, MAX_EPOCHS,
     MIX_COUNTS, MIX_POLYPHONY, MIX_SEED, OUTPUTS, PLATEAU_FACTOR, PLATEAU_PATIENCE, SEEDS,
     SPLITS_JSON, WAVE_DIR,
 )
-from .prep_data import wav_to_logmel
-from .train import (agg, get_device, load_manifest, LengthBatcher, MediumCNN, set_seed)
+from ..prep_data import wav_to_logmel
+from ..cnn_core import (agg, get_device, load_manifest, LengthBatcher, MediumCNN, set_seed)
 
 
 # --------------------------------------------------------------------------- mixtures

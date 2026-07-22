@@ -19,9 +19,9 @@ import sys
 import numpy as np
 import soundfile as sf
 
-from .config import CLASSES, OUTPUTS, SEED, SR, WAVE_DIR
+from ..config import CLASSES, OUTPUTS, SEED, SR, WAVE_DIR
 from .noise_eval import add_noise_at_snr
-from .train import load_manifest
+from ..cnn_core import load_manifest
 
 # The levels worth hearing: 60 dB (no audible change), down through the knee (40-30), to
 # 0 dB (noise as loud as the note). Ordered loud-signal -> loud-noise for the montage.

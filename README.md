@@ -26,23 +26,35 @@ librosa routes through soundfile.
 ```bash
 python -m instrument_robustness.prep_data --inventory-only   # inventory + codec gate, no audio processing
 python -m instrument_robustness.prep_data                    # download, cache, split  (~5 min, ~250 MB)
-python -m instrument_robustness.train                        # 3 seeds                 (~50 min, CPU)
-python -m instrument_robustness.train --seeds 42             # single seed             (~17 min)
+python -m instrument_robustness.single.train                 # single-instrument, 3 seeds  (~50 min, CPU)
+python -m instrument_robustness.single.train --progress      # ...with a pop-up progress bar
+python -m instrument_robustness.multi.train                  # multiple-instrument (mixtures)
 ```
 
 ## Layout
 
+The two classification tasks are separated: **`single/`** (one instrument per clip, softmax)
+and **`multi/`** (several instruments per clip, sigmoid). Both build on a shared core so
+neither depends on the other.
+
 | path | role |
 |---|---|
-| `src/instrument_robustness/config.py` | every tunable constant. **Change `CLASSES` to rescope the study**; nothing else should need editing. |
-| `src/instrument_robustness/prep_data.py` | download, inventory gate, codec check, filter, cache, pitch-grouped split. Owns the canonical `wav_to_logmel`. |
-| `src/instrument_robustness/train.py` | medium CNN (3 conv blocks → GAP → dense), multi-seed training, evaluation, plots. Owns `MediumCNN`. |
-| `src/instrument_robustness/noise_eval.py` | waveform-level noise (white/pink/brown) at controlled SNR over all seed models; reports in-band SNR. See FINDINGS §5. |
-| `src/instrument_robustness/audio_demo.py` | renders test clips at each SNR level to WAV, so the degradation is audible |
-| `configs/data/philharmonia.yaml` | documents the data settings (code reads `config.py` — that is the source of truth) |
-| `configs/models/medium_cnn.yaml` | documents the model settings |
-| `all-samples/` | inventory/manifest CSVs + scripts (from `main`) |
-| `FINDINGS.md` | results, evidence, caveats, open decisions |
+| **shared** | |
+| `config.py` | every tunable constant. **Change `CLASSES` to rescope the study.** |
+| `prep_data.py` | download, inventory gate, codec check, filter, cache, pitch-grouped split. Owns the canonical `wav_to_logmel`. |
+| `cnn_core.py` | the shared CNN: `MediumCNN`, length-bucketed batching, train/eval primitives, SpecAugment. |
+| `progress_popup.py` | optional tkinter progress bar (GUI-guarded, no-ops when headless). |
+| **`single/` — single-instrument (multi-class)** | |
+| `single/train.py` | multi-seed training, evaluation, plots. |
+| `single/noise_eval.py` | waveform noise (white/pink/brown) at controlled SNR over all seeds; reports in-band SNR. See FINDINGS §5. |
+| `single/audio_demo.py` | renders test clips at each SNR level to WAV, so the degradation is audible. |
+| `single/tune_experiment.py` | weight-decay + SpecAugment head-to-head on val (negative result — see FINDINGS). |
+| **`multi/` — multiple-instrument (multi-label)** | |
+| `multi/train.py` | synthetic mixtures (sum k notes), sigmoid+BCE, mAP evaluation. Path A toward polyphony. |
+| **docs** | |
+| `configs/*.yaml` | document data/model settings (`config.py` is the source of truth). |
+| `all-samples/` | inventory/manifest CSVs + scripts (from `main`). |
+| `FINDINGS.md` | results, evidence, caveats, open decisions. |
 
 Data source is the Philharmonia Orchestra sample library via the Internet Archive mirror
 (CC Attribution-ShareAlike 4.0) — the official `philharmonia.co.uk/assets/...` URLs predate their

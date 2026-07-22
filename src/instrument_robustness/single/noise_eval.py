@@ -27,12 +27,12 @@ import numpy as np
 import torch
 from sklearn.metrics import balanced_accuracy_score, confusion_matrix, matthews_corrcoef
 
-from .config import (
+from ..config import (
     BATCH_SIZE, CLASSES, IN_BAND_HZ, NOISE_COLORS, NOISE_SEED, OUTPUTS, SEED, SEEDS,
     SNR_LEVELS_DB, SR, WAVE_DIR,
 )
-from .prep_data import wav_to_logmel
-from .train import agg, get_device, load_manifest, MediumCNN, set_seed
+from ..prep_data import wav_to_logmel
+from ..cnn_core import agg, get_device, load_manifest, MediumCNN, set_seed
 
 
 def colored_noise(n, exponent, rng):

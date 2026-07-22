@@ -15,11 +15,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from .config import (
+from ..config import (
     BATCH_SIZE, CLASSES, EARLY_STOP_PATIENCE, LEARNING_RATE, MAX_EPOCHS, OUTPUTS,
     PLATEAU_FACTOR, PLATEAU_PATIENCE, SEEDS,
 )
-from .train import (agg, class_weights, evaluate, get_device, load_manifest, load_split,
+from ..cnn_core import (agg, class_weights, evaluate, get_device, load_manifest, load_split,
                     LengthBatcher, MediumCNN, set_seed, spec_augment, train_one_epoch)
 
 
