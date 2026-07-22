@@ -34,7 +34,8 @@ ARCHIVE_BASE = "https://archive.org/download/philharmonicorchestrasamples"
 # the model learned timbre.
 #
 # Keep alphabetical: the ordering fixes the label indices, and a reordering would silently
-# invalidate every saved checkpoint.
+# invalidate every saved checkpoint. (main standardised on a 9-class subset dropping
+# double-bass/oboe/french-horn; the team reverted to these 12.)
 CLASSES = (
     "bassoon", "cello", "clarinet", "double-bass", "flute", "french-horn",
     "oboe", "trombone", "trumpet", "tuba", "viola", "violin",
@@ -149,6 +150,18 @@ PLATEAU_PATIENCE = 4
 PLATEAU_FACTOR = 0.5
 DROPOUT = 0.4
 
+# Regularisation / augmentation. Both default to the committed baseline (0.9234): weight
+# decay 0 makes AdamW identical to Adam, and SpecAugment off means no masking. The model is
+# generalisation-limited (train ~0.99 vs val ~0.92), so these two currently-zero levers are
+# the first things to try within a plain CNN. Tune on VAL; a gain must clear the ~0.02 seed
+# noise to be real.
+WEIGHT_DECAY = 0.0           # AdamW L2 penalty
+SPECAUGMENT = False          # time/frequency masking on TRAINING batches only
+SPECAUG_FREQ_MASKS = 2       # masked frequency bands per clip
+SPECAUG_FREQ_WIDTH = 15      # max width of each (mel bins, of 128)
+SPECAUG_TIME_MASKS = 2       # masked time bands per clip
+SPECAUG_TIME_WIDTH = 12      # max width of each (frames); capped at T//2 for short clips
+
 # --- noise sweep ---
 # "clean" is reported separately, not as an x value.
 # 20/10/0 are the levels the pilot spec asked for. 60-30 were added after the sweep showed
@@ -171,3 +184,15 @@ NOISE_COLORS = {"white": 0.0, "pink": 1.0, "brown": 2.0}
 # its energy sits below it. Reporting in-band SNR makes the colours comparable on an honest
 # axis. (200Hz-8kHz spans the fundamentals and the harmonics that carry timbre.)
 IN_BAND_HZ = (200, 8000)
+
+# --- multi-label mixtures (multilabel.py) ---
+# Path A toward polyphony: sum k isolated notes into one clip; the label is the SET of
+# instruments present (a 12-dim multi-hot vector), trained with per-class sigmoid + BCE.
+# Sources are drawn PER SPLIT from the pitch-grouped splits.json, so the train/test leak
+# guarantee carries over — no source note appears in both.
+MIX_POLYPHONY = (1, 2, 3)        # instruments per mixture, drawn uniformly; 1 keeps solo detection
+MIX_COUNTS = {"train": 3600, "val": 800, "test": 800}
+MIX_SEED = 2024
+# CAVEAT: summed studio notes are NOT real polyphony — no reverb interaction, aligned
+# onsets, uncorrelated parts. This validates the multi-label machinery and lets mixing be
+# studied cleanly; it is not a substitute for IRMAS (configs/data/irmas.yaml).

@@ -25,7 +25,8 @@ from sklearn.metrics import (balanced_accuracy_score, classification_report,
 from .config import (
     BATCH_SIZE, CLASSES, DROPOUT, EARLY_STOP_PATIENCE, LEARNING_RATE, MANIFEST_JSON,
     MAX_EPOCHS, MAX_IMBALANCE, OUTPUTS, PLATEAU_FACTOR, PLATEAU_PATIENCE,
-    SEED, SEEDS, SPEC_DIR, SPLITS_JSON,
+    SEED, SEEDS, SPEC_DIR, SPECAUG_FREQ_MASKS, SPECAUG_FREQ_WIDTH, SPECAUG_TIME_MASKS,
+    SPECAUG_TIME_WIDTH, SPECAUGMENT, SPLITS_JSON, WEIGHT_DECAY,
 )
 
 
@@ -173,11 +174,34 @@ def evaluate(model, loader, criterion, device):
     return total_loss / len(targets), balanced_accuracy_score(targets, preds), preds, targets
 
 
-def train_one_epoch(model, loader, criterion, optimizer, device):
+def spec_augment(x):
+    """SpecAugment: zero out a few random frequency bands and time bands per clip. Applied to
+    TRAINING batches only. Masking to 0 = masking to the mean (spectrograms are z-scored), the
+    standard choice. Time-mask width is capped at T//2 so short clips aren't wholly erased.
+
+    Forces the model not to depend on any single spectrogram region — the direct fix for the
+    train~0.99 / val~0.92 generalisation gap, and it stays a plain CNN (training-time only)."""
+    B, _, F, T = x.shape
+    x = x.clone()
+    for b in range(B):
+        for _ in range(SPECAUG_FREQ_MASKS):
+            w = random.randint(0, SPECAUG_FREQ_WIDTH)
+            f0 = random.randint(0, max(0, F - w))
+            x[b, :, f0:f0 + w, :] = 0.0
+        for _ in range(SPECAUG_TIME_MASKS):
+            w = random.randint(0, min(SPECAUG_TIME_WIDTH, max(1, T // 2)))
+            t0 = random.randint(0, max(0, T - w))
+            x[b, :, :, t0:t0 + w] = 0.0
+    return x
+
+
+def train_one_epoch(model, loader, criterion, optimizer, device, augment=None):
     model.train()
     total_loss, n, preds, targets = 0.0, 0, [], []
     for xb, yb in loader:
         xb, yb = xb.to(device), yb.to(device)
+        if augment is not None:
+            xb = augment(xb)
         optimizer.zero_grad()
         out = model(xb)
         loss = criterion(out, yb)
@@ -274,8 +298,8 @@ def plot_misclassified(ids, preds, targets, path, limit=8):
 
 # --------------------------------------------------------------------------- one seed
 
-def run_seed(seed, data, device):
-    """Train and evaluate one seed.
+def run_seed(seed, data, device, on_epoch=None):
+    """Train and evaluate one seed. on_epoch(epoch) is called after each epoch (progress UI).
 
     The split is fixed across seeds (built once by prep_data at config.SEED), so only model
     init and batch order vary — which is exactly the variance we want to measure. Varying
@@ -291,9 +315,12 @@ def run_seed(seed, data, device):
 
     model = MediumCNN().to(device)
     criterion = nn.CrossEntropyLoss(weight=weights.to(device) if weights is not None else None)
-    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    # AdamW with WEIGHT_DECAY=0 (the default) is identical to Adam, so the baseline is
+    # unchanged; a non-zero config value turns on decoupled weight decay.
+    optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=PLATEAU_FACTOR, patience=PLATEAU_PATIENCE)
+    augment = spec_augment if SPECAUGMENT else None
 
     history = {k: [] for k in ("train_loss", "train_bacc", "val_loss", "val_bacc", "lr")}
     epoch_times = []
@@ -301,7 +328,7 @@ def run_seed(seed, data, device):
 
     for epoch in range(1, MAX_EPOCHS + 1):
         t0 = time.perf_counter()
-        tr_loss, tr_bacc = train_one_epoch(model, train_loader, criterion, optimizer, device)
+        tr_loss, tr_bacc = train_one_epoch(model, train_loader, criterion, optimizer, device, augment)
         va_loss, va_bacc, _, _ = evaluate(model, val_loader, criterion, device)
         epoch_times.append(time.perf_counter() - t0)
 
@@ -321,6 +348,8 @@ def run_seed(seed, data, device):
         print(f"  s{seed} | ep {epoch:>2}/{MAX_EPOCHS} | {epoch_times[-1]:5.1f}s | "
               f"train {tr_loss:.4f}/{tr_bacc:.4f} | val {va_loss:.4f}/{va_bacc:.4f} | "
               f"lr {lr:.1e}{flag}")
+        if on_epoch is not None:
+            on_epoch(epoch)
 
         if since_improved >= EARLY_STOP_PATIENCE:
             print(f"  s{seed} | early stop at epoch {epoch}")
@@ -369,6 +398,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", type=int, nargs="+", default=list(SEEDS),
                     help="seeds to run (default: config.SEEDS)")
+    ap.add_argument("--progress", action="store_true",
+                    help="show a pop-up progress bar (auto-skips if no display)")
     args = ap.parse_args()
 
     OUTPUTS.mkdir(parents=True, exist_ok=True)
@@ -389,9 +420,25 @@ def main():
     print(f"model params: {sum(p.numel() for p in MediumCNN().parameters()):,}\n")
 
     data = ((Xtr, ytr), (Xva, yva), (Xte, yte))
+
+    # Optional pop-up progress bar. Total is an UPPER bound (seeds x MAX_EPOCHS); early
+    # stopping means it usually finishes before filling, so we snap it to 100% at the end.
+    popup, total = None, len(args.seeds) * MAX_EPOCHS
+    if args.progress:
+        from .progress_popup import make_popup
+        popup = make_popup(f"Training {len(CLASSES)}-class CNN", total)
+
+    def on_epoch_for(si, seed):
+        def cb(epoch):
+            if popup is not None:
+                done = si * MAX_EPOCHS + epoch
+                popup.update(done, f"seed {seed}  epoch {epoch}/{MAX_EPOCHS}  "
+                                   f"({100*done/total:.0f}%)")
+        return cb
+
     results, histories, first = [], {}, None
-    for seed in args.seeds:
-        r, h, preds, targets = run_seed(seed, data, device)
+    for si, seed in enumerate(args.seeds):
+        r, h, preds, targets = run_seed(seed, data, device, on_epoch_for(si, seed))
         results.append(r)
         histories[seed] = h
         if first is None:
@@ -482,6 +529,10 @@ def main():
         "timing": timing,
     }, indent=2))
     print(f"wrote {OUTPUTS / 'metrics.json'}, {OUTPUTS / 'timing.json'}, and plots")
+
+    if popup is not None:
+        popup.update(total, "done")
+        popup.close()
 
 
 if __name__ == "__main__":
