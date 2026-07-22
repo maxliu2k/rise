@@ -63,17 +63,40 @@ def build_ast_model():
 
 # ----------------------------------------------------------------------------- MERT
 # MERT consumes raw waveform @ 24 kHz via its own processor; 13 transformer layers of hidden states.
-def build_mert_processor():
+def build_mert_processor(model_id=MERT_MODEL, revision=None):
     from transformers import Wav2Vec2FeatureExtractor
-    return Wav2Vec2FeatureExtractor.from_pretrained(MERT_MODEL, trust_remote_code=True)
+    return Wav2Vec2FeatureExtractor.from_pretrained(
+        model_id,
+        revision=revision,
+        trust_remote_code=True,
+    )
 
 def mert_input(y, processor):
     """22050 window -> MERT input_values via its processor @ 24 kHz."""
     y24 = _resample(y, MERT_SR)
     return processor(y24, sampling_rate=MERT_SR, return_tensors="pt")["input_values"]
 
-def build_mert_model():
+
+def mert_batch_input(waveforms, processor):
+    """Batch 22050 Hz windows and apply MERT's 24 kHz processor."""
+    waveforms_24k = [
+        _resample(y, MERT_SR).astype(np.float32)
+        for y in waveforms
+    ]
+    return processor(
+        waveforms_24k,
+        sampling_rate=MERT_SR,
+        return_tensors="pt",
+        padding=True,
+    )
+
+
+def build_mert_model(model_id=MERT_MODEL, revision=None):
     from transformers import AutoModel
     # DECISION (documented): frozen-feature probe first — freeze MERT, mean-pool time, learn a
     # weighted sum over the 13 layers + linear head. Switch to fine-tuning only if the probe plateaus.
-    return AutoModel.from_pretrained(MERT_MODEL, trust_remote_code=True)
+    return AutoModel.from_pretrained(
+        model_id,
+        revision=revision,
+        trust_remote_code=True,
+    )

@@ -16,6 +16,9 @@ src/instrument_robustness/     # installable package (all CODE)
   featurelib.py                # SVM vector + CNN/CRNN log-mel extractors
   crnn_data.py                 # CRNN loader (reuses CNN features)
   pretrained_extractors.py     # PANNs CNN14 / AST / MERT on-the-fly extractors
+  extract_mert.py              # frozen MERT train/validation embedding extraction
+  mert_data.py, mert_probe.py  # MERT data contract + layer-weighted linear probe
+  train_mert.py                # validation-only MERT probe selection
 all-samples/                   # DATA + ARTIFACTS (not code)
   manifest.csv, Strings/ Brass/ Woodwinds/   # raw audio + catalog
   pipeline/                    # manifest_9*.csv, splits.csv, windows.csv, norm_stats.*, pipeline_report.txt
@@ -74,3 +77,24 @@ python -m instrument_robustness.finalize_svm
 ```
 
 This command does not tune or standardize again. It writes a final model, test metrics, a test confusion matrix, and a status record under `artifacts/svm/`. The status record makes the command refuse a second test evaluation.
+
+## Start the MERT baseline
+
+MERT uses the authoritative `windows.csv` splits and the Step-5 normalized window audio. It resamples
+each 22.05 kHz window to the pretrained `m-a-p/MERT-v1-95M` model's native 24 kHz rate and does not
+use the Step-6 SVM/CNN statistics. The first baseline freezes MERT, caches a mean-pooled representation
+for each of its 13 hidden states, and trains a learned layer mixture plus a linear nine-class probe.
+
+Install the optional pretrained-model dependencies and make sure the full windowed-audio download is
+present, then extract train and validation only:
+
+```bash
+pip install -e ".[mert]"
+python -m instrument_robustness.extract_mert
+python -m instrument_robustness.train_mert
+```
+
+Neither command reads the MERT test split. On BU SCC, submit `scc/mert_probe.qsub` from the repository
+after creating the virtual environment and setting `RISE_DATA_ROOT` to the shared data directory.
+The MERT checkpoint is licensed CC-BY-NC-4.0; this branch is appropriate for the project's
+non-commercial research use, but that license must be reviewed before any commercial use.

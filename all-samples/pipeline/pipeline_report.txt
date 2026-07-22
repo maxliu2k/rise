@@ -4,7 +4,8 @@ Dataset: <repo>/all-samples  (9 instruments; oboe absent -> bassoon substituted)
   instrument_robustness.stepN_...). DATA/artifacts stay under all-samples/ (the data root).
   config.py resolves DATA_ROOT = <repo>/all-samples (override via RISE_DATA_ROOT).
 Working rate: 22050 Hz mono
-Status: Steps 0–7 COMPLETE (SVM/CNN/CRNN featurized; PANNs/AST/MERT = documented on-the-fly plans).
+Status: Steps 0–7 COMPLETE (SVM/CNN/CRNN featurized; MERT frozen-probe code implemented but not
+run; PANNs/AST remain documented on-the-fly plans).
 Models: non-pretrained = SVM, custom CNN, CRNN | pretrained = PANNs CNN14, AST, MERT.
 
 ================================================================
@@ -136,7 +137,8 @@ Feature shapes (X per split), all int-encoded labels in TARGET_LABELS order:
 
   PANNs CNN14 : raw waveform @ 32 kHz  (own internal log-mel)   features/panns/EXTRACTION_PLAN.md
   AST         : ASTFeatureExtractor @ 16 kHz, 128 bins          features/ast/EXTRACTION_PLAN.md
-  MERT        : raw waveform @ 24 kHz, own processor            features/mert/EXTRACTION_PLAN.md
+  MERT        : raw waveform @ 24 kHz, own processor; frozen extraction/probe code implemented
+                but not run                                     features/mert/EXTRACTION_PLAN.md
   -> pretrained extractors implemented in pipeline/pretrained_extractors.py (on-the-fly at training;
      inputs not materialized — would be many GB; use their own rates/normalization, not Step-6 stats).
 
@@ -167,6 +169,6 @@ INVARIANTS — VERIFIED
 NEXT — TRAINING (clean baselines first, then noise)
 ================================================================
 - Train SVM, CNN, CRNN on the saved features; report macro-F1 + per-class + confusion.
-- Then PANNs/AST/MERT: install torch/transformers(+panns), fine-tune/probe per the plans.
+- Run the MERT frozen probe; then build PANNs/AST training and MERT fine-tuning only if warranted.
 - Only after clean baselines for all 6: build the noise experiments (white + MUSAN/ESC-50,
   SNR clean/20/10/0/-5 dB), re-featurize with identical code, keep the source-level split.

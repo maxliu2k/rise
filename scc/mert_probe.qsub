@@ -1,0 +1,32 @@
+#!/bin/bash -l
+
+#$ -P rise-grid
+#$ -N mert_probe
+#$ -j y
+#$ -pe omp 4
+#$ -l gpus=1
+#$ -l gpu_c=7.0
+#$ -l h_rt=06:00:00
+#$ -l mem_per_core=4G
+
+set -euo pipefail
+
+mert_repo="${MERT_REPO:-/project/rise-grid/repos/$USER/instrument-robustness}"
+mert_data_root="${RISE_DATA_ROOT:-/projectnb/rise-grid/rise-data}"
+mert_venv="${MERT_VENV:-/projectnb/rise-grid/venvs/$USER/mert}"
+
+export RISE_DATA_ROOT="$mert_data_root"
+export HF_HOME="${HF_HOME:-/projectnb/rise-grid/huggingface/$USER}"
+export OMP_NUM_THREADS="${NSLOTS:-4}"
+
+source "$mert_venv/bin/activate"
+cd "$mert_repo"
+
+if [[ ! -f "$RISE_DATA_ROOT/features/mert/train.npz" || \
+      ! -f "$RISE_DATA_ROOT/features/mert/val.npz" ]]; then
+    python -m instrument_robustness.extract_mert \
+        --data-root "$RISE_DATA_ROOT" \
+        --windows-csv "$mert_repo/all-samples/pipeline/windows.csv"
+fi
+
+python -m instrument_robustness.train_mert
