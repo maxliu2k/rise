@@ -1,0 +1,10 @@
+{
+  "state": "complete",
+  "started_at_utc": "2026-07-21T13:04:26.016741+00:00",
+  "completed_at_utc": "2026-07-21T13:04:26.238173+00:00",
+  "test_evaluation_count": 1,
+  "test_summary": {
+    "path": "/Users/allanyu/RISE Projects/Music/artifacts/svm/test_summary.json",
+    "sha256": "e2692e2cb6850bbb62e222c6028c733698e1a287ff83bbba63b12ecc4b2ff6d3"
+  }
+}

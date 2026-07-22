@@ -1,0 +1,356 @@
+{
+  "created_at_utc": "2026-07-21T13:04:26.235339+00:00",
+  "protocol": "hyperparameters selected on validation; final model fit on train+val; test evaluated once",
+  "selected_config": {
+    "kernel": "rbf",
+    "C": 10.0,
+    "gamma": 0.01
+  },
+  "model_fit_splits": [
+    "train",
+    "val"
+  ],
+  "feature_preprocessing": "existing train-statistics-standardized features reused; no scaler refit",
+  "training_examples": 6713,
+  "validation_examples": 1450,
+  "final_fit_examples": 8163,
+  "test_examples": 1460,
+  "fit_seconds": 0.35729166585952044,
+  "test_metrics": {
+    "accuracy": 0.989041095890411,
+    "macro_f1": 0.9867443831031613,
+    "weighted_f1": 0.9891433637908033,
+    "confusion_matrix": [
+      [
+        232,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        175,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        167,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0,
+        186,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0,
+        0,
+        152,
+        0,
+        4,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        139,
+        4,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        89,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        157,
+        0
+      ],
+      [
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        147
+      ]
+    ],
+    "classification_report": {
+      "violin": {
+        "precision": 0.9872340425531915,
+        "recall": 1.0,
+        "f1-score": 0.9935760171306209,
+        "support": 232.0
+      },
+      "viola": {
+        "precision": 0.9887005649717514,
+        "recall": 0.9943181818181818,
+        "f1-score": 0.9915014164305949,
+        "support": 176.0
+      },
+      "cello": {
+        "precision": 1.0,
+        "recall": 0.9940476190476191,
+        "f1-score": 0.9970149253731343,
+        "support": 168.0
+      },
+      "flute": {
+        "precision": 1.0,
+        "recall": 0.9946524064171123,
+        "f1-score": 0.9973190348525469,
+        "support": 187.0
+      },
+      "clarinet": {
+        "precision": 1.0,
+        "recall": 0.9681528662420382,
+        "f1-score": 0.9838187702265372,
+        "support": 157.0
+      },
+      "bassoon": {
+        "precision": 0.9858156028368794,
+        "recall": 0.972027972027972,
+        "f1-score": 0.9788732394366197,
+        "support": 143.0
+      },
+      "trumpet": {
+        "precision": 0.9081632653061225,
+        "recall": 1.0,
+        "f1-score": 0.9518716577540107,
+        "support": 89.0
+      },
+      "tuba": {
+        "precision": 1.0,
+        "recall": 0.9936708860759493,
+        "f1-score": 0.9968253968253968,
+        "support": 158.0
+      },
+      "trombone": {
+        "precision": 1.0,
+        "recall": 0.98,
+        "f1-score": 0.98989898989899,
+        "support": 150.0
+      },
+      "accuracy": 0.989041095890411,
+      "macro avg": {
+        "precision": 0.9855459417408827,
+        "recall": 0.9885411035143191,
+        "f1-score": 0.9867443831031613,
+        "support": 1460.0
+      },
+      "weighted avg": {
+        "precision": 0.9896217528255392,
+        "recall": 0.989041095890411,
+        "f1-score": 0.9891433637908033,
+        "support": 1460.0
+      }
+    }
+  },
+  "label_order": [
+    "violin",
+    "viola",
+    "cello",
+    "flute",
+    "clarinet",
+    "bassoon",
+    "trumpet",
+    "tuba",
+    "trombone"
+  ],
+  "feature_schema": {
+    "dimension": 88,
+    "names": [
+      "mfcc0_mean",
+      "mfcc1_mean",
+      "mfcc2_mean",
+      "mfcc3_mean",
+      "mfcc4_mean",
+      "mfcc5_mean",
+      "mfcc6_mean",
+      "mfcc7_mean",
+      "mfcc8_mean",
+      "mfcc9_mean",
+      "mfcc10_mean",
+      "mfcc11_mean",
+      "mfcc12_mean",
+      "mfcc13_mean",
+      "mfcc14_mean",
+      "mfcc15_mean",
+      "mfcc16_mean",
+      "mfcc17_mean",
+      "mfcc18_mean",
+      "mfcc19_mean",
+      "mfcc0_std",
+      "mfcc1_std",
+      "mfcc2_std",
+      "mfcc3_std",
+      "mfcc4_std",
+      "mfcc5_std",
+      "mfcc6_std",
+      "mfcc7_std",
+      "mfcc8_std",
+      "mfcc9_std",
+      "mfcc10_std",
+      "mfcc11_std",
+      "mfcc12_std",
+      "mfcc13_std",
+      "mfcc14_std",
+      "mfcc15_std",
+      "mfcc16_std",
+      "mfcc17_std",
+      "mfcc18_std",
+      "mfcc19_std",
+      "chroma0_mean",
+      "chroma1_mean",
+      "chroma2_mean",
+      "chroma3_mean",
+      "chroma4_mean",
+      "chroma5_mean",
+      "chroma6_mean",
+      "chroma7_mean",
+      "chroma8_mean",
+      "chroma9_mean",
+      "chroma10_mean",
+      "chroma11_mean",
+      "chroma0_std",
+      "chroma1_std",
+      "chroma2_std",
+      "chroma3_std",
+      "chroma4_std",
+      "chroma5_std",
+      "chroma6_std",
+      "chroma7_std",
+      "chroma8_std",
+      "chroma9_std",
+      "chroma10_std",
+      "chroma11_std",
+      "centroid_mean",
+      "centroid_std",
+      "bandwidth_mean",
+      "bandwidth_std",
+      "rolloff_mean",
+      "rolloff_std",
+      "contrast0_mean",
+      "contrast1_mean",
+      "contrast2_mean",
+      "contrast3_mean",
+      "contrast4_mean",
+      "contrast5_mean",
+      "contrast6_mean",
+      "contrast0_std",
+      "contrast1_std",
+      "contrast2_std",
+      "contrast3_std",
+      "contrast4_std",
+      "contrast5_std",
+      "contrast6_std",
+      "zcr_mean",
+      "zcr_std",
+      "rms_mean",
+      "rms_std"
+    ],
+    "label_order": [
+      "violin",
+      "viola",
+      "cello",
+      "flute",
+      "clarinet",
+      "bassoon",
+      "trumpet",
+      "tuba",
+      "trombone"
+    ],
+    "standardization": "training-set statistics applied by step7_featurize"
+  },
+  "input_files": {
+    "train": {
+      "path": "/Users/allanyu/RISE Projects/Music/all-samples/features/svm/train.npz",
+      "sha256": "5e605c0c125e9b62f4da2f8c61eb8a9cbdb292dfa4c002d4a5e898bb0fe3a611"
+    },
+    "val": {
+      "path": "/Users/allanyu/RISE Projects/Music/all-samples/features/svm/val.npz",
+      "sha256": "ae7095683700d99404704963b9552c15504767eb1bc1885488353484e60797ea"
+    },
+    "test": {
+      "path": "/Users/allanyu/RISE Projects/Music/all-samples/features/svm/test.npz",
+      "sha256": "edb210b0976185fb09dfe94384201a18db2678f02e800ae0b5d60525ac0cb12d",
+      "X_shape": [
+        1460,
+        88
+      ],
+      "X_dtype": "float32",
+      "y_shape": [
+        1460
+      ],
+      "y_dtype": "int64"
+    },
+    "validation_summary": {
+      "path": "/Users/allanyu/RISE Projects/Music/artifacts/svm/validation_summary.json",
+      "sha256": "1fde206da008e5d52d43479b34b3ec5d220eec09e45d38a2e2e005cf88214620"
+    }
+  },
+  "software_versions": {
+    "python": "3.14.2",
+    "numpy": "2.4.6",
+    "pandas": "3.0.3",
+    "scikit_learn": "1.9.0",
+    "joblib": "1.5.3"
+  },
+  "output_files": {
+    "model": {
+      "path": "/Users/allanyu/RISE Projects/Music/artifacts/svm/final_model.joblib",
+      "sha256": "ad9d024a91a09e9b799e0cab58ec1c8fbea958e135ad1b4025e2452b00a37b2a"
+    },
+    "test_confusion_matrix": {
+      "path": "/Users/allanyu/RISE Projects/Music/artifacts/svm/test_confusion_matrix.csv",
+      "sha256": "3500f379b3343b8a200e8e9237fff32921541c294a27f66e2a07c4a592683368"
+    }
+  },
+  "test_evaluated": true,
+  "test_evaluation_count": 1
+}

@@ -54,3 +54,23 @@ python -m instrument_robustness.step7_featurize   # SVM / CNN / CRNN features
 
 See `all-samples/pipeline/pipeline_report.txt` for the full run report (shapes, per-class per-split
 counts, confound checks, invariants).
+
+## Train the SVM baseline
+
+The SVM features are already standardized with training-set statistics. Tune on the validation split and save the search results plus selected model with:
+
+```bash
+python -m instrument_robustness.train_svm
+```
+
+By default this tunes an RBF SVC over `C` and `gamma`, using validation macro-F1 for selection.
+It reads only `train.npz` and `val.npz`; `test.npz` remains untouched for the final evaluation. The defaults and predeclared final-test policy are documented in `configs/models/svm.yaml`.
+Outputs under `artifacts/svm/` include the ranked search, validation confusion matrix, selected model, and a summary containing the feature schema, input/output hashes, and software versions.
+
+After the validation results are frozen, fit the selected configuration on the combined train and validation arrays and perform the one permitted test evaluation with:
+
+```bash
+python -m instrument_robustness.finalize_svm
+```
+
+This command does not tune or standardize again. It writes a final model, test metrics, a test confusion matrix, and a status record under `artifacts/svm/`. The status record makes the command refuse a second test evaluation.
