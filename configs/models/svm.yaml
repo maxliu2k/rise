@@ -1,0 +1,29 @@
+# Default clean-baseline search. CLI arguments may override C and gamma;
+# validation_summary.json records the values actually used.
+model:
+  estimator: sklearn.svm.SVC
+  kernel: rbf
+  C_values: [0.1, 1.0, 10.0, 100.0]
+  gamma_values: [scale, 0.001, 0.01, 0.1]
+  selection_metric: validation_macro_f1
+
+features:
+  dimension: 88
+  already_standardized: true
+  standardization_source: training-set statistics from step6_stats
+
+final_evaluation:
+  fit_splits: [train, val]
+  reuse_existing_standardized_features: true
+  refit_scaler: false
+  evaluate_test_once: true
+
+outputs:
+  search: artifacts/svm/validation_search.csv
+  validation_confusion_matrix: artifacts/svm/validation_confusion_matrix.csv
+  validation_summary: artifacts/svm/validation_summary.json
+  selected_model: artifacts/svm/best_model.joblib
+  final_model: artifacts/svm/final_model.joblib
+  test_confusion_matrix: artifacts/svm/test_confusion_matrix.csv
+  test_summary: artifacts/svm/test_summary.json
+  final_evaluation_status: artifacts/svm/final_evaluation_status.json
