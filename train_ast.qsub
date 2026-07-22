@@ -1,0 +1,37 @@
+#!/bin/bash -l
+
+#$ -N rise_ast_full
+#$ -j y
+#$ -pe omp 4
+#$ -l mem_per_core=8G
+#$ -l gpus=1
+#$ -l gpu_c=7.0
+#$ -l gpu_memory=16G
+#$ -l h_rt=12:00:00
+
+set -euo pipefail
+cd "$SGE_O_WORKDIR"
+
+module load miniconda
+module load academic-ml/spring-2026
+conda activate spring-2026-pyt
+
+export PYTHONPATH="$PWD/src${PYTHONPATH:+:$PYTHONPATH}"
+export HF_HOME="$PWD/.cache/huggingface"
+export OMP_NUM_THREADS="$NSLOTS"
+export MKL_NUM_THREADS="$NSLOTS"
+export PYTHONUNBUFFERED=1
+export TOKENIZERS_PARALLELISM=false
+
+mkdir -p "$HF_HOME"
+
+test -f all-samples/pipeline/windows.csv
+test -d all-samples/work/windows
+
+python -c "import torch; print('PyTorch:', torch.__version__); print('GPU:', torch.cuda.get_device_name()); assert torch.cuda.is_available()"
+
+python -m instrument_robustness.train_ast \
+    --epochs 10 \
+    --batch-size 8 \
+    --device cuda
+

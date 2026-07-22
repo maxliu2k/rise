@@ -19,7 +19,14 @@ INSTRUMENT_FAMILIES = {
 }
 
 
-def _run_epoch(model, loader, device: torch.device, optimizer=None, collect_predictions=False):
+def _run_epoch(
+    model,
+    loader,
+    device: torch.device,
+    optimizer=None,
+    collect_predictions=False,
+    phase="evaluation",
+):
     training = optimizer is not None
     model.train(training)
     total_loss = 0.0
@@ -27,9 +34,11 @@ def _run_epoch(model, loader, device: torch.device, optimizer=None, collect_pred
     count = 0
     true_labels = []
     predicted_labels = []
+    total_batches = len(loader)
+    print(f"{phase}: {total_batches} batches", flush=True)
 
     with torch.set_grad_enabled(training):
-        for batch in loader:
+        for batch_index, batch in enumerate(loader, start=1):
             batch = {key: value.to(device, non_blocking=True) for key, value in batch.items()}
             if training:
                 optimizer.zero_grad(set_to_none=True)
@@ -48,6 +57,12 @@ def _run_epoch(model, loader, device: torch.device, optimizer=None, collect_pred
             if collect_predictions:
                 true_labels.extend(batch["labels"].cpu().tolist())
                 predicted_labels.extend(predictions.cpu().tolist())
+            if batch_index == 1 or batch_index % 100 == 0 or batch_index == total_batches:
+                print(
+                    f"{phase}: batch {batch_index}/{total_batches} "
+                    f"loss {total_loss / count:.4f} acc {correct / count:.3f}",
+                    flush=True,
+                )
 
     accuracy = correct / count
     metrics = {"loss": total_loss / count, "accuracy": accuracy, "accuracy_pct": round(100 * accuracy, 2)}
@@ -62,6 +77,7 @@ def _percentage(numerator: int, denominator: int) -> float:
 
 def _write_test_reports(output_dir: Path, true_labels: np.ndarray, predicted_labels: np.ndarray):
     per_instrument = []
+    per_instrument_f1 = []
     for index, instrument in enumerate(TARGET_LABELS):
         actual = true_labels == index
         predicted = predicted_labels == index
@@ -71,6 +87,7 @@ def _write_test_reports(output_dir: Path, true_labels: np.ndarray, predicted_lab
         precision = true_positive / predicted_count if predicted_count else 0.0
         recall = true_positive / support if support else 0.0
         f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+        per_instrument_f1.append(f1)
         per_instrument.append(
             {
                 "instrument": instrument,
@@ -83,6 +100,17 @@ def _write_test_reports(output_dir: Path, true_labels: np.ndarray, predicted_lab
             }
         )
     pd.DataFrame(per_instrument).to_csv(output_dir / "test_by_instrument.csv", index=False)
+
+    accuracy = float((true_labels == predicted_labels).mean())
+    macro_f1 = float(np.mean(per_instrument_f1))
+    summary = {
+        "test_clips": int(true_labels.size),
+        "accuracy": accuracy,
+        "accuracy_pct": round(100 * accuracy, 2),
+        "macro_f1": macro_f1,
+        "macro_f1_pct": round(100 * macro_f1, 2),
+    }
+    pd.DataFrame([summary]).to_csv(output_dir / "test_summary.csv", index=False)
 
     label_to_index = {label: index for index, label in enumerate(TARGET_LABELS)}
     per_family = []
@@ -111,7 +139,7 @@ def _write_test_reports(output_dir: Path, true_labels: np.ndarray, predicted_lab
         columns=[f"predicted_{instrument}" for instrument in TARGET_LABELS],
     ).to_csv(output_dir / "test_confusion_matrix.csv", index_label="true_instrument")
 
-    return {"per_instrument": per_instrument, "per_family": per_family}
+    return {"summary": summary, "per_instrument": per_instrument, "per_family": per_family}
 
 
 def train(
@@ -149,8 +177,19 @@ def train(
     best_accuracy = float("-inf")
     history = []
     for epoch in range(1, epochs + 1):
-        train_metrics = _run_epoch(model, train_loader, target_device, optimizer)
-        val_metrics = _run_epoch(model, val_loader, target_device)
+        train_metrics = _run_epoch(
+            model,
+            train_loader,
+            target_device,
+            optimizer,
+            phase=f"epoch {epoch} train",
+        )
+        val_metrics = _run_epoch(
+            model,
+            val_loader,
+            target_device,
+            phase=f"epoch {epoch} validation",
+        )
         result = {"epoch": epoch, "train": train_metrics, "val": val_metrics}
         history.append(result)
         print(
@@ -172,11 +211,26 @@ def train(
         test_loader,
         target_device,
         collect_predictions=True,
+        phase="test",
     )
     reports = _write_test_reports(output_dir, true_labels, predicted_labels)
-    metrics = {"history": history, "test": test_metrics, **reports}
+    test_metrics.update(
+        {
+            "macro_f1": reports["summary"]["macro_f1"],
+            "macro_f1_pct": reports["summary"]["macro_f1_pct"],
+        }
+    )
+    metrics = {
+        "history": history,
+        "test": test_metrics,
+        "per_instrument": reports["per_instrument"],
+        "per_family": reports["per_family"],
+    }
     (output_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
-    print(f"test loss {test_metrics['loss']:.4f} | acc {test_metrics['accuracy']:.3f}")
+    print(
+        f"test loss {test_metrics['loss']:.4f} | acc {test_metrics['accuracy']:.3f} "
+        f"| macro-F1 {test_metrics['macro_f1']:.3f}"
+    )
     print(f"wrote test reports to {output_dir}")
     return metrics
 
