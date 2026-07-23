@@ -113,13 +113,18 @@ TRIM_TOP_DB = 30
 # than a long one at the same SNR. noise_eval.py reports the sweep per length bucket to
 # keep that from being confounded with the noise effect itself.
 
-# A file of duration d yields min(floor(d / CLIP_SECONDS), MAX_CHUNKS_PER_FILE) chunks.
-# The cap exists because chunks of one sustained note are near-identical: uncapped, a
-# single 70.66s trumpet recording yields 35 chunks and would be weighted 35x any other
-# note. Pseudo-replication inflates the dataset without adding information. Train/test
-# leakage is separately prevented by the pitch-grouped split — every chunk of a file shares
-# its {instrument}_{note} group, so chunks cannot span splits.
-MAX_CHUNKS_PER_FILE = 4
+# A file of duration d yields min(floor(d / CLIP_SECONDS), MAX_CHUNKS_PER_FILE) chunks, taken
+# from the start — so chunk 0 always contains the note onset (attack).
+#
+# Set to 1: keep only the onset chunk, drop the later ones. At the previous cap of 4, the
+# later chunks were ~5% of the set and were near-duplicate ATTACK-LESS sustains of ~196
+# long/very-long notes — and disproportionately the soft (piano) notes that are the most
+# timbrally ambiguous (a soft sustained trumpet reads as a clarinet). Over-weighting the
+# hardest, most redundant material ~3-4x is low-value at best. cap=1 gives every file one
+# clip that includes the attack; long files keep their first CLIP_SECONDS. (Train/test
+# leakage was never the concern here — the pitch-grouped split keeps a note's chunks in one
+# split — but a cap is still cleaner.)
+MAX_CHUNKS_PER_FILE = 1
 
 # --- spectrogram ---
 N_MELS = 128

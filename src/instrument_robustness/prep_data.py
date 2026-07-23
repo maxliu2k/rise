@@ -304,10 +304,17 @@ def load_chunks(path):
 
 
 def wav_to_logmel(y):
-    """Fixed-length waveform -> per-spectrogram-standardized log-mel, shape (N_MELS, N_FRAMES)."""
+    """Variable-length waveform -> per-spectrogram-standardized log-mel, shape (N_MELS, frames).
+
+    pad_mode="reflect": center=True must pad n_fft//2 samples at each edge before framing.
+    The librosa default is "constant" (zeros), which reinserts digital silence at the edges
+    of every spectrogram — undercutting the pipeline's no-silence invariant and hitting short
+    clips hardest (~1/3 of frames for a 0.26s clip). Reflecting the clip's own audio instead
+    keeps the edge frames looking like the instrument, not a gap (edge deficit ~1dB -> ~0.3dB).
+    """
     mel = librosa.feature.melspectrogram(
         y=y, sr=SR, n_fft=N_FFT, hop_length=HOP_LENGTH,
-        n_mels=N_MELS, fmin=FMIN, fmax=FMAX,
+        n_mels=N_MELS, fmin=FMIN, fmax=FMAX, pad_mode="reflect",
     )
     logmel = librosa.power_to_db(mel, ref=np.max)
     return ((logmel - logmel.mean()) / (logmel.std() + 1e-8)).astype(np.float32)
