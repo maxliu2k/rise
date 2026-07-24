@@ -20,12 +20,16 @@ TRIMMED = WORK / "trimmed"
 WINDOWS = WORK / "windows"
 FEATURES = DATA_ROOT / "features"
 
-# Oboe is absent from this Philharmonia copy; bassoon substitutes as the 9th class.
-TARGET_LABELS = [
+# Class set. Default = the 9-class Philharmonia build (oboe absent -> bassoon substitutes).
+# Override for other datasets/scopes (e.g. 12-class TinySOL) via RISE_TARGET_LABELS
+# (comma-separated), the same way RISE_DATA_ROOT overrides the data location.
+_DEFAULT_LABELS = [
     "violin", "viola", "cello",          # strings
     "flute", "clarinet", "bassoon",      # woodwinds
     "trumpet", "tuba", "trombone",       # brass
 ]
+TARGET_LABELS = ([s.strip() for s in os.environ["RISE_TARGET_LABELS"].split(",") if s.strip()]
+                 if os.environ.get("RISE_TARGET_LABELS") else _DEFAULT_LABELS)
 
 SR = 22050            # common resample rate; Nyquist 11025 Hz sits below the lowest MP3 brick wall (~16 kHz)
 TRIM_TOP_DB = 30      # silence-trim threshold
