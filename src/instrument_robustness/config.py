@@ -32,10 +32,17 @@ FEATURES = DATA_ROOT / "features"
 # older local Philharmonia copy; prep_data.py fetches all 12 from the Internet Archive mirror, so
 # they are no longer missing. Any checkpoint trained under the 9-class set is INVALID here --
 # label indices have shifted and must be retrained.
-TARGET_LABELS = [
+#
+# TinySOL uses these SAME 12 labels (see tinysol/pipeline/pipeline_report.txt), so cross-dataset
+# evaluation is index-compatible without remapping. RISE_TARGET_LABELS (comma-separated) overrides
+# the set, mirroring how RISE_DATA_ROOT overrides the data location -- but an override that
+# reorders these names invalidates existing checkpoints, so keep it alphabetical.
+_DEFAULT_LABELS = [
     "bassoon", "cello", "clarinet", "double-bass", "flute", "french-horn",
     "oboe", "trombone", "trumpet", "tuba", "viola", "violin",
 ]
+TARGET_LABELS = ([s.strip() for s in os.environ["RISE_TARGET_LABELS"].split(",") if s.strip()]
+                 if os.environ.get("RISE_TARGET_LABELS") else _DEFAULT_LABELS)
 
 # --- Acquisition (prep_data.py) ---
 # The official philharmonia.co.uk/assets/... URLs predate their site redesign and no longer
