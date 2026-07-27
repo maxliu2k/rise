@@ -21,7 +21,8 @@ from sklearn.metrics import classification_report, confusion_matrix, matthews_co
 
 from ..config import (
     BATCH_SIZE, CLASSES, EARLY_STOP_PATIENCE, LEARNING_RATE, MAX_EPOCHS, OUTPUTS,
-    PLATEAU_FACTOR, PLATEAU_PATIENCE, SEEDS, SPECAUGMENT, WEIGHT_DECAY,
+    PLATEAU_FACTOR, PLATEAU_PATIENCE, SEED_METRICS_DIR, SEEDS, SPEC_DIR, SPECAUGMENT,
+    StaleArtifactError, WEIGHT_DECAY, assert_fingerprint, config_fingerprint,
 )
 from ..cnn_core import (
     agg, class_weights, evaluate, get_device, LengthBatcher, load_manifest, load_split,
@@ -171,7 +172,10 @@ def run_seed(seed, data, device, on_epoch=None):
 
     model.load_state_dict(best_state)
     path = OUTPUTS / f"model_s{seed}.pt"
-    torch.save({"state_dict": best_state, "seed": seed, "classes": list(CLASSES)}, path)
+    # fingerprint travels with the weights: evaluating these against a cache built under a
+    # different config yields a plausible, meaningless number that nothing else would catch.
+    torch.save({"state_dict": best_state, "seed": seed, "classes": list(CLASSES),
+                "fingerprint": config_fingerprint()}, path)
 
     te_loss, te_bacc, preds, targets = evaluate(model, test_loader, criterion, device)
     te_mcc = matthews_corrcoef(targets, preds)
@@ -200,6 +204,58 @@ def run_seed(seed, data, device, on_epoch=None):
     }, history, preds, targets
 
 
+# --------------------------------------------------------------------------- seed store
+
+
+def save_seed_metrics(seed, result, history, preds, targets):
+    """Persist one seed's complete result to outputs/seed_metrics/s{seed}.json.
+
+    Precondition: `result`, `history`, `preds`, `targets` are run_seed()'s outputs for `seed`.
+    Postcondition: the file holds everything needed to rebuild every aggregate, table and plot
+    for this seed WITHOUT retraining it, plus the config fingerprint it was produced under.
+    """
+    SEED_METRICS_DIR.mkdir(parents=True, exist_ok=True)
+    (SEED_METRICS_DIR / f"s{seed}.json").write_text(json.dumps({
+        "fingerprint": config_fingerprint(),
+        "result": result,
+        "history": history,
+        "preds": [int(p) for p in preds],
+        "targets": [int(t) for t in targets],
+    }, indent=2))
+
+
+def load_seed_metrics(seeds):
+    """Load persisted results for every seed in `seeds`, whenever they were trained.
+
+    This is why metrics.json cannot silently cover a subset: aggregation reads the canonical
+    seed set from disk rather than whatever one invocation happened to run. Training seed 42,
+    then seeds 43 and 44 separately, previously left metrics.json describing 2 of 3 while
+    still looking canonical.
+
+    Precondition: each seed has been trained under the CURRENT config.
+    Postcondition: returns (results, histories, (preds, targets) of the first seed).
+    Raises StaleArtifactError naming the missing seeds and the exact command to produce them,
+    or if any seed was trained under a different config.
+    """
+    missing = [s for s in seeds if not (SEED_METRICS_DIR / f"s{s}.json").exists()]
+    if missing:
+        have = [s for s in seeds if s not in missing]
+        raise StaleArtifactError(
+            f"no saved results for seed(s) {missing} — an aggregate over only {have} would be "
+            f"written to metrics.json and read as the full result.\n"
+            f"  Run: python -m instrument_robustness.single.train --seeds "
+            f"{' '.join(str(s) for s in missing)}")
+    results, histories, first = [], {}, None
+    for s in seeds:
+        d = json.loads((SEED_METRICS_DIR / f"s{s}.json").read_text())
+        assert_fingerprint(d.get("fingerprint"), f"outputs/seed_metrics/s{s}.json")
+        results.append(d["result"])
+        histories[s] = d["history"]
+        if first is None:
+            first = (np.array(d["preds"]), np.array(d["targets"]))
+    return results, histories, first
+
+
 # --------------------------------------------------------------------------- main
 
 
@@ -222,7 +278,8 @@ def main():
     Xte, yte, test_ids = load_split(splits["test"], by_id)
     frames = [s.shape[-1] for s in Xtr]
     print(f"train {len(Xtr)} | val {len(Xva)} | test {len(Xte)} clips")
-    print(f"variable length: {min(frames)}-{max(frames)} frames, {len(set(frames))} distinct")
+    print(f"clip frames: {min(frames)}-{max(frames)}, {len(set(frames))} distinct "
+          f"({'fixed' if len(set(frames)) == 1 else 'VARIABLE'})")
     class_weights(ytr)
     nb = len(LengthBatcher(Xtr, ytr, BATCH_SIZE))
     print(f"length-bucketed batching: {nb} train batches/epoch, mean size {len(Xtr) / nb:.1f}")
@@ -245,13 +302,14 @@ def main():
                                    f"({100*done/total:.0f}%)")
         return cb
 
-    results, histories, first = [], {}, None
     for si, seed in enumerate(args.seeds):
         r, h, preds, targets = run_seed(seed, data, device, on_epoch_for(si, seed))
-        results.append(r)
-        histories[seed] = h
-        if first is None:
-            first = (preds, targets)
+        save_seed_metrics(seed, r, h, preds, targets)
+
+    # Aggregate over the CANONICAL seed set, pulling in seeds trained by earlier invocations.
+    # Aggregating this run's seeds instead is what let `--seeds 42` followed by
+    # `--seeds 43 44` write a 2-seed metrics.json that looked like the full 3-seed result.
+    results, histories, first = load_seed_metrics(list(SEEDS))
 
     chance = 1.0 / len(CLASSES)
     bacc = agg([r["test_balanced_accuracy"] for r in results])
@@ -318,7 +376,8 @@ def main():
         "classes": list(CLASSES),
         "n_classes": len(CLASSES),
         "chance_balanced_accuracy": chance,
-        "seeds": args.seeds,
+        "seeds": list(SEEDS),          # always the canonical set — see load_seed_metrics()
+        "fingerprint": config_fingerprint(),
         "device": str(device),
         "articulation_mode": manifest["articulation_mode"],
         "sample_rate": manifest.get("sample_rate"),

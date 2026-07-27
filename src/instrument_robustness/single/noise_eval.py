@@ -29,7 +29,7 @@ from sklearn.metrics import balanced_accuracy_score, confusion_matrix, matthews_
 
 from ..config import (
     BATCH_SIZE, CLASSES, IN_BAND_HZ, NOISE_COLORS, NOISE_SEED, OUTPUTS, SEED, SEEDS,
-    SNR_LEVELS_DB, SR, WAVE_DIR,
+    SNR_LEVELS_DB, SR, WAVE_DIR, assert_fingerprint, config_fingerprint,
 )
 from ..prep_data import wav_to_logmel
 from ..cnn_core import agg, get_device, load_manifest, MediumCNN, set_seed
@@ -183,16 +183,24 @@ def main():
     set_seed(SEED)
     device = get_device()
 
+    # Every seed in SEEDS must be present and built under the CURRENT config. Skipping absent
+    # checkpoints (the previous behaviour) silently turned a 3-seed sweep into a 2-seed one
+    # while still printing "mean +/- std"; loading a checkpoint trained on a differently-built
+    # cache produces a plausible curve that means nothing.
+    missing = [s for s in SEEDS if not (OUTPUTS / f"model_s{s}.pt").exists()]
+    if missing:
+        sys.exit(f"ERROR: no checkpoint for seed(s) {missing}. The sweep would report "
+                 f"{[s for s in SEEDS if s not in missing]} as if complete.\n"
+                 f"  Run: python -m instrument_robustness.single.train --seeds "
+                 f"{' '.join(str(s) for s in missing)}")
     models = {}
     for seed in SEEDS:
         p = OUTPUTS / f"model_s{seed}.pt"
-        if not p.exists():
-            continue
+        ckpt = torch.load(p, map_location=device, weights_only=False)
+        assert_fingerprint(ckpt.get("fingerprint"), f"outputs/model_s{seed}.pt")
         m = MediumCNN().to(device)
-        m.load_state_dict(torch.load(p, map_location=device)["state_dict"])
+        m.load_state_dict(ckpt["state_dict"])
         models[seed] = m
-    if not models:
-        sys.exit("ERROR: no model_s*.pt in outputs/ — run `python -m instrument_robustness.train` first.")
 
     manifest, splits, by_id = load_manifest()
     records = [by_id[i] for i in sorted(splits["test"])]
@@ -260,6 +268,7 @@ def main():
         "chance_balanced_accuracy": chance, "clean_balanced_accuracy": clean["balanced_accuracy"],
         "seeds": list(models), "noise_seed": NOISE_SEED, "in_band_hz": list(IN_BAND_HZ),
         "device": str(device), "n_test": len(records), "clean_path_check_passed": bool(ok),
+        "fingerprint": config_fingerprint(),
         "by_color": by_color,
     }, indent=2))
     plot_colors(by_color, clean_bacc, OUTPUTS / "noise_colors.png")

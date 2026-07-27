@@ -18,6 +18,9 @@ SPLITS_JSON = DATA_CACHE / "splits.json"
 MANIFEST_JSON = DATA_CACHE / "manifest.json"
 OUTPUTS = ROOT / "outputs"
 MODEL_PATH = OUTPUTS / "model.pt"
+# One JSON per trained seed. metrics.json is rebuilt by aggregating ALL of these, so seeds may
+# be trained in separate invocations without the aggregate silently covering only the last one.
+SEED_METRICS_DIR = OUTPUTS / "seed_metrics"
 
 # --- data source ---
 # The official philharmonia.co.uk/assets/audio/samples/... URLs predate their site
@@ -84,34 +87,35 @@ MAX_IMBALANCE = 1.5     # above this ratio, train.py applies class weights
 # Raising SR toward 44100 puts the encoder INSIDE the analysis band and hands the model a
 # perfect non-timbral shortcut. prep_data.check_bitrates() enforces this each run.
 SR = 22050
-CLIP_SECONDS = 2.0            # MAXIMUM clip length, not a fixed one — see below
-CLIP_SAMPLES = int(SR * CLIP_SECONDS)  # 44100
+CLIP_SECONDS = 3.0           # FIXED window: every clip is exactly this long
+CLIP_SAMPLES = int(SR * CLIP_SECONDS)  # 66150
+# 3.0s matches the team's shared window, so our CNN clips line up with the other models'
+# without anyone reconciling two window sizes. It is a whole multiple of the library's coded
+# note durations (0.25/0.5/1.0/1.5s), and truncates only the longest ~3% of notes (vs ~20%
+# at 1.5s); those lose redundant sustain tails, not timbre (attack + early sustain carry it).
+# Most notes are shorter than the window (median ~0.91s) and get TILED to fill it — see below.
 TRIM_TOP_DB = 30
 
-# Clips are VARIABLE LENGTH. Nothing is ever padded or tiled: a note shorter than
-# CLIP_SECONDS is kept at its true length, and a file longer than CLIP_SECONDS is cut into
-# chunks of exactly CLIP_SECONDS (capped, see below). Every sample the model sees is real
-# recorded audio.
+# Clips are FIXED LENGTH (CLIP_SAMPLES). A note shorter than the window is TILED — looped
+# end-to-start until it fills the window — and a file longer than the window is truncated
+# (chunked, see below). Every clip is the same size, which the shared .npz stacking requires
+# and which removes clip-width as a class-correlated cue the model could otherwise exploit.
 #
-# This is viable because MediumCNN ends in AdaptiveAvgPool2d, which collapses any time
-# axis — verified from 12 to 500 frames. Batching is what needs care: train.py groups
-# clips by exact frame count so every batch is uniform without padding (73 groups here,
-# median 10 clips, mean batch ~14 vs the 32 target).
-#
-# Rejected alternatives, both measured:
-#   tiling  — repeat a short note to fill CLIP_SECONDS. Produces no click artifact (seam
-#             discontinuity is 0.2x a normal sample step, since trimmed notes start and end
-#             near zero) but fabricates 2s of audio from as little as 0.26s. 79% of clips
-#             would have been tiled.
-#   zeros   — centered zero-padding. Actively breaks the noise sweep: power_to_db clamps
+# Why tiling and not zero-padding:
+#   zeros   — centered zero-padding actively BREAKS the noise sweep: power_to_db clamps
 #             digital silence to the -80dB floor, that floor is ~61% of a median image, and
 #             added noise fills it, collapsing the spectrogram's std and pushing the clip
 #             outside the training distribution. Measured: majority-class collapse (0.65
 #             acc, trumpet F1 0.00) at every SNR including a mild 20dB.
-#
-# Known cost: clip length now varies 11-87 frames, so a short clip carries less evidence
-# than a long one at the same SNR. noise_eval.py reports the sweep per length bucket to
-# keep that from being confounded with the noise effect itself.
+#   tiling  — looping the trimmed note keeps the window 100% real signal, so noise lands on
+#             music at every point, not on a silence floor. The trimmed note starts near its
+#             onset and ends near-zero (top_db=30), so each loop re-introduces the recorded
+#             attack: the seam discontinuity measured ~0.2x a normal sample step (no click),
+#             and the result resembles a re-articulated / tongued note of the same pitch — an
+#             in-class sound, not an alien one. The loop is class-neutral (applied identically
+#             to all 12 instruments); its only per-clip parameter, the repeat period = source
+#             note length, carries just the weak note-length signal, which MediumCNN's
+#             AdaptiveAvgPool2d averages over the time axis and largely discards.
 
 # A file of duration d yields min(floor(d / CLIP_SECONDS), MAX_CHUNKS_PER_FILE) chunks, taken
 # from the start — so chunk 0 always contains the note onset (attack).
@@ -132,10 +136,9 @@ N_FFT = 2048
 HOP_LENGTH = 512
 FMIN = 0
 FMAX = SR // 2
-# Time axis is variable. A clip of n samples @ hop 512, center=True -> 1 + n//512 frames,
-# so 2.0s -> 87 (the maximum) and the shortest note here, 0.26s, -> 12.
-MAX_FRAMES = 1 + CLIP_SAMPLES // HOP_LENGTH  # 87
-MIN_FRAMES = 8  # 3 MaxPool2d(2) stages must leave a non-empty time axis: 8 -> 4 -> 2 -> 1
+# Time axis is now FIXED: every clip is CLIP_SAMPLES @ hop 512, center=True -> 1 + n//512.
+MAX_FRAMES = 1 + CLIP_SAMPLES // HOP_LENGTH  # 130 at 3.0s
+MIN_FRAMES = 8  # floor guard: 3 MaxPool2d(2) stages must leave a non-empty time axis (8->4->2->1)
 
 # --- split ---
 SPLIT_FRACTIONS = {"train": 0.70, "val": 0.15, "test": 0.15}
@@ -201,3 +204,60 @@ MIX_SEED = 2024
 # CAVEAT: summed studio notes are NOT real polyphony — no reverb interaction, aligned
 # onsets, uncorrelated parts. This validates the multi-label machinery and lets mixing be
 # studied cleanly; it is not a substitute for IRMAS (configs/data/irmas.yaml).
+
+
+# --- provenance ---
+
+def config_fingerprint():
+    """The data-processing settings that define what a cached array or checkpoint MEANS.
+
+    Every artifact (manifest, checkpoint, metrics) records this; every consumer asserts it
+    matches before using them together. This exists because a stale checkpoint evaluated
+    against a freshly rebuilt cache produces a plausible-looking, entirely meaningless number
+    — and nothing else in the pipeline would notice. Caught once by reading file timestamps
+    by hand, which is exactly the vigilance this replaces.
+
+    Only fields that change the meaning of the data belong here. Training hyperparameters
+    (LR, epochs, dropout) deliberately do NOT: a model trained at a different learning rate is
+    still a valid model for this cache, so including them would fire on harmless differences
+    and train everyone to ignore the check.
+
+    Postcondition: returns a JSON-serialisable dict, stable across runs for a given config.
+    """
+    return {
+        "sr": SR,
+        "clip_seconds": CLIP_SECONDS,
+        "max_chunks_per_file": MAX_CHUNKS_PER_FILE,
+        "trim_top_db": TRIM_TOP_DB,
+        "n_mels": N_MELS,
+        "n_fft": N_FFT,
+        "hop_length": HOP_LENGTH,
+        "classes": list(CLASSES),
+    }
+
+
+class StaleArtifactError(RuntimeError):
+    """An artifact was built under a different config than the one now in effect."""
+
+
+def assert_fingerprint(found, source, expected=None):
+    """Crash unless `found` matches the current config fingerprint.
+
+    Precondition: `found` is a fingerprint dict previously produced by config_fingerprint(),
+    or None for an artifact predating fingerprinting.
+    Postcondition: returns None; raises otherwise. Never returns "close enough".
+
+    Raises StaleArtifactError, naming the differing fields and how to fix it — a bare
+    assertion here would print a 40-line dict diff and teach the reader nothing.
+    """
+    expected = expected if expected is not None else config_fingerprint()
+    if found is None:
+        raise StaleArtifactError(
+            f"{source} predates config fingerprinting, so it cannot be checked against the "
+            f"current config. Rebuild it: python -m instrument_robustness.prep_data")
+    diffs = [f"    {k}: artifact={found.get(k, '<missing>')!r} current={v!r}"
+             for k, v in expected.items() if found.get(k) != v]
+    if diffs:
+        raise StaleArtifactError(
+            f"{source} was built under a different config:\n" + "\n".join(diffs) +
+            "\n  Rebuild the cache and retrain, or check out the config that made it.")

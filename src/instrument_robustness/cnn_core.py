@@ -1,6 +1,6 @@
 """Shared CNN core — used by BOTH the single-instrument and multiple-instrument tasks.
 
-Holds the model (MediumCNN), the variable-length batching, the training/eval primitives,
+Holds the model (MediumCNN), the length-bucketed batching, the training/eval primitives,
 and small helpers. The task-specific code lives in single/ and multi/; anything they both
 need lives here so neither depends on the other.
 """
@@ -18,7 +18,7 @@ from sklearn.metrics import balanced_accuracy_score
 from .config import (
     BATCH_SIZE, CLASSES, DROPOUT, MANIFEST_JSON, MAX_IMBALANCE, SPEC_DIR,
     SPECAUG_FREQ_MASKS, SPECAUG_FREQ_WIDTH, SPECAUG_TIME_MASKS, SPECAUG_TIME_WIDTH,
-    SPLITS_JSON,
+    SPLITS_JSON, assert_fingerprint,
 )
 
 
@@ -42,19 +42,27 @@ def agg(vals):
 # --------------------------------------------------------------------------- data
 
 def load_manifest():
+    """Load the cache manifest and splits, refusing a cache built under a different config.
+
+    Postcondition: returns (manifest, splits, records-by-id) whose cached arrays were produced
+    by the config now in effect. Raises StaleArtifactError otherwise — silently training on a
+    cache built at a different CLIP_SECONDS or SR yields a plausible, meaningless model.
+    """
     if not MANIFEST_JSON.exists() or not SPLITS_JSON.exists():
         sys.exit("ERROR: cache missing — run `python -m instrument_robustness.prep_data` first.")
     manifest = json.loads(MANIFEST_JSON.read_text())
     splits = json.loads(SPLITS_JSON.read_text())
+    assert_fingerprint(manifest.get("fingerprint"), str(MANIFEST_JSON))
     return manifest, splits, {r["id"]: r for r in manifest["records"]}
 
 
 def load_split(split_ids, by_id):
     """Cached spectrograms for a split -> (specs, y, ids).
 
-    Clips are variable length, so specs is a LIST of (1, n_mels, frames) tensors rather than
-    one stacked array. The whole set is ~50 MB, so it lives in memory and epochs never touch
-    disk.
+    specs is a LIST of (1, n_mels, frames) tensors rather than one stacked array. Clips are all
+    the same length now, so stacking would work — the list is kept because it costs nothing and
+    keeps this correct if a variable-length experiment is ever run again. The whole set is
+    ~100 MB, so it lives in memory and epochs never touch disk.
     """
     ids = sorted(split_ids)
     specs = [torch.from_numpy(np.load(SPEC_DIR / f"{i}.npy")).float().unsqueeze(0)
@@ -66,14 +74,15 @@ def load_split(split_ids, by_id):
 class LengthBatcher:
     """Yields batches of clips that all have the SAME frame count.
 
-    Variable-length clips cannot be stacked into one tensor, and the usual workaround —
-    padding to the batch maximum — would reintroduce exactly the digital silence that
-    breaks the noise sweep, and would contaminate BatchNorm statistics. Grouping by exact
-    length sidesteps both: every batch is uniform by construction, with zero padding.
+    Clips are now a fixed CLIP_SECONDS, so there is exactly one bucket and this behaves as an
+    ordinary shuffling batcher at the full BATCH_SIZE. It is retained because it is the thing
+    that makes padding unnecessary if clip length is ever varied again: padding to the batch
+    maximum would reintroduce exactly the digital silence that breaks the noise sweep, and
+    would contaminate BatchNorm statistics. Grouping by exact length sidesteps both.
 
-    Cost: batches are smaller than BATCH_SIZE when a length has few clips (here ~14 mean vs
-    a 32 target). BatchNorm2d tolerates this because it pools over height and width as well
-    as batch, so even a single clip yields n_mels x frames values per channel.
+    Cost when lengths DO vary: batches are smaller than BATCH_SIZE where a length has few
+    clips. BatchNorm2d tolerates this because it pools over height and width as well as batch,
+    so even a single clip yields n_mels x frames values per channel.
     """
 
     def __init__(self, specs, labels, batch_size, shuffle=False, seed=None):
