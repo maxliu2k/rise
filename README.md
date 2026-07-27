@@ -3,12 +3,13 @@
 Instrument classification and noise-robustness study. **12 classes** (4 strings, 4 woodwinds,
 4 brass) from the Philharmonia sample library, medium CNN, multi-seed.
 
-**Read [FINDINGS.md](FINDINGS.md) first.** Headline: balanced accuracy **0.9234 ± 0.0105**
-(MCC 0.9213 ± 0.0097) over 3 seeds against a 0.0833 chance floor. Two study-design problems are
+**Read [FINDINGS.md](FINDINGS.md) first.** Headline: balanced accuracy **0.9600 ± 0.0138**
+(MCC 0.9618 ± 0.0097) over 3 seeds against a 0.0833 chance floor. Two study-design problems are
 documented there, neither of them bugs:
 
-1. **The planned 20/10/0 dB noise sweep is a dead zone** — a clean-trained model has MCC 0.0000 by
-   10 dB, so all models would score identically. All the signal is between 60 and 30 dB.
+1. **Most of the planned 20/10/0 dB noise sweep can't discriminate models** — by 10 dB a
+   clean-trained model has folded onto 6 of 12 classes (MCC 0.149), and by 0 dB onto 4 (MCC 0.037).
+   20 dB is still usable. The full label space is only in play between 60 and 30 dB. See §5a.
 2. **Bitrate is confounded with class** (64/80/96 kbps across families). Inert at SR=22050,
    a free 3-way shortcut at 44.1 kHz. Do not raise the sample rate without reading §4.
 
@@ -18,7 +19,7 @@ documented there, neither of them bugs:
 pip install -e .          # or: pip install -r requirements.txt && export PYTHONPATH=src
 ```
 
-Python 3.10+, PyTorch (CPU is fine — a 3-seed run is ~50 min). MP3 decoding needs no ffmpeg;
+Python 3.10+, PyTorch (CPU is fine — a 3-seed run is ~88 min). MP3 decoding needs no ffmpeg;
 librosa routes through soundfile.
 
 ## Run
@@ -26,7 +27,7 @@ librosa routes through soundfile.
 ```bash
 python -m instrument_robustness.prep_data --inventory-only   # inventory + codec gate, no audio processing
 python -m instrument_robustness.prep_data                    # download, cache, split  (~5 min, ~250 MB)
-python -m instrument_robustness.single.train                 # single-instrument, 3 seeds  (~50 min, CPU)
+python -m instrument_robustness.single.train                 # single-instrument, 3 seeds  (~88 min, CPU)
 python -m instrument_robustness.single.train --progress      # ...with a pop-up progress bar
 python -m instrument_robustness.multi.train                  # multiple-instrument (mixtures)
 ```
@@ -69,10 +70,21 @@ Choices that are load-bearing and easy to undo by accident:
   above ~14 kHz. At 22050 the Nyquist is 11,025 Hz and it is discarded. At 44.1 kHz it is inside
   the analysis band and hands the model a free 3-way shortcut. `check_bitrates()` enforces this
   each run — do not silence it.
-- **Nothing is padded or tiled.** Clips are variable length; every sample is real recorded audio.
-  Zero-padding specifically **breaks** the noise sweep: `power_to_db` clamps digital silence to the
-  −80 dB floor, noise fills it, and the clip lands outside the training distribution.
-  `train.LengthBatcher` groups batches by exact frame count so no padding is ever needed.
+- **Clips are a fixed 3.0 s; short notes are tiled, never zero-padded.** A note shorter than the
+  window is looped to fill it, so every clip is 100% real signal. Zero-padding specifically
+  **breaks** the noise sweep: `power_to_db` clamps digital silence to the −80 dB floor, noise fills
+  it, and the clip lands outside the training distribution (measured: majority-class collapse at
+  every SNR). Tiling was tested for the obvious objection — that a looped note's repeated attacks
+  leak the source note length, which correlates with class — and **refuted**: both extremes of the
+  length distribution (tuba, ~5× repeats; clarinet, least tiled) floor at 0.000 recall under noise,
+  there is no monotone length-vs-survival relationship, and 0 dB accuracy is *lower* than the old
+  variable-length design. See FINDINGS §6.
+- **Artifacts carry a config fingerprint and consumers assert it.** `config.config_fingerprint()`
+  is stamped into `manifest.json`, every checkpoint, and `metrics.json`; `load_manifest()` and
+  `noise_eval` refuse to run against one built under a different config. A stale checkpoint
+  evaluated on a rebuilt cache otherwise produces a plausible, meaningless curve that nothing
+  catches. Likewise `metrics.json` always aggregates the canonical `config.SEEDS` from
+  `outputs/seed_metrics/`, so a partial run cannot masquerade as a complete one.
 - **Pitch-grouped splits.** The same note at different dynamics makes near-identical clips. A plain
   random split scatters them across train and test and inflates the score. `prep_data.py` keeps
   whole pitch-groups in one split and asserts no group — and no source file — spans two.
@@ -81,5 +93,5 @@ Choices that are load-bearing and easy to undo by accident:
 - **Accuracy and F1 are deliberately not reported.** Both pay a collapsed classifier the class
   prior and both have floors that drift with the split. Balanced accuracy (chance = 1/n_classes)
   and MCC (0.0 = no information) have fixed floors. See FINDINGS §7.
-- **Report mean ± std over ≥3 seeds.** Seeds 42/43/44 gave 0.9298/0.9291/0.9113 — a 1.85-point
-  spread, which is the margin a model comparison would turn on.
+- **Report mean ± std over ≥3 seeds.** Seeds 42/43/44 gave 0.9502/0.9540/0.9757 — a 2.55-point
+  spread, wider than the margin many model comparisons turn on.

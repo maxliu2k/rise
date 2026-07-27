@@ -26,6 +26,7 @@ from .config import (
     HOP_LENGTH, MANIFEST_JSON, MAX_CHUNKS_PER_FILE, MAX_IMBALANCE,
     MIN_FRAMES, MIN_STRICT_N, N_FFT, N_MELS, SEED, SPEC_DIR, SPLIT_FRACTIONS, SPLITS_JSON,
     SR, STRICT_ARTICULATIONS, SUSTAINED_ARTICULATIONS, TRIM_TOP_DB, WAVE_DIR,
+    config_fingerprint,
 )
 
 
@@ -279,23 +280,33 @@ def load_trimmed(path):
 
 
 def load_chunks(path):
-    """mp3 -> list of variable-length waveforms. Nothing is padded or tiled.
+    """mp3 -> list of FIXED-length waveforms, each exactly CLIP_SAMPLES.
 
-    A note shorter than CLIP_SAMPLES is kept at its true length. A file longer than that is
-    cut into chunks of exactly CLIP_SAMPLES, capped at MAX_CHUNKS_PER_FILE. Every returned
-    sample is real recorded audio. Also returns (source_samples, samples_discarded).
+    A note shorter than CLIP_SAMPLES is TILED (looped) to fill the window; a longer file is
+    cut into chunks of CLIP_SAMPLES, capped at MAX_CHUNKS_PER_FILE. Fixed size is required to
+    stack clips into the shared .npz format (128 x N_FRAMES) and stay comparable across the
+    team's models.
+
+    Tiling, not zero-padding, is the fill: zeros insert digital silence that the noise sweep
+    floods (majority-class collapse, measured), whereas looping keeps the window 100% real
+    signal so noise degrades it uniformly. Looping is clean because trimmed notes start/end
+    near zero (seam discontinuity ~0.2x a normal sample step — no click), and the data is
+    99.3% single sustained notes, so a repeated note ~= an extended note, not a chopped
+    phrase. Returns (source_samples, samples_discarded).
     """
     y_trim = load_trimmed(path)   # may raise DecodeError; build_cache counts those
     if y_trim is None:
         return [], 0, 0
     src = int(y_trim.size)
 
-    # too short to survive 3 MaxPool stages — would produce an empty time axis
+    # guard against tiling a sub-perceptual fragment dozens of times
     if 1 + src // HOP_LENGTH < MIN_FRAMES:
         return [], src, src
 
     if src < CLIP_SAMPLES:
-        return [y_trim.astype(np.float32)], src, 0  # leave it be
+        reps = int(np.ceil(CLIP_SAMPLES / src))
+        y_fixed = np.tile(y_trim, reps)[:CLIP_SAMPLES]
+        return [y_fixed.astype(np.float32)], src, 0
 
     n = min(src // CLIP_SAMPLES, MAX_CHUNKS_PER_FILE)
     chunks = [y_trim[i * CLIP_SAMPLES:(i + 1) * CLIP_SAMPLES].astype(np.float32)
@@ -381,56 +392,53 @@ def build_cache(records):
 
 
 def report_signal_stats(records):
-    L = np.array([r["clip_seconds"] for r in records])
-    F = np.array([r["n_frames"] for r in records])
-    print(f"\nclip length (every sample is real audio — nothing padded or tiled):")
-    print(f"    {L.min():.2f}s to {L.max():.2f}s | median {np.median(L):.2f}s")
-    print(f"    {F.min()} to {F.max()} frames | {len(np.unique(F))} distinct lengths")
-    print(f"    clips at the {CLIP_SECONDS}s cap: {(L >= CLIP_SECONDS - 1e-6).sum()} "
-          f"({(L >= CLIP_SECONDS - 1e-6).mean():.1%})")
+    S = np.array([r["source_seconds"] for r in records])   # note length BEFORE tiling
+    reps = np.where(S < CLIP_SECONDS, np.ceil(CLIP_SECONDS / np.maximum(S, 1e-6)), 1)
+    n_frames = records[0]["n_frames"] if records else 0
+    print(f"\nfixed clips: every clip is {CLIP_SECONDS}s -> 128 x {n_frames} spectrogram")
+    print(f"    short notes TILED to fill (looped), long notes truncated. No silence.")
+    print(f"    source note length: {S.min():.2f}s to {S.max():.2f}s | median {np.median(S):.2f}s")
+    print(f"    truncated (>= {CLIP_SECONDS}s): {(S >= CLIP_SECONDS).mean():.0%} | "
+          f"tiled: {(S < CLIP_SECONDS).mean():.0%} (median {np.median(reps[S < CLIP_SECONDS]):.1f}x)")
 
-    # Clip length is now a visible property of each example — it is literally the width of
-    # the spectrogram — rather than something padding normalised away. If it predicts the
-    # class, the CNN could read width instead of timbre.
+    # Every clip is now the same width, so the model CANNOT read clip length as a cue — the
+    # length confound is eliminated by fixed size. The only residual is whether the tiling
+    # PERIOD (a proxy for source length) leaks; we bound that by testing whether source
+    # length alone predicts the class (an upper bound — the model never sees it directly).
     per_class = {}
-    print("\n    clip length by class:")
+    print("\n    source note length by class:")
     for cls in CLASSES:
-        c = np.array([r["clip_seconds"] for r in records if r["instrument"] == cls])
+        c = np.array([r["source_seconds"] for r in records if r["instrument"] == cls])
         per_class[cls] = {"median_s": float(np.median(c)), "mean_s": float(c.mean()),
                           "iqr_s": [float(np.percentile(c, 25)), float(np.percentile(c, 75))]}
         print(f"        {cls:<14} median {np.median(c):.3f}s | IQR "
               f"{np.percentile(c, 25):.2f}-{np.percentile(c, 75):.2f}s | n {c.size}")
     lift = length_confound_lift(records)
-    print(f"\n        confound check: length-only classifier scores "
-          f"{lift['balanced_accuracy']:.4f} balanced acc vs {lift['chance']:.4f} chance "
-          f"(lift {lift['lift']:+.4f}, optimistic — scored on train)")
-    print("        -> WARNING: clip length alone is predictive; the model may read width, "
-          "not timbre" if lift["lift"] > 0.15
-          else "        -> length is not a strong shortcut; distributions overlap")
+    print(f"\n        confound upper bound: source-length-only classifier scores "
+          f"{lift['balanced_accuracy']:.4f} vs {lift['chance']:.4f} chance "
+          f"(lift {lift['lift']:+.4f}) — the model sees only the tiling period, not this")
 
-    return {"clip_seconds": {"min": float(L.min()), "max": float(L.max()),
-                             "median": float(np.median(L))},
-            "n_frames": {"min": int(F.min()), "max": int(F.max()),
-                         "distinct": int(len(np.unique(F)))},
-            "clip_seconds_by_class": per_class,
+    return {"fixed_clip_seconds": CLIP_SECONDS, "n_frames": int(n_frames),
+            "source_seconds": {"min": float(S.min()), "max": float(S.max()),
+                               "median": float(np.median(S))},
+            "tiled_fraction": float((S < CLIP_SECONDS).mean()),
+            "source_seconds_by_class": per_class,
             "length_confound": lift}
 
 
 def length_confound_lift(records):
-    """How well does clip length ALONE predict the class?
+    """How well does the SOURCE note length ALONE predict the class?
 
-    A median-gap test is the wrong instrument: distributions can differ in median while
-    overlapping so heavily that length carries almost no information. What matters is
-    predictive lift — and measured in BALANCED accuracy, so chance is 1/n_classes whatever
-    the imbalance, consistent with how everything else here is scored.
-
-    Fits a shallow decision tree on the single `clip_seconds` feature. Deliberately weak: if
-    even a strong learner can't beat chance on length alone, length is not a shortcut.
+    An UPPER BOUND on the tiling confound. Every clip is now the same width, so the model
+    cannot read clip length directly; the only leak would be if it inferred the source length
+    from the tiling period. This tests the friendlier version — source length handed to the
+    classifier outright — so if even that barely beats chance, the tiling period is safe.
+    Balanced accuracy, so chance is 1/n_classes whatever the imbalance.
     """
     from sklearn.metrics import balanced_accuracy_score
     from sklearn.tree import DecisionTreeClassifier
 
-    L = np.array([r["clip_seconds"] for r in records]).reshape(-1, 1)
+    L = np.array([r["source_seconds"] for r in records]).reshape(-1, 1)
     y = np.array([r["label"] for r in records])
     tree = DecisionTreeClassifier(max_depth=4, class_weight="balanced",
                                   random_state=SEED).fit(L, y)
@@ -557,8 +565,10 @@ def main():
         "seed": SEED,
         "sample_rate": SR,
         "bitrate_kbps_by_class": bitrates,
-        "variable_length": True,
-        "max_clip_seconds": CLIP_SECONDS,
+        # anything trained or evaluated against this cache asserts this matches
+        "fingerprint": config_fingerprint(),
+        "variable_length": False,      # clips are a fixed CLIP_SECONDS; short notes are tiled
+        "clip_seconds": CLIP_SECONDS,
         "max_chunks_per_file": MAX_CHUNKS_PER_FILE,
         "n_source_files": len({r["parent_id"] for r in cached}),
         "signal_stats": signal_stats,
