@@ -162,33 +162,49 @@ most-predicted class, and how many of the 12 classes still receive ≥1% of pred
 |---|---|---|---|---|---|
 | clean | 0.9600 | 0.9618 | — | — | 12 |
 | 60 dB | 0.9609 | 0.9627 | +0.001 | 10.7% | 12 |
-| 50 dB | 0.9448 | 0.9452 | −0.015 | 10.9% | 12 |
-| **45 dB** | 0.8999 | 0.8968 | −0.060 | 11.7% | 12 |
-| **40 dB** | 0.8268 | 0.8209 | −0.133 | 13.3% | 12 |
-| 35 dB | 0.7002 | 0.6967 | −0.260 | 17.4% | 12 |
-| 30 dB | 0.5755 | 0.5715 | −0.384 | 21.5% | 11 |
-| **20 dB** | 0.3838 | 0.3748 | −0.576 | 29.7% | 7 |
-| 10 dB | 0.1923 | 0.1493 | −0.768 | 46.8% | 6 |
-| 0 dB | 0.1071 | 0.0373 | −0.853 | 75.4% | 4 |
+| 55 dB | 0.9591 | 0.9610 | −0.001 | 10.7% | 12 |
+| 50 dB | 0.9432 | 0.9435 | −0.017 | 10.9% | 12 |
+| 47.5 dB | 0.9259 | 0.9247 | −0.034 | 11.3% | 12 |
+| **45 dB** | 0.9017 | 0.8979 | −0.058 | 11.8% | 12 |
+| 42.5 dB | 0.8711 | 0.8662 | −0.089 | 12.3% | 12 |
+| **40 dB** | 0.8275 | 0.8217 | −0.132 | 13.3% | 12 |
+| 37.5 dB | 0.7619 | 0.7577 | −0.198 | 15.0% | 12 |
+| 35 dB | 0.7011 | 0.6976 | −0.259 | 17.1% | 12 |
+| 32.5 dB | 0.6363 | 0.6332 | −0.324 | 19.3% | **12** |
+| 30 dB | 0.5769 | 0.5738 | −0.383 | 21.1% | 11 |
+| 27.5 dB | 0.5227 | 0.5191 | −0.437 | 23.6% | 11 |
+| 25 dB | 0.4787 | 0.4757 | −0.481 | 26.0% | 10 |
+| **20 dB** | 0.3826 | 0.3732 | −0.577 | 29.9% | 7 |
+| 10 dB | 0.1896 | 0.1458 | −0.770 | 46.4% | 6 |
+| 0 dB | 0.1052 | 0.0343 | −0.855 | 75.6% | 4 |
 
 The knee is at **45–40 dB** — noise at ~1% of signal amplitude, quieter than a recording studio.
 Degradation starts absurdly early. But the levels split into three regimes:
 
-- **60–30 dB: genuine graded degradation.** Predictions stay spread over all 12 classes (top share
-  10.7–21.5% against a uniform 8.3%). This is the band with real resolving power for a model
-  comparison.
-- **20 dB: partially collapsed but still informative.** bacc 0.3838 is well clear of chance, but
-  **5 of 12 classes have already dropped out of the model's effective output vocabulary.** A
-  comparison here measures how fast each model sheds its label space, which is a legitimate
-  quantity — but it is not the same quantity as accuracy in the band above.
-- **10 dB and 0 dB: collapsed.** By 0 dB, 75.4% of all predictions are double-bass and 94% are
+- **60–32.5 dB: genuine graded degradation.** Predictions stay spread over all 12 classes (top
+  share 10.7–19.3% against a uniform 8.3%). This is the band with real resolving power for a model
+  comparison. The 2.5 dB grid pins the boundary at **32.5 dB**; the earlier coarse grid could only
+  say "60–30".
+- **30–25 dB: shedding.** The model drops to 11 classes at 30 dB and 10 at 25 dB. Still well above
+  chance and still informative, but a comparison here is partly measuring how fast each model
+  loses its label space.
+- **20 dB: substantially collapsed.** bacc 0.3826 is clear of chance, but **5 of 12 classes have
+  dropped out of the model's effective output vocabulary.**
+- **10 dB and 0 dB: collapsed.** By 0 dB, 75.6% of all predictions are double-bass and ~94% are
   double-bass or cello — the model has folded onto the low-register strings. Recall figures for
   those classes at low SNR (double-bass 0.976 at 0 dB) are **attractor artifacts, not robustness.**
   Six models run here would be near-indistinguishable.
 
+*Grid note.* This sweep uses 16 levels (2.5 dB steps across 50–25 dB). `noise_eval` seeds its
+per-clip RNG on the condition's index in `SNR_LEVELS_DB`, so re-gridding changes the noise
+realisation at every level whose position moved. Measured effect: at the nine levels shared with
+the previous 9-point grid, the largest change is **0.0027** (a fifth of the seed spread), and
+60 dB — the one level whose index did not move — is bit-identical. Statistically comparable, not
+bit-identical.
+
 **Correction to the previous version of this section.** It stated that degradation is "graceful (a
 steady slide, not the majority-class collapse the 2-class model showed)." That is true only in the
-60–30 dB band. Majority-class collapse *does* occur here — it arrives around 20 dB and is severe by
+60–32.5 dB band. Majority-class collapse *does* occur here — it begins at 30 dB and is severe by
 10 dB. The earlier claim was measured before the class-space diagnostic existed and is retracted.
 
 This is a clean-trained model meeting noise it never saw, so it measures brittleness to distribution
@@ -200,7 +216,7 @@ rather than a characterisation.
 ### 5b. In-band energy explains most of the colour gap, but not all of it
 
 Swept white / pink (1/f) / brown (1/f²) at matched *nominal* SNR. On that axis the colours look
-wildly different — at nominal 0 dB, brown 0.3837 vs white 0.1071. Most of that is an artifact of
+wildly different — at nominal 0 dB, brown 0.3823 vs white 0.1052. Most of that is an artifact of
 the SNR definition: nominal SNR fixes total power and ignores *where* the power sits. In-band is
 200 Hz – 8 kHz, where the notes live.
 
@@ -208,7 +224,7 @@ the SNR definition: nominal SNR fixes total power and ignores *where* the power 
 |---|---|
 | white | −0.41 dB (honest) |
 | pink | +2.81 dB |
-| brown | **+27.26 dB** |
+| brown | **+27.34 dB** |
 
 Brown dumps almost all its energy below the band, so a "nominal 0 dB" brown clip is really +27 dB
 where it counts. It didn't survive the noise — it was never given it. **Always report in-band SNR
@@ -219,15 +235,15 @@ common grid over their shared in-band range (27.3–59.6 dB):
 
 | in-band SNR | white | pink | brown | spread |
 |---|---|---|---|---|
-| 27.3 dB | 0.5308 | 0.4352 | 0.3837 | **0.1472** |
-| 32.6 dB | 0.6518 | 0.6141 | 0.5514 | 0.1003 |
-| 38.0 dB | 0.7875 | 0.8035 | 0.7118 | 0.0916 |
-| 43.4 dB | 0.8829 | 0.8943 | 0.8240 | 0.0703 |
-| 48.8 dB | 0.9378 | 0.9425 | 0.9119 | 0.0306 |
-| 54.2 dB | 0.9522 | 0.9556 | 0.9337 | 0.0218 |
-| 59.6 dB | 0.9609 | 0.9575 | 0.9495 | 0.0114 |
+| 27.3 dB | 0.5281 | 0.4165 | 0.3823 | **0.1458** |
+| 32.3 dB | 0.6417 | 0.5978 | 0.5442 | 0.0976 |
+| 37.3 dB | 0.7664 | 0.7841 | 0.7061 | 0.0781 |
+| 42.2 dB | 0.8727 | 0.8797 | 0.8030 | 0.0767 |
+| 47.2 dB | 0.9266 | 0.9331 | 0.8976 | 0.0355 |
+| 52.1 dB | 0.9513 | 0.9545 | 0.9323 | 0.0221 |
+| 57.1 dB | 0.9600 | 0.9588 | 0.9434 | 0.0166 |
 
-Max spread **0.1472 — over 10× the seed std (0.0138)**. The collapse holds only above ~49 dB
+Max spread **0.1458 — over 10× the seed std (0.0138)**. The collapse holds only above ~49 dB
 in-band, where every colour is already near clean. Below that a consistent ordering persists: at
 matched in-band SNR, **white is least harmful and brown most.**
 
@@ -235,8 +251,17 @@ matched in-band SNR, **white is least harmful and brown most.**
 ~0.03–0.05 (the seed noise floor)" and concluded "colour is irrelevant to robustness... the colour
 axis can be dropped." The first claim is not supported at these numbers and the recommendation is
 retracted — it is a recommendation someone would have acted on. Sweeping white alone remains the
-right default (it is the honest colour, and the harshest at matched in-band SNR), but dropping the
-colour axis would discard a real effect.
+right default (it is the honest colour, and the harshest at matched in-band SNR *at low SNR*), but
+dropping the colour axis would discard a real effect.
+
+**The 16-point grid adds a finding the 9-point grid could not resolve: white and pink CROSS OVER
+at ~28 dB nominal.** Pink is gentler above it (35 dB: 0.7995 pink vs 0.7011 white) and harsher
+below (20 dB: 0.2860 vs 0.3826; 10 dB: 0.1191 vs 0.1896). The old grid stepped 30 → 20 and showed
+only an ambiguous gap. So the colours do not merely differ in magnitude — **their ordering inverts
+with SNR**, which is a second, independent reason the colour axis cannot be collapsed to one curve.
+
+Recomputed on this denser grid, the retraction below stands unchanged: max spread 0.1458 against
+0.1472 on the 9-point grid.
 
 *Untested hypothesis for the residual:* brown's sub-200 Hz energy falls outside the in-band window
 but still lands in the low mel bins, and per-clip z-scoring lets it shift the whole normalisation.
@@ -245,10 +270,18 @@ Not measured — stated only to record what to test, not as a mechanism.
 ### 5c. Open decision
 
 (a) noise-aware / multi-condition training, keep 20/10/0 — proven at 2 classes to give a usable
-curve, unmeasured at 12; (b) keep clean training, re-centre the sweep on the 60–30 dB band where
-the full label space is still in play; (c) both, as matched vs. mismatched conditions. Given §5a,
-option (b) at minimum should replace 10/0 dB with additional points in 45–25 dB before six models
-are run. Still yours to make.
+curve, unmeasured at 12; (b) keep clean training on the re-centred grid; (c) both, as matched vs.
+mismatched conditions.
+
+**Option (b) is done.** `SNR_LEVELS_DB` was re-gridded on 2026-07-28 to 16 levels — 2.5 dB steps
+across 50–25 dB, where balanced accuracy falls 0.90 → 0.48, plus 60/55 anchoring the clean end and
+20/10/0 retained to document the collapse. The old 9-point grid spent 3 points where every model
+scores near chance and only 4 in the band that resolves anything. This does not invalidate any
+cache or checkpoint: `SNR_LEVELS_DB` is deliberately absent from `config_fingerprint()`, since it
+describes an evaluation sweep rather than the meaning of the cached arrays.
+
+**(a) remains unrun**, and it is still the experiment that turns this from characterisation into a
+result. Choice between (a) and (c) is still yours.
 
 ## 6. Dataset notes
 
@@ -297,6 +330,30 @@ are run. Still yours to make.
     features could still pick up the loop period. Re-check before this becomes the shared dataset.
 - **Leak-free split, asserted every run**: grouped by pitch — 544 groups and all 8,375 source
   files, none spanning splits.
+- **Measured cost of getting the split wrong: +0.0357 balanced accuracy.**
+  `single/split_policy_probe.py`, 3 seeds, identical data and training, only the split policy
+  varying:
+
+  | split policy | pitch-groups leaking | balanced accuracy |
+  |---|---|---|
+  | grouped (correct) | 0.000 | **0.9600 ± 0.0138** |
+  | random by file | 0.967 | **0.9957 ± 0.0006** |
+
+  The inflation is **2.6× the seed spread**, so it is a real effect and not seed noise. It is also
+  close to the +0.0372 that a single-seed probe suggested on 2026-07-22 — that estimate was right
+  in magnitude, but it was one run on the old variable-length config with no fingerprint, and
+  should not have been quoted as a number until now. It is superseded by this.
+
+  **The seed spread is the more useful tell.** The leaked arm's std is 0.0006 against 0.0138 — a
+  23-fold collapse. Per-seed it scores 0.9959 / 0.9950 / 0.9962. When a split leaks, the task
+  becomes so easy that initialisation stops mattering; near-perfect accuracy with almost no seed
+  variance is the signature of memorising near-duplicates, not of a good model. That diagnostic
+  costs nothing to apply and needs no control experiment: **be suspicious of an implausibly tight
+  multi-seed spread.**
+
+  Applies directly to `main`, whose file-level split leaked 93.1% of pitch-groups (406 of 436,
+  361 spanning all three splits) until 2026-07-28. Every number that pipeline produced before then
+  carries roughly this inflation.
 
 ## 7. Metrics: why accuracy and F1 are not reported
 
@@ -327,7 +384,8 @@ skill.
   boundary, not a defect: real-audio evaluation is deferred by decision (§9).
 - **Clean accuracy is close to saturating again.** At 0.9600 with a 0.0138 seed spread, separating
   six models on clean audio has limited headroom. The discriminating measurement is the noise
-  sweep, and per §5a it must be run in the 60–30 dB band to discriminate anything.
+  sweep, and per §5a it must be run in the 60–32.5 dB band to discriminate anything (the grid was
+  re-centred there on 2026-07-28).
 - **Clip length is a real shortcut at 12 classes.** A length-only classifier (depth-4 decision tree
   on `source_seconds`) scores **0.1977 balanced accuracy vs 0.0833 chance** — lift +0.1144,
   optimistic since it is fit and scored on train. Not negligible. Per-class medians: tuba 0.575 s,
