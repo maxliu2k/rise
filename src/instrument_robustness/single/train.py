@@ -113,12 +113,17 @@ def plot_misclassified(ids, preds, targets, path, limit=8):
 
 # --------------------------------------------------------------------------- one seed
 
-def run_seed(seed, data, device, on_epoch=None):
+def run_seed(seed, data, device, on_epoch=None, ckpt_path=None):
     """Train and evaluate one seed. on_epoch(epoch) is called after each epoch (progress UI).
 
     The split is fixed across seeds (built once by prep_data at config.SEED), so only model
     init and batch order vary — which is exactly the variance we want to measure. Varying
     the split too would conflate model variance with split variance.
+
+    ckpt_path overrides where the checkpoint is written. It exists so an experiment that trains
+    on a DIFFERENT split (split_policy_probe) cannot overwrite the canonical outputs/model_s*.pt
+    — those are the checkpoints noise_eval loads, and silently replacing them with models trained
+    on a deliberately-leaked split is exactly the kind of swap nothing downstream would notice.
     """
     (Xtr, ytr), (Xva, yva), (Xte, yte) = data
     set_seed(seed)
@@ -171,7 +176,8 @@ def run_seed(seed, data, device, on_epoch=None):
             break
 
     model.load_state_dict(best_state)
-    path = OUTPUTS / f"model_s{seed}.pt"
+    path = ckpt_path if ckpt_path is not None else OUTPUTS / f"model_s{seed}.pt"
+    path.parent.mkdir(parents=True, exist_ok=True)
     # fingerprint travels with the weights: evaluating these against a cache built under a
     # different config yields a plausible, meaningless number that nothing else would catch.
     torch.save({"state_dict": best_state, "seed": seed, "classes": list(CLASSES),
