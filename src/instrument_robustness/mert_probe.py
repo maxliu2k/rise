@@ -3,6 +3,7 @@ from __future__ import annotations
 import torch
 from torch import nn
 
+from instrument_robustness.config import TARGET_LABELS, assert_fingerprint
 from instrument_robustness.mert_data import MERT_HIDDEN_SIZE, MERT_NUM_LAYERS
 
 
@@ -30,3 +31,17 @@ class MERTProbe(nn.Module):
 
     def layer_weights(self) -> list[float]:
         return torch.softmax(self.layer_logits.detach().cpu(), dim=0).tolist()
+
+
+def load_mert_probe(path, *, device="cpu"):
+    """Load a saved validation or final probe and verify its dataset identity."""
+    checkpoint = torch.load(path, map_location=device, weights_only=True)
+    if checkpoint.get("label_order") != TARGET_LABELS:
+        raise ValueError(f"Unexpected MERT label order in {path}")
+    if checkpoint.get("num_classes") != len(TARGET_LABELS):
+        raise ValueError(f"Unexpected MERT class count in {path}")
+    assert_fingerprint(checkpoint.get("config_fingerprint"), str(path))
+    model = MERTProbe(len(TARGET_LABELS))
+    model.load_state_dict(checkpoint["state_dict"])
+    model.to(device).eval()
+    return model, checkpoint

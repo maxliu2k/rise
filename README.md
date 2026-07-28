@@ -142,7 +142,17 @@ python -m instrument_robustness.extract_mert
 python -m instrument_robustness.train_mert
 ```
 
-Neither command reads the MERT test split. On BU SCC, submit `scc/mert_probe.qsub` from the repository
-after creating the virtual environment and setting `RISE_DATA_ROOT` to the shared data directory.
-The MERT checkpoint is licensed CC-BY-NC-4.0; this branch is appropriate for the project's
-non-commercial research use, but that license must be reviewed before any commercial use.
+Neither command reads the MERT test split. Inspect and freeze
+`artifacts/mert/validation_summary.json`; then refit on train+validation and perform the one
+permitted test extraction/evaluation with:
+
+```bash
+python -m instrument_robustness.finalize_mert
+```
+
+The finalizer uses the validation-selected learning rate and epoch, requires the exact saved MERT
+checkpoint revision, and refuses to run if test extraction or finalization has already started.
+On BU SCC, submit `scc/mert_probe.qsub` first and submit `scc/mert_finalize.qsub` only after
+validation review. The MERT checkpoint is licensed CC-BY-NC-4.0; this branch is appropriate for
+the project's non-commercial research use, but that license must be reviewed before any
+commercial use.

@@ -1,0 +1,38 @@
+#!/bin/bash -l
+
+#$ -P rise-grid
+#$ -N mert_prepare
+#$ -j y
+#$ -pe omp 4
+#$ -l h_rt=12:00:00
+#$ -l mem_per_core=8G
+
+set -euo pipefail
+
+mert_repo="${MERT_REPO:-$SGE_O_WORKDIR}"
+mert_data_root="${RISE_DATA_ROOT:?Submit with -v RISE_DATA_ROOT=/projectnb/...}"
+mert_venv="${MERT_VENV:-/projectnb/rise-grid/venvs/$USER/mert}"
+
+source "$mert_venv/bin/activate"
+cd "$mert_repo"
+
+export PYTHONPATH="$mert_repo/src${PYTHONPATH:+:$PYTHONPATH}"
+export RISE_DATA_ROOT="$mert_data_root"
+export OMP_NUM_THREADS="${NSLOTS:-4}"
+export MKL_NUM_THREADS="${NSLOTS:-4}"
+export OPENBLAS_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+export NUMBA_NUM_THREADS=1
+export PYTHONUNBUFFERED=1
+
+mkdir -p "$RISE_DATA_ROOT"
+
+python -m instrument_robustness.prep_data
+python -m instrument_robustness.step0_filter
+python -m instrument_robustness.step1_resample
+python -m instrument_robustness.step2_trim
+python -m instrument_robustness.step3_split
+python -m instrument_robustness.step4_window
+python -m instrument_robustness.step5_normalize
+
+python -c "from instrument_robustness.mert_data import validate_mert_windows; print(validate_mert_windows())"

@@ -1,13 +1,13 @@
 #!/bin/bash -l
 
 #$ -P rise-grid
-#$ -N mert_probe
+#$ -N mert_finalize
 #$ -j y
 #$ -pe omp 4
 #$ -l gpus=1
 #$ -l gpu_c=7.0
 #$ -l gpu_memory=16G
-#$ -l h_rt=12:00:00
+#$ -l h_rt=06:00:00
 #$ -l mem_per_core=8G
 
 set -euo pipefail
@@ -19,6 +19,10 @@ mert_feature_dir="${MERT_FEATURE_DIR:-$mert_data_root/features/mert}"
 mert_output_dir="${MERT_OUTPUT_DIR:-$mert_repo/artifacts/mert}"
 mert_windows_csv="$mert_data_root/pipeline/windows.csv"
 
+source "$mert_venv/bin/activate"
+cd "$mert_repo"
+
+export PYTHONPATH="$mert_repo/src${PYTHONPATH:+:$PYTHONPATH}"
 export RISE_DATA_ROOT="$mert_data_root"
 export HF_HOME="${HF_HOME:-/projectnb/rise-grid/huggingface/$USER}"
 export OMP_NUM_THREADS="${NSLOTS:-4}"
@@ -26,38 +30,18 @@ export MKL_NUM_THREADS="${NSLOTS:-4}"
 export PYTHONUNBUFFERED=1
 export TOKENIZERS_PARALLELISM=false
 
-source "$mert_venv/bin/activate"
-cd "$mert_repo"
-export PYTHONPATH="$mert_repo/src${PYTHONPATH:+:$PYTHONPATH}"
-
-mkdir -p "$HF_HOME" "$mert_feature_dir" "$mert_output_dir"
 test -f "$mert_windows_csv"
-test -d "$mert_data_root/work/windows"
+test -f "$mert_feature_dir/train.npz"
+test -f "$mert_feature_dir/val.npz"
+test -f "$mert_output_dir/validation_summary.json"
 
 python -c "import torch; print('PyTorch:', torch.__version__); print('GPU:', torch.cuda.get_device_name()); assert torch.cuda.is_available()"
 python -m unittest tests.test_mert -q
-python -c "from instrument_robustness.mert_data import validate_mert_windows; print(validate_mert_windows(splits=('train', 'val')))"
 
-missing_splits=()
-[[ -f "$mert_feature_dir/train.npz" ]] || missing_splits+=(train)
-[[ -f "$mert_feature_dir/val.npz" ]] || missing_splits+=(val)
-if (( ${#missing_splits[@]} )); then
-    extract_args=(
-        --data-root "$mert_data_root"
-        --windows-csv "$mert_windows_csv"
-        --output-dir "$mert_feature_dir"
-        --splits "${missing_splits[@]}"
-        --batch-size "${MERT_EXTRACTION_BATCH_SIZE:-8}"
-        --device cuda
-    )
-    if [[ -n "${MERT_REVISION:-}" ]]; then
-        extract_args+=(--revision "$MERT_REVISION")
-    fi
-    python -m instrument_robustness.extract_mert \
-        "${extract_args[@]}"
-fi
-
-python -m instrument_robustness.train_mert \
+python -m instrument_robustness.finalize_mert \
+    --data-root "$mert_data_root" \
+    --windows-csv "$mert_windows_csv" \
     --feature-dir "$mert_feature_dir" \
     --output-dir "$mert_output_dir" \
+    --extraction-batch-size "${MERT_EXTRACTION_BATCH_SIZE:-8}" \
     --device cuda

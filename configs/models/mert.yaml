@@ -1,5 +1,6 @@
 model:
   backbone: m-a-p/MERT-v1-95M
+  checkpoint_revision: 12af15fef9d0ac838c3f475bfbbf26d2060dd4f5
   checkpoint_license: CC-BY-NC-4.0
   sample_rate: 24000
   transformer_layers: 12
@@ -7,7 +8,8 @@ model:
   hidden_size: 768
   backbone_frozen: true
   pooling: mean_over_time_per_hidden_layer
-  probe: learned_layer_weighted_sum_then_linear_9_way_head
+  probe: learned_layer_weighted_sum_then_linear_12_way_head
+  class_weights: inverse_frequency_if_max_min_exceeds_1.5
 
 selection:
   metric: validation_macro_f1
@@ -23,6 +25,15 @@ data:
   use_step6_statistics: false
   test_policy: sealed_until_probe_selection_is_complete
 
+final_evaluation:
+  fit_splits: [train, val]
+  epochs: validation_selected_best_epoch
+  extract_test_once: true
+  evaluate_test_once: true
+
 outputs:
   embeddings: all-samples/features/mert/{train,val}.npz
   artifacts: artifacts/mert/
+  final_model: artifacts/mert/final_probe.pt
+  test_summary: artifacts/mert/test_summary.json
+  final_evaluation_status: artifacts/mert/final_evaluation_status.json
