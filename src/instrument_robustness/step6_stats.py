@@ -56,6 +56,7 @@ def main():
     mel_var = (s2 / cnt) - (s1 / cnt) ** 2
     mel_std = np.sqrt(np.maximum(mel_var, 1e-8)).astype(np.float32)
 
+    STATS_NPZ.parent.mkdir(parents=True, exist_ok=True)
     np.savez(STATS_NPZ,
              svm_mean=svm_mean.astype(np.float32), svm_std=svm_std.astype(np.float32),
              svm_feature_names=np.array(SVM_FEATURE_NAMES),

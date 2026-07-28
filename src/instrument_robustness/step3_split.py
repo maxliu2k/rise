@@ -1,48 +1,142 @@
-"""Step 3 - Split BY SOURCE FILE, stratified by label (70/15/15).
+"""Step 3 - Split BY PITCH GROUP, stratified by label (70/15/15).
 
-This is the single most important ordering constraint: the split happens at the level of the
-original source recording, BEFORE any windowing. Every window later inherits its source's tag.
-Output: splits.csv (source_path -> split). Verify: no source in two splits; all 9 classes present
-in all three splits.
+Two ordering constraints, both load-bearing:
+
+1. The split happens BEFORE any windowing. Every window later inherits its source's tag, so a
+   source's windows can never straddle splits.
+2. The unit of the split is the PITCH GROUP -- all files sharing (label, note) -- not the
+   individual source file.
+
+Why (2) matters. `violin_A4_15_forte_arco-normal.mp3` and `violin_A4_15_piano_arco-normal.mp3`
+are different source files holding the same note at different dynamics. They are near-duplicates.
+Splitting by file scatters them across train and test, so the model is scored on notes it has
+effectively already seen and the number comes out inflated.
+
+This is not hypothetical. The previous file-level split, measured on its own committed splits.csv:
+406 of 436 pitch-groups (93.1%) spanned more than one split, 361 spanned all three, and 8036 of
+8096 source files (99.3%) sat in a leaking group. A single-seed probe comparing the two policies
+on otherwise identical data put the inflation at roughly +3.7 balanced-accuracy points (0.9670
+leaked vs 0.9298 grouped) -- indicative rather than canonical, since it was one run and not a
+multi-seed mean.
+
+The old `assert df.groupby("path")["split"].nunique().max() == 1` never guarded anything: each
+source is exactly one row, so it held by construction and could not detect the leak above. A check
+that cannot fail is worse than no check, because it reads as reassurance. `verify_no_group_leak`
+is the one that can actually fire.
+
+Output: splits.csv (source_path, trimmed_path, label, split, is_phrase). Schema unchanged, so
+Step 4 needs no modification.
 """
+import random
+
 import pandas as pd
-from sklearn.model_selection import train_test_split
-from instrument_robustness.config import PIPE, SPLIT_FRACS, SEED, TARGET_LABELS
+
+from instrument_robustness.config import (MANIFEST_TRIMMED, SPLITS_CSV, SPLIT_FRACS, SEED,
+                                          TARGET_LABELS)
+
+SPLIT_NAMES = ("train", "val", "test")
+
+
+def group_key(label, note):
+    """The unit of the split. Same instrument + same note = near-duplicate recordings."""
+    return f"{label}_{note}"
+
+
+def assign_groups(sizes, fracs, rng):
+    """Assign whole pitch-groups to splits, targeting a share of FILES.
+
+    Preconditions: `sizes` maps group key -> number of source files in it, all of one label;
+    `fracs` maps split name -> target fraction, summing to 1.
+    Postcondition: returns {group_key: split_name}, every key assigned exactly once.
+
+    Groups have unequal sizes, so this targets file counts rather than group counts -- handing out
+    equal numbers of groups would not produce a 70/15/15 split of clips. Largest groups are placed
+    first so a large group cannot overshoot a nearly-full bin at the end; the shuffle breaks ties
+    reproducibly given SEED.
+    """
+    total = sum(sizes.values())
+    targets = {name: fracs[name] * total for name in fracs}
+    filled = {name: 0 for name in fracs}
+    keys = list(sizes)
+    rng.shuffle(keys)
+    keys.sort(key=lambda k: -sizes[k])
+    out = {}
+    for k in keys:
+        name = max(fracs, key=lambda s: targets[s] - filled[s])
+        out[k] = name
+        filled[name] += sizes[k]
+    return out
+
+
+def verify_no_group_leak(df):
+    """Crash unless every pitch-group lives in exactly one split.
+
+    Postcondition: returns the number of pitch-groups.
+    Raises: AssertionError naming the offending groups.
+    """
+    spans = df.groupby("grp")["split"].nunique()
+    bad = spans[spans > 1]
+    assert bad.empty, (
+        f"{len(bad)} pitch-group(s) span more than one split -- near-duplicate leak:\n"
+        + "\n".join(f"    {k}" for k in list(bad.index)[:10])
+        + ("\n    ..." if len(bad) > 10 else ""))
+    return len(spans)
+
 
 def main():
-    df = pd.read_csv(PIPE / "manifest_9_trimmed.csv")
-    # one row == one source recording; splitting rows == splitting sources
-    tr_frac, va_frac, te_frac = SPLIT_FRACS
+    df = pd.read_csv(MANIFEST_TRIMMED)
+    missing = [c for c in ("path", "label", "note") if c not in df.columns]
+    if missing:
+        raise SystemExit(
+            f"ERROR: {MANIFEST_TRIMMED} lacks column(s) {missing}. The pitch-grouped split needs "
+            f"`note` to build its group key. Rebuild the index with "
+            f"`python -m instrument_robustness.prep_data`.")
+    if df["note"].isna().any():
+        raise SystemExit(
+            f"ERROR: {int(df['note'].isna().sum())} row(s) in {MANIFEST_TRIMMED} have no `note`. "
+            f"A row with no pitch cannot be grouped, and dropping it silently would bias the "
+            f"split. Fix the index rather than skipping them.")
 
-    train, temp = train_test_split(
-        df, train_size=tr_frac, stratify=df["label"], random_state=SEED)
-    # split temp into val/test proportionally
-    va_rel = va_frac / (va_frac + te_frac)
-    val, test = train_test_split(
-        temp, train_size=va_rel, stratify=temp["label"], random_state=SEED)
+    fracs = dict(zip(SPLIT_NAMES, SPLIT_FRACS))
+    df["grp"] = [group_key(lab, note) for lab, note in zip(df["label"], df["note"])]
 
+    # Assign per class, so each class hits 70/15/15 independently (this is the stratification).
+    rng = random.Random(SEED)
     tag = {}
-    for name, part in [("train", train), ("val", val), ("test", test)]:
-        for p in part["path"]:
-            tag[p] = name
-    df["split"] = df["path"].map(tag)
+    for label in sorted(df["label"].unique()):
+        sizes = df[df["label"] == label].groupby("grp").size().to_dict()
+        tag.update(assign_groups(sizes, fracs, rng))
+    df["split"] = df["grp"].map(tag)
 
     out = df[["path", "trimmed_path", "label", "split", "is_phrase"]].rename(
         columns={"path": "source_path"})
-    out.to_csv(PIPE / "splits.csv", index=False)
+    SPLITS_CSV.parent.mkdir(parents=True, exist_ok=True)
+    out.to_csv(SPLITS_CSV, index=False)
 
     # --- verifications ---
     assert df["split"].notna().all(), "some source got no split tag"
-    counts = pd.crosstab(df["label"], df["split"])[["train", "val", "test"]]
-    print("per-class source-file counts per split:")
+    n_groups = verify_no_group_leak(df)
+    print(f"leak check passed: {n_groups} pitch-groups, none spanning splits")
+
+    counts = pd.crosstab(df["label"], df["split"])
+    for name in SPLIT_NAMES:                    # a split with zero rows would drop its column
+        if name not in counts.columns:
+            counts[name] = 0
+    counts = counts[list(SPLIT_NAMES)]
+    print("\nper-class source-file counts per split:")
     print(counts.to_string())
     print("\ntotals:", df["split"].value_counts().to_dict())
-    all_present = (counts > 0).all().all() and set(counts.index) == set(TARGET_LABELS)
-    print("all 9 classes present in train/val/test:", all_present)
-    # no leakage possible: each source appears in exactly one row -> one split
-    assert df.groupby("path")["split"].nunique().max() == 1, "a source appears in >1 split"
-    print("no source file appears in more than one split: True")
-    print(f"\nwrote {PIPE / 'splits.csv'}")
+
+    got, want = set(counts.index), set(TARGET_LABELS)
+    assert got == want, f"label mismatch: missing {want - got}, unexpected {got - want}"
+    assert (counts > 0).all().all(), "a class is absent from a split:\n" + counts.to_string()
+    print(f"all {len(TARGET_LABELS)} classes present in train/val/test: True")
+
+    achieved = {n: counts[n].sum() / len(df) for n in SPLIT_NAMES}
+    print("achieved fractions: " + ", ".join(f"{n} {achieved[n]:.3f}" for n in SPLIT_NAMES)
+          + f"  (target {', '.join(f'{f:.2f}' for f in SPLIT_FRACS)})")
+    print(f"\nwrote {SPLITS_CSV}")
+
 
 if __name__ == "__main__":
     main()

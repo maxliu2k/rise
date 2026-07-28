@@ -3,7 +3,7 @@
 - Decode every file, resample to SR (22050 Hz), mono.
 - NO loudness normalization here (that is per-window, later).
 - Write .wav to work/resampled/, preserving the source's relative path.
-- Persist source -> resampled mapping in manifest_9_resampled.csv.
+- Persist source -> resampled mapping in manifest_resampled.csv.
 - Sanity check: re-measure the per-instrument high-frequency ceiling AFTER resampling.
   All instruments should now be capped at/below Nyquist (11025 Hz) with no differential
   brick wall. If one instrument still shows a distinctly lower wall, STOP and investigate.
@@ -11,7 +11,7 @@
 import warnings, sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np, pandas as pd, librosa, soundfile as sf
-from instrument_robustness.config import ROOT, RESAMPLED, MANIFEST_9, PIPE, SR, TARGET_LABELS
+from instrument_robustness.config import ROOT, RESAMPLED, MANIFEST_LABELED, MANIFEST_RESAMPLED, PIPE, SR, TARGET_LABELS
 warnings.filterwarnings("ignore")
 
 def resample_one(rel_path):
@@ -57,7 +57,7 @@ def sanity_check(df):
     return rep
 
 def main():
-    df = pd.read_csv(MANIFEST_9)
+    df = pd.read_csv(MANIFEST_LABELED)
     paths = df["path"].tolist()
     print(f"resampling {len(paths)} files to {SR} Hz mono ...")
     results = {}
@@ -77,7 +77,7 @@ def main():
     print(f"\nresampled ok: {n_ok} | failures: {len(df) - n_ok}")
     if (df.status != "ok").any():
         print(df[df.status != "ok"][["path", "status"]].to_string(index=False))
-    out = PIPE / "manifest_9_resampled.csv"
+    out = MANIFEST_RESAMPLED
     df.to_csv(out, index=False)
     print(f"wrote {out}")
     sanity_check(df)

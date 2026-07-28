@@ -19,6 +19,7 @@ src/instrument_robustness/     # installable package (all CODE)
   extract_mert.py              # frozen MERT train/validation embedding extraction
   mert_data.py, mert_probe.py  # MERT data contract + layer-weighted linear probe
   train_mert.py                # validation-only MERT probe selection
+  ast_data.py, train_ast.py    # AST on-the-fly DataLoader and fine-tuning command
 all-samples/                   # DATA + ARTIFACTS (not code)
   manifest.csv, Strings/ Brass/ Woodwinds/   # raw audio + catalog
   pipeline/                    # manifest_9*.csv, splits.csv, windows.csv, norm_stats.*, pipeline_report.txt
@@ -35,18 +36,45 @@ or `RISE_DATA_ROOT` (see `.env.example`).
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e .                 # core deps (numpy/pandas/librosa/scikit-learn/…)
+pip install -e ".[ast]"          # AST fine-tuning only
 pip install -e ".[pretrained]"   # + torch/transformers/panns for AST/MERT/PANNs branches
 ```
+
+## Data — `prep_data.py` is the official dataset
+
+**Run this first. It is the only supported way to obtain the data.**
+
+```bash
+python -m instrument_robustness.prep_data
+```
+
+It downloads all **12** instruments from the Internet Archive mirror of the Philharmonia library
+(CC-BY-SA 4.0), unpacks them into `<data root>/<instrument>/<note>/`, and writes `manifest.csv` —
+the index every step below reads. It also writes `manifest_fingerprint.json`, recording the config
+that produced the index.
+
+**Do not copy a data tree from a teammate, and do not unpack a pre-derived feature or window
+archive.** A derived artifact cannot prove which config produced it: a feature array built under a
+different label set or window length still loads, still trains, and still produces plausible
+numbers. Nothing catches it. Rebuilding costs minutes.
+
+`download_data.py` (Google Drive) is **deprecated** and its archives are **not** interchangeable
+with this pipeline — they were built against the old file-level split and zero-padded windows,
+carry no fingerprint, and cover only 9 of the 12 classes.
+
+> **Migrating from the 9-class set:** label indices have shifted, so every checkpoint and feature
+> array produced before this change is invalid and must be regenerated. This is unavoidable —
+> `TARGET_LABELS` fixes the label indices, and oboe, double-bass and french-horn now exist.
 
 ## Run the pipeline
 
 ```bash
-# steps read/write under the data root; run from anywhere once installed
-python -m instrument_robustness.step0_filter      # filter manifest to 9 classes
+python -m instrument_robustness.prep_data         # fetch data + write manifest.csv  (START HERE)
+python -m instrument_robustness.step0_filter      # filter manifest to the 12 target classes
 python -m instrument_robustness.step1_resample    # 22050 Hz mono (kills bitrate confound)
 python -m instrument_robustness.step2_trim        # silence trim
-python -m instrument_robustness.step3_split       # split BY SOURCE FILE (70/15/15)
-python -m instrument_robustness.step4_window      # 3.0 s windows (kills phrase-length confound)
+python -m instrument_robustness.step3_split       # split BY PITCH GROUP (70/15/15)
+python -m instrument_robustness.step4_window      # 3.0 s windows, short notes TILED not padded
 python -m instrument_robustness.step5_normalize   # per-window RMS normalize
 python -m instrument_robustness.step6_stats       # TRAIN-ONLY normalization stats
 python -m instrument_robustness.step7_featurize   # SVM / CNN / CRNN features
@@ -58,6 +86,28 @@ python -m instrument_robustness.step7_featurize   # SVM / CNN / CRNN features
 See `all-samples/pipeline/pipeline_report.txt` for the full run report (shapes, per-class per-split
 counts, confound checks, invariants).
 
+<<<<<<< ours
+## Fine-tune AST
+
+The AST branch reads Step-5-normalized windows directly from `pipeline/windows.csv`; no AST
+inputs are materialized. It builds one `ASTFeatureExtractor`, resamples each 22050 Hz waveform to
+16 kHz in the DataLoader, then fine-tunes the pretrained model and retains the best validation
+checkpoint.
+
+```bash
+python -m instrument_robustness.train_ast --epochs 10 --batch-size 8
+```
+
+The command downloads `MIT/ast-finetuned-audioset-10-10-0.4593` on first use and writes the best
+checkpoint plus `metrics.json` to `all-samples/models/ast/` by default. For noisy runs, pass a
+waveform transform to `ASTWindowDataset` or `make_ast_dataloader`; it is applied to the 22050 Hz
+window before `ast_input`.
+
+After testing, that output directory also contains `test_by_instrument.csv` with accuracy,
+precision, recall, F1, and test-clip counts for each instrument; `test_by_family.csv` with
+percentage accuracy for strings, woodwinds, and brass; and `test_confusion_matrix.csv` showing
+which instruments were confused with one another.
+=======
 ## Train the SVM baseline
 
 The SVM features are already standardized with training-set statistics. Tune on the validation split and save the search results plus selected model with:
@@ -98,3 +148,4 @@ Neither command reads the MERT test split. On BU SCC, submit `scc/mert_probe.qsu
 after creating the virtual environment and setting `RISE_DATA_ROOT` to the shared data directory.
 The MERT checkpoint is licensed CC-BY-NC-4.0; this branch is appropriate for the project's
 non-commercial research use, but that license must be reviewed before any commercial use.
+>>>>>>> theirs

@@ -3,8 +3,20 @@
 - 3.0 s windows, NO overlap (hop 3.0 s). See config for rationale.
 - Every window inherits its source's label AND its source's split tag from Step 3.
   Never re-split at window level.
-- Short/only windows are zero-padded to 3.0 s. A trailing window with < MIN_WINDOW_CONTENT_S
-  of real content is dropped, unless it is the source's only window.
+- Short/only windows are TILED (looped) to 3.0 s, never zero-padded. A trailing window with
+  < MIN_WINDOW_CONTENT_S of real content is dropped, unless it is the source's only window.
+
+  Zero-padding is not a stylistic choice here, it is a correctness bug for any noise experiment:
+  librosa's power_to_db(ref=np.max) clamps digital silence to the -80 dB floor, injected noise
+  fills that region, and the window lands outside the training distribution. Measured on the
+  cnn-ensemble branch, a padded cache collapses to the majority class at EVERY SNR -- the noise
+  sweep stops measuring anything. Tiling keeps every sample real signal.
+
+  The obvious objection -- that a looped note's repeated attacks encode the source duration, which
+  correlates with instrument -- was pre-registered and tested: if the model read tiling period,
+  the extremes of the length distribution would be the most noise-robust. They are not. Tuba
+  (shortest, ~5x repeats) and clarinet (longest, least tiled) both floor at 0.000 recall under
+  noise, with no monotone length-vs-survival relationship. See FINDINGS S6 on cnn-ensemble.
 Output: work/windows/*.wav and windows.csv (window_path,label,split,source_path,start_time,content_s)
 Also writes per-class WINDOW counts per split into the report block returned to caller.
 """
@@ -19,6 +31,22 @@ WIN = int(round(WINDOW_S * SR))
 HOP = int(round(HOP_S * SR))
 MIN_CONTENT = int(round(MIN_WINDOW_CONTENT_S * SR))
 
+def tile_to_length(seg, n):
+    """Loop `seg` until it is exactly `n` samples. Every sample stays real signal.
+
+    Preconditions: len(seg) >= 1 and len(seg) <= n.
+    Postcondition: returns an array of exactly n samples, containing no synthesised silence.
+    Raises: ValueError on an empty segment -- an empty window means the caller has a bug, and
+    padding it to 3 s of zeros would hide that behind a plausible-looking file.
+    """
+    if len(seg) == 0:
+        raise ValueError("cannot tile an empty segment")
+    if len(seg) >= n:
+        return seg[:n]
+    reps = int(np.ceil(n / len(seg)))
+    return np.tile(seg, reps)[:n]
+
+
 def window_one(args):
     trimmed_rel, label, split, source_path = args
     y, _ = librosa.load(str(ROOT / trimmed_rel), sr=SR, mono=True)
@@ -32,8 +60,8 @@ def window_one(args):
         content = len(seg)
         if content < MIN_CONTENT and wi != 0:      # drop tiny trailing window (never the only one)
             continue
-        if content < WIN:                          # zero-pad short/only/final window
-            seg = np.pad(seg, (0, WIN - content))
+        if content < WIN:                          # TILE short/only/final window -- never pad
+            seg = tile_to_length(seg, WIN)
         wpath = WINDOWS / f"{stem}_w{idx:03d}.wav"
         wpath.parent.mkdir(parents=True, exist_ok=True)
         sf.write(str(wpath), seg, SR, subtype="PCM_16")
@@ -57,6 +85,7 @@ def main():
     win = pd.DataFrame(rows, columns=["window_path", "label", "split",
                                       "source_path", "start_time", "content_s"])
     win = win.sort_values(["source_path", "start_time"]).reset_index(drop=True)
+    PIPE.mkdir(parents=True, exist_ok=True)
     win.to_csv(PIPE / "windows.csv", index=False)
 
     print(f"\ntotal windows: {len(win)}  (from {len(args)} sources)")
@@ -80,7 +109,10 @@ def main():
              f"{WINDOW_S}s windows, no overlap. total windows: {len(win)} from {len(args)} sources.",
              "", "per-class WINDOW counts per split:", counts.to_string(),
              f"\nwindow-level imbalance (max/min total): {imb:.1f}x",
-             "-> lean on class weights / window-count capping accordingly; report macro-F1."]
+             "-> lean on class weights / window-count capping accordingly.",
+             "-> report BALANCED ACCURACY and MCC, not accuracy or macro-F1: macro-F1 RISES with",
+             "   imbalance for a collapsed classifier (0.3333 at a 0.50 prior, 0.4737 at 0.90),",
+             "   so it pays a dead model more on more imbalanced data. See FINDINGS S7."]
     (PIPE / "_step4_report_block.txt").write_text("\n".join(block))
     print(f"\nwrote {PIPE / 'windows.csv'} and report block")
 
