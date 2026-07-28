@@ -5,8 +5,8 @@ saved head (panns_probe.pt) and the cached test/val embeddings (emb_{test,val}.n
 re-fit and the test split is used ONLY for this final evaluation.
 
 Outputs (under features/panns/):
-  panns_probe_test_predictions.csv   one row/test window: window_path, true, pred, prob_<class> x9
-  panns_probe_confusion_counts.csv   9x9 raw counts (rows=true, cols=pred, TARGET_LABELS order)
+  panns_probe_test_predictions.csv   one row/test window: window_path, true, pred, prob_<class>
+  panns_probe_confusion_counts.csv   NxN raw counts (rows=true, cols=pred, TARGET_LABELS order)
   panns_probe_confusion_rownorm.csv  row-normalized version
   panns_probe_confusion.png          heatmap (labeled axes)
   panns_probe_eval.json              classification_report + accuracy/macro-F1 (test & val)
@@ -20,7 +20,15 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import (classification_report, confusion_matrix,
                              accuracy_score, f1_score)
 
-from instrument_robustness.config import PIPE, FEATURES, TARGET_LABELS
+from instrument_robustness.config import (
+    FEATURES,
+    TARGET_LABELS,
+    WINDOWS_CSV,
+    assert_artifact_fingerprint,
+    assert_fingerprint,
+    assert_serialized_fingerprint,
+    config_fingerprint,
+)
 
 OUT = FEATURES / "panns"
 LABEL2IDX = {l: i for i, l in enumerate(TARGET_LABELS)}
@@ -28,9 +36,16 @@ N = len(TARGET_LABELS)
 
 
 def load_head():
-    sd = torch.load(OUT / "panns_probe.pt", map_location="cpu")
+    checkpoint_path = OUT / "panns_probe.pt"
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    assert_fingerprint(
+        checkpoint.get("config_fingerprint"),
+        str(checkpoint_path),
+    )
+    if checkpoint.get("label_order") != TARGET_LABELS:
+        raise ValueError(f"Unexpected label order in {checkpoint_path}")
     head = nn.Linear(2048, N)
-    head.load_state_dict(sd)
+    head.load_state_dict(checkpoint["state_dict"])
     head.eval()
     return head
 
@@ -38,13 +53,19 @@ def load_head():
 def split_frame(split):
     """windows.csv rows for this split, in the SAME order the embeddings were extracted
     (get_embeddings used a no-shuffle DataLoader over load_split(), which preserves df order)."""
-    df = pd.read_csv(PIPE / "windows.csv")
+    assert_artifact_fingerprint(WINDOWS_CSV, "step5_normalize")
+    df = pd.read_csv(WINDOWS_CSV)
     return df[df.split == split].reset_index(drop=True)
 
 
 def predict(head, split):
-    d = np.load(OUT / f"emb_{split}.npz")
-    E, y = d["E"], d["y"].astype(int)
+    cache_path = OUT / f"emb_{split}.npz"
+    with np.load(cache_path) as data:
+        assert_serialized_fingerprint(
+            data["config_fingerprint"] if "config_fingerprint" in data else None,
+            str(cache_path),
+        )
+        E, y = data["E"], data["y"].astype(int)
     df = split_frame(split)
     # verify the cached-embedding order matches windows.csv order (so window_path attaches correctly)
     y_ref = np.array([LABEL2IDX[l] for l in df["label"]], dtype=int)
@@ -117,6 +138,7 @@ def main():
 
     with open(OUT / "panns_probe_eval.json", "w") as f:
         json.dump({"split": "test", "n_test": int(len(y_te)), "n_val": int(len(y_va)),
+                   "config_fingerprint": config_fingerprint(),
                    "test_accuracy": round(float(test_acc), 4),
                    "test_macro_f1": round(float(test_f1), 4),
                    "val_accuracy": round(float(val_acc), 4),

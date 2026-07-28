@@ -14,7 +14,17 @@ for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
 import json, warnings
 from concurrent.futures import ProcessPoolExecutor
 import numpy as np, pandas as pd
-from instrument_robustness.config import ROOT, PIPE, STATS_NPZ, STATS_JSON, N_MELS, N_FRAMES
+from instrument_robustness.config import (
+    N_FRAMES,
+    N_MELS,
+    ROOT,
+    STATS_JSON,
+    STATS_NPZ,
+    WINDOWS_CSV,
+    assert_artifact_fingerprint,
+    config_fingerprint,
+    config_fingerprint_json,
+)
 from instrument_robustness.featurelib import load_window, svm_vector, logmel, SVM_FEATURE_NAMES
 warnings.filterwarnings("ignore")
 
@@ -27,7 +37,8 @@ def _feats(wrel):
 
 
 def main():
-    win = pd.read_csv(PIPE / "windows.csv")
+    assert_artifact_fingerprint(WINDOWS_CSV, "step5_normalize")
+    win = pd.read_csv(WINDOWS_CSV)
     train = win[win.split == "train"]["window_path"].tolist()
     print(f"computing TRAIN-ONLY stats over {len(train)} train windows ...")
 
@@ -61,10 +72,12 @@ def main():
              svm_mean=svm_mean.astype(np.float32), svm_std=svm_std.astype(np.float32),
              svm_feature_names=np.array(SVM_FEATURE_NAMES),
              logmel_mean=mel_mean, logmel_std=mel_std,
-             computed_on="train", n_train_windows=len(train))
+             computed_on="train", n_train_windows=len(train),
+             config_fingerprint=np.asarray(config_fingerprint_json()))
     with open(STATS_JSON, "w") as f:
         json.dump({
             "computed_on": "train ONLY",
+            "config_fingerprint": config_fingerprint(),
             "n_train_windows": len(train),
             "svm_dim": int(X.shape[1]),
             "svm_feature_names": SVM_FEATURE_NAMES,

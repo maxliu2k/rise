@@ -23,6 +23,7 @@ from sklearn.metrics import (
 )
 from sklearn.svm import SVC
 
+from instrument_robustness.config import config_fingerprint
 from instrument_robustness.svm_model import (
     SVM_FEATURE_DIR,
     SVMConfig,
@@ -301,6 +302,7 @@ def main() -> None:
 
     summary = {
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
+        "config_fingerprint": config_fingerprint(),
         "selection_metric": "validation_macro_f1",
         "best_config": {
             "kernel": "rbf",

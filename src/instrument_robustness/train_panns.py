@@ -1,4 +1,4 @@
-"""train_panns.py — PANNs CNN14 for 9-class instrument classification.
+"""train_panns.py — PANNs CNN14 for 12-class instrument classification.
 
 Two modes:
   probe    : freeze the pretrained CNN14 trunk, extract 2048-d embeddings ONCE (cached to
@@ -10,7 +10,7 @@ Design notes:
     CNN14 computes its own log-mel + normalization internally (it does NOT use the Step-6 stats).
   * Classification head reads CNN14's 2048-d `embedding` with softmax/CrossEntropy — NOT the
     pretrained sigmoid AudioSet head.
-  * Split comes straight from windows.csv (source-level split) — no leakage re-introduced.
+  * Split comes straight from windows.csv (pitch-group split) — no leakage re-introduced.
   * Gentle inverse-frequency class weights (window imbalance is only ~2.3x); model selection and
     reporting use macro-F1.
 
@@ -30,7 +30,16 @@ import torch, torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from sklearn.metrics import f1_score, confusion_matrix
 
-from instrument_robustness.config import ROOT, PIPE, FEATURES, TARGET_LABELS
+from instrument_robustness.config import (
+    FEATURES,
+    ROOT,
+    TARGET_LABELS,
+    WINDOWS_CSV,
+    assert_artifact_fingerprint,
+    assert_serialized_fingerprint,
+    config_fingerprint,
+    config_fingerprint_json,
+)
 from instrument_robustness.featurelib import load_window
 from instrument_robustness.pretrained_extractors import panns_input, PANNS_SR
 
@@ -65,7 +74,8 @@ class WindowWaveformDataset(Dataset):
 
 
 def load_split(split, limit=None):
-    df = pd.read_csv(PIPE / "windows.csv")
+    assert_artifact_fingerprint(WINDOWS_CSV, "step5_normalize")
+    df = pd.read_csv(WINDOWS_CSV)
     df = df[df.split == split].reset_index(drop=True)
     return df.iloc[:limit].copy() if limit else df
 
@@ -130,10 +140,21 @@ def predict_full(model, loader, device):
 def get_embeddings(model, df, split, device, args):
     cache = OUT / f"emb_{split}.npz"
     if cache.exists() and not args.force:
-        d = np.load(cache)
-        if len(d["y"]) == len(df):
-            print(f"  [{split}] embeddings from cache: {d['E'].shape}")
-            return d["E"], d["y"]
+        with np.load(cache) as data:
+            assert_serialized_fingerprint(
+                data["config_fingerprint"] if "config_fingerprint" in data else None,
+                str(cache),
+            )
+            cached_paths = (
+                data["window_path"].astype(str)
+                if "window_path" in data
+                else np.asarray([])
+            )
+            current_paths = df["window_path"].astype(str).to_numpy()
+            if len(data["y"]) == len(df) and np.array_equal(cached_paths, current_paths):
+                E, y = data["E"], data["y"]
+                print(f"  [{split}] embeddings from cache: {E.shape}")
+                return E, y
     loader = DataLoader(WindowWaveformDataset(df), batch_size=args.batch_size,
                         num_workers=args.num_workers)
     Es, ys = [], []
@@ -145,7 +166,14 @@ def get_embeddings(model, df, split, device, args):
             ys.append(np.asarray(y))
     E, Y = np.concatenate(Es), np.concatenate(ys)
     OUT.mkdir(parents=True, exist_ok=True)
-    np.savez(cache, E=E, y=Y)
+    np.savez(
+        cache,
+        E=E,
+        y=Y,
+        window_path=df["window_path"].astype(str).to_numpy(),
+        label_names=np.asarray(TARGET_LABELS),
+        config_fingerprint=np.asarray(config_fingerprint_json()),
+    )
     print(f"  [{split}] extracted {E.shape} in {time.time()-t0:.0f}s -> {cache.name}")
     return E, Y
 
@@ -276,14 +304,22 @@ def main():
     metrics, model = runner(args, device)
     metrics["meta"] = {"mode": args.mode, "device": device, "epochs": args.epochs,
                        "lr": args.lr, "seed": args.seed, "minutes": round((time.time()-t0)/60, 1),
-                       "n_train": int(len(load_split("train", args.limit)))}
+                       "n_train": int(len(load_split("train", args.limit))),
+                       "config_fingerprint": config_fingerprint()}
 
     OUT.mkdir(parents=True, exist_ok=True)
     res_path = OUT / f"results_{args.mode}{'_smoke' if args.smoke else ''}.json"
     ckpt_path = OUT / f"panns_{args.mode}{'_smoke' if args.smoke else ''}.pt"
     with open(res_path, "w") as f:
         json.dump(metrics, f, indent=2)
-    torch.save(model.state_dict(), ckpt_path)
+    torch.save(
+        {
+            "state_dict": model.state_dict(),
+            "label_order": TARGET_LABELS,
+            "config_fingerprint": config_fingerprint(),
+        },
+        ckpt_path,
+    )
 
     print(f"\n==== PANNs {args.mode} done in {metrics['meta']['minutes']} min ====")
     print(f"VAL  macro-F1 {metrics['val']['macro_f1']}   acc {metrics['val']['accuracy']}")

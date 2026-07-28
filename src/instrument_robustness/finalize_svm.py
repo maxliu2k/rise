@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import sklearn
 
+from instrument_robustness.config import assert_fingerprint, config_fingerprint
 from instrument_robustness.svm_model import (
     SVM_FEATURE_DIR,
     SVMConfig,
@@ -82,6 +83,10 @@ def main() -> None:
         raise ValueError("The validation summary does not describe a sealed test set")
     if validation_summary.get("label_order") != TARGET_LABELS:
         raise ValueError("The validation summary uses an unexpected label order")
+    assert_fingerprint(
+        validation_summary.get("config_fingerprint"),
+        str(validation_summary_path),
+    )
 
     selected = validation_summary.get("best_config", {})
     if selected.get("kernel") != "rbf":
@@ -114,7 +119,7 @@ def main() -> None:
 
     expected_labels = set(range(len(TARGET_LABELS)))
     if set(np.concatenate([y_train, y_val]).tolist()) != expected_labels:
-        raise ValueError("The final development data does not contain all nine classes")
+        raise ValueError("The final development data does not contain all configured classes")
 
     X_final = np.concatenate([X_train, X_val], axis=0)
     y_final = np.concatenate([y_train, y_val], axis=0)
@@ -131,6 +136,7 @@ def main() -> None:
                 "state": "started",
                 "started_at_utc": started_at,
                 "validation_summary": str(validation_summary_path.resolve()),
+                "config_fingerprint": config_fingerprint(),
             },
             file,
             indent=2,
@@ -151,6 +157,7 @@ def main() -> None:
 
         summary = {
             "created_at_utc": datetime.now(timezone.utc).isoformat(),
+            "config_fingerprint": config_fingerprint(),
             "protocol": (
                 "hyperparameters selected on validation; final model fit on "
                 "train+val; test evaluated once"
@@ -224,6 +231,7 @@ def main() -> None:
                 "started_at_utc": started_at,
                 "completed_at_utc": datetime.now(timezone.utc).isoformat(),
                 "test_evaluation_count": 1,
+                "config_fingerprint": config_fingerprint(),
                 "test_summary": {
                     "path": str(test_summary_path.resolve()),
                     "sha256": sha256(test_summary_path),
@@ -239,6 +247,7 @@ def main() -> None:
                 "failed_at_utc": datetime.now(timezone.utc).isoformat(),
                 "error": f"{type(error).__name__}: {error}",
                 "test_evaluation_count": 1,
+                "config_fingerprint": config_fingerprint(),
             },
         )
         raise

@@ -8,7 +8,14 @@ RMS-to-target is idempotent, so re-running is safe. Adds pre/post RMS columns to
 import warnings
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np, pandas as pd, librosa, soundfile as sf
-from instrument_robustness.config import ROOT, PIPE, SR, TARGET_RMS
+from instrument_robustness.config import (
+    ROOT,
+    SR,
+    TARGET_RMS,
+    WINDOWS_CSV,
+    assert_artifact_fingerprint,
+    write_artifact_fingerprint,
+)
 warnings.filterwarnings("ignore")
 
 def norm_one(wrel):
@@ -26,7 +33,8 @@ def norm_one(wrel):
     return (wrel, rms, post)
 
 def main():
-    win = pd.read_csv(PIPE / "windows.csv")
+    assert_artifact_fingerprint(WINDOWS_CSV, "step4_window")
+    win = pd.read_csv(WINDOWS_CSV)
     paths = win["window_path"].tolist()
     print(f"normalizing {len(paths)} windows to RMS={TARGET_RMS} ...")
     res, done = {}, 0
@@ -40,14 +48,15 @@ def main():
                 print(f"  {done}/{len(paths)}")
     win["pre_norm_rms"] = win["window_path"].map(lambda p: round(res[p][0], 5))
     win["post_norm_rms"] = win["window_path"].map(lambda p: round(res[p][1], 5))
-    PIPE.mkdir(parents=True, exist_ok=True)
-    win.to_csv(PIPE / "windows.csv", index=False)
+    WINDOWS_CSV.parent.mkdir(parents=True, exist_ok=True)
+    win.to_csv(WINDOWS_CSV, index=False)
+    write_artifact_fingerprint(WINDOWS_CSV, "step5_normalize")
     peaked = (np.abs(win["post_norm_rms"] - TARGET_RMS) > 1e-3).sum()
     print(f"\ndone. windows below target due to peak-guard: {peaked} "
           f"({peaked/len(win)*100:.1f}%)")
     print("post-norm RMS: median = %.4f (target %.4f)" %
           (win["post_norm_rms"].median(), TARGET_RMS))
-    print(f"updated {PIPE / 'windows.csv'} with pre/post RMS columns")
+    print(f"updated {WINDOWS_CSV} with pre/post RMS columns")
 
 if __name__ == "__main__":
     main()

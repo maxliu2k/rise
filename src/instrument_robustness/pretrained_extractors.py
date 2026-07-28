@@ -64,12 +64,17 @@ def ast_input(y, extractor):
         raise ValueError(f"AST expects a mono waveform, got shape {y16.shape}")
     return extractor(y16, sampling_rate=AST_SR, return_tensors="pt")["input_values"]
 
-def build_ast_model():
+def build_ast_model(label_names=None):
     from transformers import ASTConfig, ASTForAudioClassification
-    label2id = {label: index for index, label in enumerate(TARGET_LABELS)}
+    labels = list(TARGET_LABELS if label_names is None else label_names)
+    if len(labels) < 2:
+        raise ValueError("AST classification requires at least two labels")
+    if len(labels) != len(set(labels)):
+        raise ValueError(f"AST labels must be unique, got {labels}")
+    label2id = {label: index for index, label in enumerate(labels)}
     id2label = {index: label for label, index in label2id.items()}
     config = ASTConfig.from_pretrained(AST_MODEL)
-    config.num_labels = N_CLASSES
+    config.num_labels = len(labels)
     config.label2id = label2id
     config.id2label = id2label
     return ASTForAudioClassification.from_pretrained(
@@ -81,17 +86,40 @@ def build_ast_model():
 
 # ----------------------------------------------------------------------------- MERT
 # MERT consumes raw waveform @ 24 kHz via its own processor; 13 transformer layers of hidden states.
-def build_mert_processor():
+def build_mert_processor(model_id=MERT_MODEL, revision=None):
     from transformers import Wav2Vec2FeatureExtractor
-    return Wav2Vec2FeatureExtractor.from_pretrained(MERT_MODEL, trust_remote_code=True)
+    return Wav2Vec2FeatureExtractor.from_pretrained(
+        model_id,
+        revision=revision,
+        trust_remote_code=True,
+    )
 
 def mert_input(y, processor):
     """22050 window -> MERT input_values via its processor @ 24 kHz."""
     y24 = _resample(y, MERT_SR)
     return processor(y24, sampling_rate=MERT_SR, return_tensors="pt")["input_values"]
 
-def build_mert_model():
+
+def mert_batch_input(waveforms, processor):
+    """Batch 22050 Hz windows and apply MERT's 24 kHz processor."""
+    waveforms_24k = [
+        _resample(y, MERT_SR).astype(np.float32)
+        for y in waveforms
+    ]
+    return processor(
+        waveforms_24k,
+        sampling_rate=MERT_SR,
+        return_tensors="pt",
+        padding=True,
+    )
+
+
+def build_mert_model(model_id=MERT_MODEL, revision=None):
     from transformers import AutoModel
     # DECISION (documented): frozen-feature probe first — freeze MERT, mean-pool time, learn a
     # weighted sum over the 13 layers + linear head. Switch to fine-tuning only if the probe plateaus.
-    return AutoModel.from_pretrained(MERT_MODEL, trust_remote_code=True)
+    return AutoModel.from_pretrained(
+        model_id,
+        revision=revision,
+        trust_remote_code=True,
+    )

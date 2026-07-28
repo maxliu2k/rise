@@ -9,7 +9,13 @@ import numpy as np
 from numpy.typing import NDArray
 from sklearn.svm import SVC
 
-from instrument_robustness.config import FEATURES, TARGET_LABELS
+from instrument_robustness.config import (
+    FEATURES,
+    TARGET_LABELS,
+    assert_fingerprint,
+    assert_serialized_fingerprint,
+    config_fingerprint,
+)
 
 
 SVM_FEATURE_DIR = FEATURES / "svm"
@@ -40,7 +46,8 @@ def load_svm_split(
     if not path.exists():
         raise FileNotFoundError(
             f"Missing {path}. Run "
-            "`python download_data.py --features-only` first."
+            "`python -m instrument_robustness.step6_stats` followed by "
+            "`python -m instrument_robustness.step7_featurize` first."
         )
 
     with np.load(path) as data:
@@ -52,6 +59,10 @@ def load_svm_split(
 
         X = np.asarray(data["X"], dtype=np.float32)
         y = np.asarray(data["y"], dtype=np.int64)
+        assert_serialized_fingerprint(
+            data["config_fingerprint"] if "config_fingerprint" in data else None,
+            str(path),
+        )
 
         if "label_names" in data:
             label_names = data["label_names"].tolist()
@@ -98,6 +109,10 @@ def load_svm_feature_names(
 
     path = Path(feature_dir) / f"{split}.npz"
     with np.load(path) as data:
+        assert_serialized_fingerprint(
+            data["config_fingerprint"] if "config_fingerprint" in data else None,
+            str(path),
+        )
         if "feature_names" not in data:
             return None
         return data["feature_names"].astype(str).tolist()
@@ -121,6 +136,7 @@ def build_svm(config: SVMConfig) -> SVC:
 def save_svm(model: SVC, path: str | Path) -> None:
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
+    model.instrument_robustness_fingerprint_ = config_fingerprint()
     joblib.dump(model, output)
 
 
@@ -128,4 +144,8 @@ def load_svm(path: str | Path) -> SVC:
     model: Any = joblib.load(path)
     if not isinstance(model, SVC):
         raise TypeError(f"Expected an sklearn SVC in {path}, got {type(model)!r}")
+    assert_fingerprint(
+        getattr(model, "instrument_robustness_fingerprint_", None),
+        str(path),
+    )
     return model

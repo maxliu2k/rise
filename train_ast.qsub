@@ -20,6 +20,9 @@ export PYTHONPATH="$PWD/src${PYTHONPATH:+:$PYTHONPATH}"
 export HF_HOME="$PWD/.cache/huggingface"
 export RISE_DATA_ROOT="${RISE_DATA_ROOT:-$PWD/all-samples}"
 export AST_OUTPUT_DIR="${AST_OUTPUT_DIR:-$PWD/artifacts/ast}"
+export AST_EPOCHS="${AST_EPOCHS:-10}"
+export AST_BATCH_SIZE="${AST_BATCH_SIZE:-8}"
+export AST_LEARNING_RATE="${AST_LEARNING_RATE:-1e-5}"
 export OMP_NUM_THREADS="$NSLOTS"
 export MKL_NUM_THREADS="$NSLOTS"
 export PYTHONUNBUFFERED=1
@@ -31,9 +34,11 @@ test -f "$RISE_DATA_ROOT/pipeline/windows.csv"
 test -d "$RISE_DATA_ROOT/work/windows"
 
 python -c "import torch; print('PyTorch:', torch.__version__); print('GPU:', torch.cuda.get_device_name()); assert torch.cuda.is_available()"
+python -c "from instrument_robustness.ast_data import resolve_ast_labels; print('AST labels:', resolve_ast_labels())"
 
 python -m instrument_robustness.train_ast \
-    --epochs 10 \
-    --batch-size 8 \
+    --epochs "$AST_EPOCHS" \
+    --batch-size "$AST_BATCH_SIZE" \
+    --learning-rate "$AST_LEARNING_RATE" \
     --device cuda \
     --output-dir "$AST_OUTPUT_DIR"

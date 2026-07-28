@@ -225,6 +225,7 @@ __marimo__/
 # below. (Git cannot un-ignore a file whose parent directory is excluded, so we glob
 # contents rather than ignoring the directory outright.)
 all-samples/*
+!all-samples/manifest_fingerprint.json
 
 # Keep large / binary / generated data ignored everywhere
 work/
@@ -240,10 +241,16 @@ checkpoints/
 *.egg-info/
 .DS_Store
 
+# Local-only copies of generated artifacts retired from active pipeline paths.
+legacy/**/local-data/
+
 # --- Re-include: small pipeline artifacts under all-samples/pipeline/ ---
 !all-samples/pipeline/
 all-samples/pipeline/*
+!all-samples/pipeline/*.fingerprint.json
 !all-samples/pipeline/manifest_labeled.csv
+!all-samples/pipeline/manifest_resampled.csv
+!all-samples/pipeline/manifest_trimmed.csv
 !all-samples/manifest_fingerprint.json
 !all-samples/pipeline/splits.csv
 !all-samples/pipeline/windows.csv
