@@ -4,14 +4,14 @@ are produced by identical code.
 """
 import warnings
 import numpy as np, librosa
-from instrument_robustness.config import SR, N_FFT, HOP, N_MELS, N_FRAMES, N_MFCC
+from instrument_robustness.config import SR, WINDOW_S, N_FFT, HOP, N_MELS, N_FRAMES, N_MFCC
 warnings.filterwarnings("ignore")
 
 
 def load_window(path):
     y, _ = librosa.load(str(path), sr=SR, mono=True)
     # windows are already exactly 3.0 s; enforce length defensively
-    target = int(round(3.0 * SR))
+    target = int(round(WINDOW_S * SR))
     if len(y) < target:
         y = np.pad(y, (0, target - len(y)))
     return y[:target]

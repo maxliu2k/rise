@@ -20,10 +20,10 @@
 Output: work/windows/*.wav and windows.csv (window_path,label,split,source_path,start_time,content_s)
 Also writes per-class WINDOW counts per split into the report block returned to caller.
 """
-import json
 import warnings
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np, pandas as pd, librosa, soundfile as sf
+
 from instrument_robustness.config import (
     HOP_S,
     MIN_WINDOW_CONTENT_S,
@@ -34,9 +34,9 @@ from instrument_robustness.config import (
     TARGET_LABELS,
     WINDOWS,
     WINDOWS_CSV,
-    WINDOWS_FINGERPRINT,
     WINDOW_S,
-    config_fingerprint,
+    assert_artifact_fingerprint,
+    write_artifact_fingerprint,
 )
 warnings.filterwarnings("ignore")
 
@@ -84,6 +84,7 @@ def window_one(args):
     return out
 
 def main():
+    assert_artifact_fingerprint(SPLITS_CSV, "step3_split")
     sp = pd.read_csv(SPLITS_CSV)
     args = list(zip(sp["trimmed_path"], sp["label"], sp["split"], sp["source_path"]))
     print(f"windowing {len(args)} source files -> {WINDOW_S}s windows (no overlap) ...")
@@ -100,16 +101,6 @@ def main():
     win = win.sort_values(["source_path", "start_time"]).reset_index(drop=True)
     PIPE.mkdir(parents=True, exist_ok=True)
     win.to_csv(WINDOWS_CSV, index=False)
-    WINDOWS_FINGERPRINT.write_text(
-        json.dumps(
-            {
-                "fingerprint": config_fingerprint(),
-                "n_rows": len(win),
-            },
-            indent=2,
-        )
-        + "\n"
-    )
 
     print(f"\ntotal windows: {len(win)}  (from {len(args)} sources)")
     counts = pd.crosstab(win["label"], win["split"])[["train", "val", "test"]]
@@ -137,7 +128,8 @@ def main():
              "   imbalance for a collapsed classifier (0.3333 at a 0.50 prior, 0.4737 at 0.90),",
              "   so it pays a dead model more on more imbalanced data. See FINDINGS S7."]
     (PIPE / "_step4_report_block.txt").write_text("\n".join(block))
-    print(f"\nwrote {WINDOWS_CSV}, {WINDOWS_FINGERPRINT}, and report block")
+    write_artifact_fingerprint(WINDOWS_CSV, "step4_window")
+    print(f"\nwrote {WINDOWS_CSV} and report block")
 
 if __name__ == "__main__":
     main()

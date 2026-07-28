@@ -11,7 +11,17 @@
 import warnings, sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np, pandas as pd, librosa, soundfile as sf
-from instrument_robustness.config import ROOT, RESAMPLED, MANIFEST_LABELED, MANIFEST_RESAMPLED, PIPE, SR, TARGET_LABELS
+from instrument_robustness.config import (
+    MANIFEST_LABELED,
+    MANIFEST_RESAMPLED,
+    PIPE,
+    RESAMPLED,
+    ROOT,
+    SR,
+    TARGET_LABELS,
+    assert_artifact_fingerprint,
+    write_artifact_fingerprint,
+)
 warnings.filterwarnings("ignore")
 
 def resample_one(rel_path):
@@ -57,6 +67,7 @@ def sanity_check(df):
     return rep
 
 def main():
+    assert_artifact_fingerprint(MANIFEST_LABELED, "step0_filter")
     df = pd.read_csv(MANIFEST_LABELED)
     paths = df["path"].tolist()
     print(f"resampling {len(paths)} files to {SR} Hz mono ...")
@@ -79,6 +90,7 @@ def main():
         print(df[df.status != "ok"][["path", "status"]].to_string(index=False))
     out = MANIFEST_RESAMPLED
     df.to_csv(out, index=False)
+    write_artifact_fingerprint(out, "step1_resample")
     print(f"wrote {out}")
     sanity_check(df)
 

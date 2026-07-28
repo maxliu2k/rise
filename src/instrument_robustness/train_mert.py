@@ -14,7 +14,7 @@ import pandas as pd
 import sklearn
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score
 
-from instrument_robustness.config import TARGET_LABELS
+from instrument_robustness.config import TARGET_LABELS, config_fingerprint
 from instrument_robustness.mert_data import (
     MERT_FEATURE_DIR,
     load_mert_embedding_metadata,
@@ -274,6 +274,7 @@ def main() -> None:
             "label_order": TARGET_LABELS,
             "learning_rate": float(best_row["learning_rate"]),
             "layer_weights": best_model.layer_weights(),
+            "config_fingerprint": config_fingerprint(),
         },
         model_path,
     )
@@ -283,6 +284,7 @@ def main() -> None:
     val_path = feature_dir / "val.npz"
     summary = {
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
+        "config_fingerprint": config_fingerprint(),
         "model": "frozen MERT-v1-95M layer-weighted linear probe",
         "selection_metric": "validation_macro_f1",
         "best_config": {

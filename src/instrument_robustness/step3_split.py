@@ -32,7 +32,8 @@ import random
 import pandas as pd
 
 from instrument_robustness.config import (MANIFEST_TRIMMED, SPLITS_CSV, SPLIT_FRACS, SEED,
-                                          TARGET_LABELS)
+                                          TARGET_LABELS, assert_artifact_fingerprint,
+                                          write_artifact_fingerprint)
 
 SPLIT_NAMES = ("train", "val", "test")
 
@@ -84,6 +85,7 @@ def verify_no_group_leak(df):
 
 
 def main():
+    assert_artifact_fingerprint(MANIFEST_TRIMMED, "step2_trim")
     df = pd.read_csv(MANIFEST_TRIMMED)
     missing = [c for c in ("path", "label", "note") if c not in df.columns]
     if missing:
@@ -135,6 +137,7 @@ def main():
     achieved = {n: counts[n].sum() / len(df) for n in SPLIT_NAMES}
     print("achieved fractions: " + ", ".join(f"{n} {achieved[n]:.3f}" for n in SPLIT_NAMES)
           + f"  (target {', '.join(f'{f:.2f}' for f in SPLIT_FRACS)})")
+    write_artifact_fingerprint(SPLITS_CSV, "step3_split")
     print(f"\nwrote {SPLITS_CSV}")
 
 

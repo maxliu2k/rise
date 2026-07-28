@@ -7,7 +7,14 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
-from instrument_robustness.config import FEATURES, PIPE, ROOT, TARGET_LABELS
+from instrument_robustness.config import (
+    FEATURES,
+    PIPE,
+    ROOT,
+    TARGET_LABELS,
+    assert_artifact_fingerprint,
+    assert_serialized_fingerprint,
+)
 
 
 MERT_FEATURE_DIR = FEATURES / "mert"
@@ -36,6 +43,7 @@ def load_mert_examples(
     if split not in {"train", "val", "test"}:
         raise ValueError("split must be one of: train, val, test")
 
+    assert_artifact_fingerprint(windows_csv, "step5_normalize")
     frame = pd.read_csv(windows_csv)
     required = {"window_path", "source_path", "label", "split"}
     missing = required - set(frame.columns)
@@ -70,7 +78,7 @@ def load_mert_examples(
     if missing_paths:
         raise FileNotFoundError(
             f"Missing {len(missing_paths)} window files; first missing: "
-            f"{missing_paths[0]}. MERT requires the full windowed-audio download."
+            f"{missing_paths[0]}. Run the canonical pipeline through Step 5 for this data root."
         )
 
     return examples
@@ -95,6 +103,10 @@ def load_mert_embeddings(
             raise KeyError(f"{path} must contain arrays named X and y")
         X = np.asarray(data["X"], dtype=np.float32)
         y = np.asarray(data["y"], dtype=np.int64)
+        assert_serialized_fingerprint(
+            data["config_fingerprint"] if "config_fingerprint" in data else None,
+            str(path),
+        )
         if "label_names" in data:
             labels = data["label_names"].astype(str).tolist()
             if labels != TARGET_LABELS:
@@ -130,6 +142,10 @@ def load_mert_embedding_metadata(
 ) -> dict[str, str]:
     path = Path(feature_dir) / f"{split}.npz"
     with np.load(path) as data:
+        assert_serialized_fingerprint(
+            data["config_fingerprint"] if "config_fingerprint" in data else None,
+            str(path),
+        )
         required = ("model_id", "model_revision", "pooling")
         missing = [key for key in required if key not in data]
         if missing:

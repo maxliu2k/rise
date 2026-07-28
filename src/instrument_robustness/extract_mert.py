@@ -6,7 +6,13 @@ from time import perf_counter
 
 import numpy as np
 
-from instrument_robustness.config import MERT_MODEL, PIPE, ROOT, TARGET_LABELS
+from instrument_robustness.config import (
+    MERT_MODEL,
+    PIPE,
+    ROOT,
+    TARGET_LABELS,
+    config_fingerprint_json,
+)
 from instrument_robustness.featurelib import load_window
 from instrument_robustness.mert_data import (
     MERT_FEATURE_DIR,
@@ -128,6 +134,7 @@ def main() -> None:
             model_id=np.asarray(args.model_id),
             model_revision=np.asarray(resolved_revision or args.revision or "main"),
             pooling=np.asarray("mean_over_time_per_hidden_layer"),
+            config_fingerprint=np.asarray(config_fingerprint_json()),
         )
         elapsed = perf_counter() - started
         print(f"Saved {output_path}: X={X.shape}, seconds={elapsed:.1f}")

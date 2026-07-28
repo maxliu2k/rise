@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import csv
-import json
+import importlib.util
 import sys
 import tempfile
 import types
@@ -11,8 +11,15 @@ from unittest.mock import patch
 
 import numpy as np
 
+if importlib.util.find_spec("torch") is None:
+    raise unittest.SkipTest("PyTorch is optional; install the ast extra to run AST tests")
+
 from instrument_robustness.ast_data import ASTWindowDataset, resolve_ast_labels
-from instrument_robustness.config import TARGET_LABELS, config_fingerprint
+from instrument_robustness.config import (
+    TARGET_LABELS,
+    artifact_fingerprint_path,
+    write_artifact_fingerprint,
+)
 from instrument_robustness.pretrained_extractors import build_ast_model
 from instrument_robustness.train_ast import _balanced_class_weights, _write_test_reports
 
@@ -23,7 +30,6 @@ TWELVE_LABELS = list(TARGET_LABELS)
 
 def write_manifest(path: Path, labels, counts=None) -> None:
     counts = counts or {label: 1 for label in labels}
-    row_count = 0
     with path.open("w", newline="") as manifest:
         writer = csv.DictWriter(
             manifest,
@@ -40,15 +46,7 @@ def write_manifest(path: Path, labels, counts=None) -> None:
                             "split": split,
                         }
                     )
-                    row_count += 1
-    with path.with_name("windows_fingerprint.json").open("w") as fingerprint:
-        json.dump(
-            {
-                "fingerprint": config_fingerprint(),
-                "n_rows": row_count,
-            },
-            fingerprint,
-        )
+    write_artifact_fingerprint(path, "step5_normalize")
 
 
 class ASTLabelTests(unittest.TestCase):
@@ -97,14 +95,7 @@ class ASTLabelTests(unittest.TestCase):
                 writer = csv.DictWriter(manifest, fieldnames=rows[0].keys())
                 writer.writeheader()
                 writer.writerows(rows)
-            manifest_path.with_name("windows_fingerprint.json").write_text(
-                json.dumps(
-                    {
-                        "fingerprint": config_fingerprint(),
-                        "n_rows": len(rows),
-                    }
-                )
-            )
+            write_artifact_fingerprint(manifest_path, "step5_normalize")
 
             with self.assertRaisesRegex(ValueError, "french-horn"):
                 resolve_ast_labels(manifest_path)
@@ -113,9 +104,9 @@ class ASTLabelTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_dir:
             manifest_path = Path(temporary_dir) / "windows.csv"
             write_manifest(manifest_path, TWELVE_LABELS)
-            manifest_path.with_name("windows_fingerprint.json").unlink()
+            artifact_fingerprint_path(manifest_path).unlink()
 
-            with self.assertRaisesRegex(RuntimeError, "predates config fingerprinting"):
+            with self.assertRaisesRegex(RuntimeError, "no provenance sidecar"):
                 resolve_ast_labels(manifest_path)
 
     def test_balanced_weights_favor_underrepresented_classes(self) -> None:

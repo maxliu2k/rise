@@ -1,11 +1,11 @@
 # rise — instrument-classification robustness
 
-Preprocessing + featurization pipeline and model branches for 9-class instrument classification,
+Preprocessing + featurization pipeline and model branches for 12-class instrument classification,
 built to neutralize two Philharmonia confounds (per-instrument MP3 bitrate; phrase-length) and to
 compare models under clean and (later) noisy conditions.
 
-**9 classes:** violin, viola, cello, flute, clarinet, bassoon, trumpet, tuba, trombone
-(oboe is absent from this Philharmonia copy → bassoon substitutes).
+**12 classes:** bassoon, cello, clarinet, double-bass, flute, french-horn, oboe, trombone,
+trumpet, tuba, viola, violin.
 
 ## Layout
 
@@ -21,8 +21,8 @@ src/instrument_robustness/     # installable package (all CODE)
   train_mert.py                # validation-only MERT probe selection
   ast_data.py, train_ast.py    # AST on-the-fly DataLoader and fine-tuning command
 all-samples/                   # DATA + ARTIFACTS (not code)
-  manifest.csv, Strings/ Brass/ Woodwinds/   # raw audio + catalog
-  pipeline/                    # manifest_9*.csv, splits.csv, windows.csv, norm_stats.*, pipeline_report.txt
+  manifest.csv, <instrument>/<note>/         # raw audio + catalog
+  pipeline/                    # stage manifests, splits.csv, windows.csv, stats, fingerprints
   work/                        # resampled / trimmed / windowed audio
   features/                    # svm/ cnn/ (npz) + crnn/ ast/ mert/ panns/ (docs)
 configs/                       # svm.yaml, irmas.yaml
@@ -53,10 +53,9 @@ It downloads all **12** instruments from the Internet Archive mirror of the Phil
 the index every step below reads. It also writes `manifest_fingerprint.json`, recording the config
 that produced the index.
 
-**Do not copy a data tree from a teammate, and do not unpack a pre-derived feature or window
-archive.** A derived artifact cannot prove which config produced it: a feature array built under a
-different label set or window length still loads, still trains, and still produces plausible
-numbers. Nothing catches it. Rebuilding costs minutes.
+**Do not use an unfingerprinted data tree or pre-derived feature/window archive.** Every pipeline
+stage, feature array, and model artifact records the preprocessing fingerprint; loaders reject
+missing or mismatched provenance rather than silently training on incompatible data.
 
 `download_data.py` (Google Drive) is **deprecated** and its archives are **not** interchangeable
 with this pipeline — they were built against the old file-level split and zero-padded windows,
@@ -70,7 +69,7 @@ carry no fingerprint, and cover only 9 of the 12 classes.
 
 ```bash
 python -m instrument_robustness.prep_data         # fetch data + write manifest.csv  (START HERE)
-python -m instrument_robustness.step0_filter      # filter manifest to the 12 target classes
+python -m instrument_robustness.step0_filter      # keep 12 classes and one articulation per class
 python -m instrument_robustness.step1_resample    # 22050 Hz mono (kills bitrate confound)
 python -m instrument_robustness.step2_trim        # silence trim
 python -m instrument_robustness.step3_split       # split BY PITCH GROUP (70/15/15)
@@ -86,7 +85,6 @@ python -m instrument_robustness.step7_featurize   # SVM / CNN / CRNN features
 See `all-samples/pipeline/pipeline_report.txt` for the full run report (shapes, per-class per-split
 counts, confound checks, invariants).
 
-<<<<<<< ours
 ## Fine-tune AST
 
 The AST branch reads Step-5-normalized windows directly from `pipeline/windows.csv`; no AST
@@ -107,7 +105,7 @@ After testing, that output directory also contains `test_by_instrument.csv` with
 precision, recall, F1, and test-clip counts for each instrument; `test_by_family.csv` with
 percentage accuracy for strings, woodwinds, and brass; and `test_confusion_matrix.csv` showing
 which instruments were confused with one another.
-=======
+
 ## Train the SVM baseline
 
 The SVM features are already standardized with training-set statistics. Tune on the validation split and save the search results plus selected model with:
@@ -133,9 +131,9 @@ This command does not tune or standardize again. It writes a final model, test m
 MERT uses the authoritative `windows.csv` splits and the Step-5 normalized window audio. It resamples
 each 22.05 kHz window to the pretrained `m-a-p/MERT-v1-95M` model's native 24 kHz rate and does not
 use the Step-6 SVM/CNN statistics. The first baseline freezes MERT, caches a mean-pooled representation
-for each of its 13 hidden states, and trains a learned layer mixture plus a linear nine-class probe.
+for each of its 13 hidden states, and trains a learned layer mixture plus a linear 12-class probe.
 
-Install the optional pretrained-model dependencies and make sure the full windowed-audio download is
+Install the optional pretrained-model dependencies and make sure the repaired Step-5 windows are
 present, then extract train and validation only:
 
 ```bash
@@ -148,4 +146,3 @@ Neither command reads the MERT test split. On BU SCC, submit `scc/mert_probe.qsu
 after creating the virtual environment and setting `RISE_DATA_ROOT` to the shared data directory.
 The MERT checkpoint is licensed CC-BY-NC-4.0; this branch is appropriate for the project's
 non-commercial research use, but that license must be reviewed before any commercial use.
->>>>>>> theirs

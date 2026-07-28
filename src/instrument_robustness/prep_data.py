@@ -26,7 +26,6 @@ Undecodable and unparseable files are COUNTED AND REPORTED, never silently dropp
 quietly falls is indistinguishable from a dataset that quietly shrank.
 """
 import csv
-import json
 import re
 import shutil
 import sys
@@ -36,9 +35,10 @@ from collections import Counter
 
 from mutagen.mp3 import MP3
 
-from instrument_robustness.config import (ARCHIVE_BASE, DATA_RAW, DATA_ROOT, FEATURES, MANIFEST_IN,
-                                          PIPE, STRICT_ARTICULATIONS, TARGET_LABELS, WORK,
-                                          ZIP_NAME, config_fingerprint)
+from instrument_robustness.config import (ARCHIVE_BASE, DATA_RAW, DATA_ROOT, FEATURES,
+                                          MANIFEST_FINGERPRINT, MANIFEST_IN, PIPE,
+                                          STRICT_ARTICULATIONS, TARGET_LABELS, WORK, ZIP_NAME,
+                                          write_artifact_fingerprint)
 
 # Philharmonia uses 's' for sharps (As4 = A#4). No flats appear in this set.
 SEMITONES = {"C": 0, "Cs": 1, "D": 2, "Ds": 3, "E": 4, "F": 5,
@@ -195,10 +195,12 @@ def main():
         w.writeheader()
         w.writerows(rows)
 
-    fp_path = DATA_ROOT / "manifest_fingerprint.json"
-    fp_path.write_text(json.dumps({"fingerprint": config_fingerprint(),
-                                   "n_rows": len(rows),
-                                   "excluded": dict(problems)}, indent=2))
+    write_artifact_fingerprint(
+        MANIFEST_IN,
+        "prep_data",
+        fingerprint_path=MANIFEST_FINGERPRINT,
+        metadata={"n_rows": len(rows), "excluded": dict(problems)},
+    )
 
     per_class = Counter(r["label"] for r in rows)
     plain = Counter(r["label"] for r in rows if r["is_plain"])

@@ -12,7 +12,12 @@ from unittest.mock import patch
 import numpy as np
 from sklearn.svm import SVC
 
-from instrument_robustness.config import TARGET_LABELS
+from instrument_robustness.config import (
+    TARGET_LABELS,
+    StaleArtifactError,
+    config_fingerprint,
+    config_fingerprint_json,
+)
 from instrument_robustness.finalize_svm import main as finalize_main
 from instrument_robustness.svm_model import (
     SVMConfig,
@@ -32,6 +37,7 @@ def write_split(path: Path, X: np.ndarray, y: np.ndarray) -> None:
         y=y,
         feature_names=np.array([f"feature_{index}" for index in range(88)]),
         label_names=np.array(TARGET_LABELS),
+        config_fingerprint=np.asarray(config_fingerprint_json()),
     )
 
 
@@ -50,6 +56,19 @@ class SVMTests(unittest.TestCase):
 
             np.testing.assert_array_equal(loaded_X, X)
             np.testing.assert_array_equal(loaded_y, y)
+
+    def test_loader_rejects_an_unfingerprinted_split(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            feature_dir = Path(temporary_dir)
+            np.savez(
+                feature_dir / "train.npz",
+                X=np.zeros((1, 88), dtype=np.float32),
+                y=np.zeros(1, dtype=np.int64),
+                label_names=np.asarray(TARGET_LABELS),
+            )
+
+            with self.assertRaises(StaleArtifactError):
+                load_svm_split("train", feature_dir=feature_dir)
 
     def test_grid_and_model_are_rbf_only(self) -> None:
         configs = candidate_configs(
@@ -160,6 +179,7 @@ class SVMTests(unittest.TestCase):
             )
             self.assertIn("scikit_learn", summary["software_versions"])
             self.assertEqual(len(summary["output_files"]["model"]["sha256"]), 64)
+            self.assertEqual(summary["config_fingerprint"], config_fingerprint())
             self.assertEqual(model.kernel, "rbf")
             self.assertEqual(model.n_features_in_, 88)
 
@@ -188,6 +208,7 @@ class SVMTests(unittest.TestCase):
             validation_summary = {
                 "best_config": {"kernel": "rbf", "C": 1.0, "gamma": "scale"},
                 "label_order": TARGET_LABELS,
+                "config_fingerprint": config_fingerprint(),
                 "test_evaluated": False,
                 "feature_schema": {
                     "dimension": 88,

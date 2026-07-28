@@ -8,7 +8,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from instrument_robustness.config import SR, TARGET_LABELS
+from instrument_robustness.config import (
+    SR,
+    TARGET_LABELS,
+    config_fingerprint_json,
+    write_artifact_fingerprint,
+)
 from instrument_robustness.mert_data import (
     MERT_HIDDEN_SIZE,
     MERT_NUM_LAYERS,
@@ -61,6 +66,7 @@ class MERTTests(unittest.TestCase):
                     },
                 ]
             ).to_csv(windows_csv, index=False)
+            write_artifact_fingerprint(windows_csv, "step5_normalize")
 
             examples = load_mert_examples(
                 "train", windows_csv=windows_csv, data_root=root
@@ -68,7 +74,7 @@ class MERTTests(unittest.TestCase):
 
             self.assertEqual(len(examples), 1)
             self.assertEqual(examples[0].label, "violin")
-            self.assertEqual(examples[0].target, 0)
+            self.assertEqual(examples[0].target, TARGET_LABELS.index("violin"))
             self.assertEqual(examples[0].source_path, "source/train.mp3")
 
     def test_batch_input_resamples_to_mert_rate(self) -> None:
@@ -88,10 +94,10 @@ class MERTTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_dir:
             feature_dir = Path(temporary_dir)
             X = np.zeros(
-                (9, MERT_NUM_LAYERS, MERT_HIDDEN_SIZE),
+                (len(TARGET_LABELS), MERT_NUM_LAYERS, MERT_HIDDEN_SIZE),
                 dtype=np.float32,
             )
-            y = np.arange(9, dtype=np.int64)
+            y = np.arange(len(TARGET_LABELS), dtype=np.int64)
             np.savez(
                 feature_dir / "train.npz",
                 X=X,
@@ -100,6 +106,7 @@ class MERTTests(unittest.TestCase):
                 model_id=np.asarray("m-a-p/MERT-v1-95M"),
                 model_revision=np.asarray("test-revision"),
                 pooling=np.asarray("mean_over_time_per_hidden_layer"),
+                config_fingerprint=np.asarray(config_fingerprint_json()),
             )
 
             loaded_X, loaded_y = load_mert_embeddings(
@@ -118,7 +125,7 @@ class MERTTests(unittest.TestCase):
             )
 
     @unittest.skipUnless(importlib.util.find_spec("torch"), "PyTorch is optional")
-    def test_probe_returns_nine_logits_and_normalized_layer_weights(self) -> None:
+    def test_probe_returns_one_logit_per_class_and_normalized_layer_weights(self) -> None:
         import torch
 
         from instrument_robustness.mert_probe import MERTProbe
@@ -128,7 +135,7 @@ class MERTTests(unittest.TestCase):
 
         logits = model(embeddings)
 
-        self.assertEqual(tuple(logits.shape), (2, 9))
+        self.assertEqual(tuple(logits.shape), (2, len(TARGET_LABELS)))
         self.assertAlmostEqual(sum(model.layer_weights()), 1.0, places=6)
 
 

@@ -15,7 +15,18 @@ for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
 import warnings
 from concurrent.futures import ProcessPoolExecutor
 import numpy as np, pandas as pd
-from instrument_robustness.config import ROOT, PIPE, FEATURES, STATS_NPZ, N_MELS, N_FRAMES, TARGET_LABELS
+from instrument_robustness.config import (
+    FEATURES,
+    N_FRAMES,
+    N_MELS,
+    ROOT,
+    STATS_NPZ,
+    TARGET_LABELS,
+    WINDOWS_CSV,
+    assert_artifact_fingerprint,
+    assert_serialized_fingerprint,
+    config_fingerprint_json,
+)
 from instrument_robustness.featurelib import load_window, svm_vector, logmel, SVM_FEATURE_NAMES
 warnings.filterwarnings("ignore")
 
@@ -28,12 +39,17 @@ def _feats(wrel):
 
 
 def main():
-    st = np.load(STATS_NPZ, allow_pickle=True)
-    svm_mean, svm_std = st["svm_mean"], st["svm_std"]
-    mel_mean = st["logmel_mean"][:, None]     # (128,1) broadcast over frames
-    mel_std = st["logmel_std"][:, None]
+    assert_artifact_fingerprint(WINDOWS_CSV, "step5_normalize")
+    with np.load(STATS_NPZ, allow_pickle=True) as st:
+        assert_serialized_fingerprint(
+            st["config_fingerprint"] if "config_fingerprint" in st else None,
+            str(STATS_NPZ),
+        )
+        svm_mean, svm_std = st["svm_mean"], st["svm_std"]
+        mel_mean = st["logmel_mean"][:, None]     # (128,1) broadcast over frames
+        mel_std = st["logmel_std"][:, None]
 
-    win = pd.read_csv(PIPE / "windows.csv")
+    win = pd.read_csv(WINDOWS_CSV)
     (FEATURES / "svm").mkdir(parents=True, exist_ok=True)
     (FEATURES / "cnn").mkdir(parents=True, exist_ok=True)
 
@@ -54,14 +70,16 @@ def main():
         Xsvm = (Xsvm - svm_mean) / svm_std
         np.savez(FEATURES / "svm" / f"{split}.npz",
                  X=Xsvm, y=y, source_path=rows["source_path"].values,
-                 feature_names=np.array(SVM_FEATURE_NAMES), label_names=np.array(TARGET_LABELS))
+                 feature_names=np.array(SVM_FEATURE_NAMES), label_names=np.array(TARGET_LABELS),
+                 config_fingerprint=np.asarray(config_fingerprint_json()))
 
         # 7b CNN: per-bin standardize with train stats, add channel axis
         Xmel = (Xmel - mel_mean) / mel_std
         Xcnn = Xmel[..., None]
         np.savez(FEATURES / "cnn" / f"{split}.npz",
                  X=Xcnn, y=y, source_path=rows["source_path"].values,
-                 label_names=np.array(TARGET_LABELS))
+                 label_names=np.array(TARGET_LABELS),
+                 config_fingerprint=np.asarray(config_fingerprint_json()))
         print(f"    svm X {Xsvm.shape} | cnn X {Xcnn.shape}")
 
     _write_crnn_pointer()
