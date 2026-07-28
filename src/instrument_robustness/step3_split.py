@@ -14,10 +14,18 @@ effectively already seen and the number comes out inflated.
 
 This is not hypothetical. The previous file-level split, measured on its own committed splits.csv:
 406 of 436 pitch-groups (93.1%) spanned more than one split, 361 spanned all three, and 8036 of
-8096 source files (99.3%) sat in a leaking group. A single-seed probe comparing the two policies
-on otherwise identical data put the inflation at roughly +3.7 balanced-accuracy points (0.9670
-leaked vs 0.9298 grouped) -- indicative rather than canonical, since it was one run and not a
-multi-seed mean.
+8096 source files (99.3%) sat in a leaking group.
+
+The cost has since been measured properly (cnn-ensemble, single/split_policy_probe.py: 3 seeds,
+identical data and training, only the split policy varying):
+
+    grouped (leak 0.000):  0.9600 +/- 0.0138
+    random  (leak 0.967):  0.9957 +/- 0.0006     -> +0.0357, i.e. 2.6x the seed spread
+
+Note the seed spread as much as the mean. The leaked arm varies by 0.0006 against 0.0138 -- a
+23-fold collapse -- because a leaked split makes the task easy enough that initialisation stops
+mattering. Near-perfect accuracy with almost no seed variance is the signature of memorising
+near-duplicates, and it is a free diagnostic: be suspicious of an implausibly tight spread.
 
 The old `assert df.groupby("path")["split"].nunique().max() == 1` never guarded anything: each
 source is exactly one row, so it held by construction and could not detect the leak above. A check
