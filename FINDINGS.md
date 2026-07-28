@@ -267,9 +267,11 @@ are run. Still yours to make.
   (84–89% of files) rather than being a slice. Same insight as `manifest.py`'s
   `PLAIN = {normal, arco-normal}`.
 - **Clips are a fixed 3.0 s; short notes are TILED, never zero-padded.** A note shorter than the
-  window is looped to fill it, so every sample is real signal. Median source length is ~0.95 s, so
-  most clips are tiled — tuba (median 0.575 s) repeats ~5×. This replaces the previous
-  variable-length design; the note that "nothing is padded or tiled" is no longer true.
+  window is looped to fill it, so every sample is real signal. **97.3% of clips are tiled**
+  (`manifest.signal_stats.tiled_fraction`) — only 2.7% of notes reach 3.0 s unaided. Median source
+  length is 0.906 s (range 0.18–77.6 s); tuba (median 0.575 s) repeats ~5×. Tiling is the dominant
+  path, not an edge case. This replaces the previous variable-length design; the note that "nothing
+  is padded or tiled" is no longer true.
   - **Why not zero-padding.** `power_to_db(ref=np.max)` clamps digital silence to the −80 dB floor,
     injected noise fills it, and the clip lands outside the training distribution. Measured:
     majority-class collapse at *every* SNR. Zero-padding does not merely add a nuisance — it
@@ -321,7 +323,8 @@ skill.
 - **Studio single notes are an upper bound**, not a forecast for real polyphonic audio. The
   `multi/` mixtures are equal-RMS sums of isolated notes — they exercise the multi-label machinery
   but are not real polyphony (no shared room, no mic bleed, no ensemble interaction). No claim
-  about transfer to real audio is supported by anything in this document.
+  about transfer to real audio is supported by anything in this document. This is a scope
+  boundary, not a defect: real-audio evaluation is deferred by decision (§9).
 - **Clean accuracy is close to saturating again.** At 0.9600 with a 0.0138 seed spread, separating
   six models on clean audio has limited headroom. The discriminating measurement is the noise
   sweep, and per §5a it must be run in the 60–30 dB band to discriminate anything.
@@ -348,10 +351,12 @@ skill.
   Consuming it instead would avoid two sources of truth. Blocked on layout: its paths point at an
   `all-samples/` tree (`bassoon/As1/*.mp3`) that isn't committed, while `prep_data.py` downloads
   per-instrument zips to `data/raw/bassoon/*.mp3`.
-- **`configs/data/irmas.yaml` is present but empty.** The stated plan is six models (three
-  from-scratch, three pretrained) evaluated on transfer to real audio with overlapping harmonics
-  and/or noise. Nothing in this repo currently evaluates on real audio, so that axis is
-  unmeasurable until IRMAS (or an equivalent) is populated. It is the gating dependency for the
-  study's headline question.
+- **`configs/data/irmas.yaml` is present and 0 bytes — real-audio evaluation is deliberately
+  deferred.** The study is six models (three from-scratch, three pretrained), and the current scope
+  is **Philharmonia only**. That supports the model comparison, the noise sweep, the synthetic
+  polyphony axis, and rank-stability between conditions — none of which need real audio. It does
+  **not** support any claim about real recordings. State conclusions as "under controlled
+  degradation of studio single notes"; an unqualified transfer claim is not available from this
+  data, and would need IRMAS or an equivalent populated first.
 - **`src/instrument_robustness/init.py` should be `__init__.py`** — `init.py` is not a package
   marker and does nothing. The correct one was added; the original is still in place.
