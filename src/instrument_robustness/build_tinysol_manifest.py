@@ -29,10 +29,30 @@ FAMILY = {
 }
 
 
+def parse_note(stem):
+    """`Fl-ord-A#4-ff-N-N` -> `A#4`. Field 2 of the TinySOL naming scheme.
+
+    step3 splits by PITCH GROUP (label + note): the same note recorded at different dynamics is a
+    near-duplicate, so those files must move between splits together. Without this the split
+    silently degrades to per-file and the test score inflates. Fails loudly rather than returning a
+    placeholder -- a missing note would collapse a whole class into one group and quietly wreck the
+    split proportions.
+    """
+    parts = stem.split("-")
+    if len(parts) < 3 or not parts[2]:
+        raise ValueError(f"cannot parse note from TinySOL filename: {stem!r}")
+    return parts[2]
+
+
 def main():
     rows = []
+    # Only the pristine source tree. `work/` holds this pipeline's OWN output (resampled, trimmed
+    # and windowed copies) under paths that repeat the instrument folder names, so a bare rglob
+    # re-ingests them and silently inflates the manifest ~5x (2125 -> 11238) with derived audio
+    # relabelled as source. `features/` and `_removed/` are excluded for the same reason.
+    SKIP = {"work", "features", "checkpoints", "_removed", "__MACOSX"}
     for wav in sorted(ROOT.rglob("*.wav")):
-        if "_removed" in wav.parts:
+        if SKIP & set(wav.parts):
             continue
         inst = next((p for p in wav.parts if p in FOLDER2LABEL), None)
         if inst is None:
@@ -44,6 +64,7 @@ def main():
         rows.append({
             "path": str(wav.relative_to(ROOT)),
             "label": label,
+            "note": parse_note(wav.stem),        # required by step3's pitch-group split
             "family": FAMILY[label],
             "duration_s": round(info.frames / info.samplerate, 4),
             "sample_rate": info.samplerate,

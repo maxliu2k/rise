@@ -243,7 +243,7 @@ checkpoints/
 # --- Re-include: small pipeline artifacts under all-samples/pipeline/ ---
 !all-samples/pipeline/
 all-samples/pipeline/*
-!all-samples/pipeline/manifest_9.csv
+!all-samples/pipeline/manifest_labeled.csv
 !all-samples/pipeline/splits.csv
 !all-samples/pipeline/windows.csv
 !all-samples/pipeline/norm_stats.json
