@@ -73,3 +73,41 @@ REPRODUCE
   python -m instrument_robustness.step0_filter ... step7_featurize
   python -m instrument_robustness.train_panns --mode probe | finetune
 Large data (audio, features/*.npz, *.pt) is NOT in git — see download_data.py.
+
+================================================================
+NOISE SWEEP (test split only, inference only — no retraining)
+================================================================
+Noise source : ESC-50 (2000 environmental clips) for "real"; numpy Gaussian for "white".
+               Stored OUTSIDE git at ~/Downloads/noise_sources (override: RISE_NOISE_ROOT).
+               Noise resampled to 22050 Hz; random 3 s segment per window.
+SNR levels   : clean, 20, 10, 0, -5 dB  x  {white, real}  = 9 conditions
+               (clean is SHARED, not duplicated — it points at work/windows/).
+SNR math     : P = mean(x^2); alpha = sqrt(P_sig / (P_noise * 10^(SNR/10))); x + alpha*noise.
+               NO re-normalization after mixing. Written float32 WAV (peaks reach 9.2 at
+               real/-5 dB — 16-bit PCM would have clipped and corrupted the low-SNR conditions).
+Seed scheme  : sha256("{window_id}|{noise_type}|{snr}")[:4] -> same window always gets the same
+               noise realization; reproducible across reruns and IDENTICAL for every model, so
+               predictions stay paired for McNemar / bootstrap.
+Generated ONCE, shared: work/windows_noisy/{noise_type}/snr{level}/<window_id>.wav
+               5784 files, 1.4 GB (git-ignored).
+VALIDATION (B5): measured-vs-target SNR error = 0.000000 dB across all 8 noisy conditions on 5
+               sampled windows (spec: <0.1 dB). P_signal asserted ~= TARGET_RMS^2 per window.
+               Listenable 0 dB samples in work/windows_noisy/_validation_samples/.
+
+RESULTS — PANNs CNN14 fine-tune (clean-trained), TinySOL test, 723 windows:
+  condition     accuracy   macro-F1   vs clean
+  clean           0.9876     0.9842          -
+  real_20         0.6750     0.5963    -0.3879
+  white_20        0.5353     0.3876    -0.5966
+  real_10         0.4896     0.3980    -0.5862
+  white_10        0.3264     0.1878    -0.7964
+  real_0          0.3140     0.2146    -0.7696
+  white_0         0.0636     0.0216    -0.9626
+  real_-5         0.2739     0.1727    -0.8115
+  white_-5        0.0373     0.0072    -0.9770
+Chance = 1/12 = 0.083 accuracy. white_0 and white_-5 fall BELOW chance -> at those levels the
+model does not merely fail, it collapses onto a degenerate prediction pattern.
+Headline: a model at 98.4% clean drops to 38.8% (white) / 59.6% (real) macro-F1 at 20 dB SNR —
+a barely-audible amount of noise. Clean-trained models are NOT robust; this motivates the
+noise-augmented training condition (separate experiment, not run here).
+Per-condition predictions CSVs + metrics JSONs: features/panns/noise/ (git-ignored, regenerate).
