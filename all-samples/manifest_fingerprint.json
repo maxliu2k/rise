@@ -1,0 +1,47 @@
+{
+  "fingerprint": {
+    "sr": 22050,
+    "window_s": 3.0,
+    "hop_s": 3.0,
+    "trim_top_db": 30,
+    "min_window_content_s": 0.5,
+    "n_mels": 128,
+    "n_fft": 2048,
+    "hop_length": 512,
+    "n_frames": 130,
+    "labels": [
+      "bassoon",
+      "cello",
+      "clarinet",
+      "double-bass",
+      "flute",
+      "french-horn",
+      "oboe",
+      "trombone",
+      "trumpet",
+      "tuba",
+      "viola",
+      "violin"
+    ]
+  },
+  "n_rows": 10196,
+  "excluded": {
+    "unreadable_audio": 1
+  },
+  "content_sha256": "dd77f4a8ea900a0a18f292c2f0c32dae6e9db3c8d21ce96031f58a75c991525e",
+  "content_sha256_note": "sha256 of sorted 'path|label' lines from manifest.csv. n_rows alone cannot catch a change that swaps which files are included while keeping the count equal; this can. Same hash => identical dataset => models remain comparable and no retraining is required.",
+  "per_class_counts": {
+    "bassoon": 720,
+    "cello": 889,
+    "clarinet": 846,
+    "double-bass": 852,
+    "flute": 878,
+    "french-horn": 652,
+    "oboe": 596,
+    "trombone": 831,
+    "trumpet": 485,
+    "tuba": 972,
+    "viola": 973,
+    "violin": 1502
+  }
+}

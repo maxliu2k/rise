@@ -244,6 +244,7 @@ checkpoints/
 !all-samples/pipeline/
 all-samples/pipeline/*
 !all-samples/pipeline/manifest_labeled.csv
+!all-samples/manifest_fingerprint.json
 !all-samples/pipeline/splits.csv
 !all-samples/pipeline/windows.csv
 !all-samples/pipeline/norm_stats.json
