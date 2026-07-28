@@ -9,7 +9,8 @@ documented there, neither of them bugs:
 
 1. **Most of the planned 20/10/0 dB noise sweep can't discriminate models** — by 10 dB a
    clean-trained model has folded onto 6 of 12 classes (MCC 0.149), and by 0 dB onto 4 (MCC 0.037).
-   20 dB is still usable. The full label space is only in play between 60 and 30 dB. See §5a.
+   20 dB is still usable. The full label space is only in play between 60 and 32.5 dB, and the
+   sweep grid has been re-centred there. See §5a.
 2. **Bitrate is confounded with class** (64/80/96 kbps across families). Inert at SR=22050,
    a free 3-way shortcut at 44.1 kHz. Do not raise the sample rate without reading §4.
 

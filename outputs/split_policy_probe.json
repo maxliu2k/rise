@@ -1,0 +1,72 @@
+{
+  "fingerprint": {
+    "sr": 22050,
+    "clip_seconds": 3.0,
+    "max_chunks_per_file": 1,
+    "trim_top_db": 30,
+    "n_mels": 128,
+    "n_fft": 2048,
+    "hop_length": 512,
+    "classes": [
+      "bassoon",
+      "cello",
+      "clarinet",
+      "double-bass",
+      "flute",
+      "french-horn",
+      "oboe",
+      "trombone",
+      "trumpet",
+      "tuba",
+      "viola",
+      "violin"
+    ]
+  },
+  "seeds": [
+    42,
+    43,
+    44
+  ],
+  "split_rng_seed": 20260728,
+  "n_clips": 8375,
+  "n_pitch_groups": 544,
+  "classes": [
+    "bassoon",
+    "cello",
+    "clarinet",
+    "double-bass",
+    "flute",
+    "french-horn",
+    "oboe",
+    "trombone",
+    "trumpet",
+    "tuba",
+    "viola",
+    "violin"
+  ],
+  "grouped": {
+    "leak_fraction": 0.0,
+    "mean": 0.9599844392332048,
+    "std": 0.013753927342091224,
+    "per_seed": [
+      0.9502355732532582,
+      0.9540011456466653,
+      0.9757165987996904
+    ],
+    "n": 3
+  },
+  "random": {
+    "leak_fraction": 0.9669117647058824,
+    "mean": 0.9956652896770427,
+    "std": 0.0006224137294726087,
+    "per_seed": [
+      0.9958780231617391,
+      0.9949644002698594,
+      0.9961534455995298
+    ],
+    "n": 3
+  },
+  "inflation_balanced_accuracy": 0.03568085044383795,
+  "seed_spread": 0.013753927342091224,
+  "exceeds_seed_spread": true
+}
