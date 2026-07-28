@@ -37,15 +37,41 @@ pip install -e ".[ast]"          # AST fine-tuning only
 pip install -e ".[pretrained]"   # + torch/transformers/panns for AST/MERT/PANNs branches
 ```
 
+## Data — `prep_data.py` is the official dataset
+
+**Run this first. It is the only supported way to obtain the data.**
+
+```bash
+python -m instrument_robustness.prep_data
+```
+
+It downloads all **12** instruments from the Internet Archive mirror of the Philharmonia library
+(CC-BY-SA 4.0), unpacks them into `<data root>/<instrument>/<note>/`, and writes `manifest.csv` —
+the index every step below reads. It also writes `manifest_fingerprint.json`, recording the config
+that produced the index.
+
+**Do not copy a data tree from a teammate, and do not unpack a pre-derived feature or window
+archive.** A derived artifact cannot prove which config produced it: a feature array built under a
+different label set or window length still loads, still trains, and still produces plausible
+numbers. Nothing catches it. Rebuilding costs minutes.
+
+`download_data.py` (Google Drive) is **deprecated** and its archives are **not** interchangeable
+with this pipeline — they were built against the old file-level split and zero-padded windows,
+carry no fingerprint, and cover only 9 of the 12 classes.
+
+> **Migrating from the 9-class set:** label indices have shifted, so every checkpoint and feature
+> array produced before this change is invalid and must be regenerated. This is unavoidable —
+> `TARGET_LABELS` fixes the label indices, and oboe, double-bass and french-horn now exist.
+
 ## Run the pipeline
 
 ```bash
-# steps read/write under the data root; run from anywhere once installed
-python -m instrument_robustness.step0_filter      # filter manifest to 9 classes
+python -m instrument_robustness.prep_data         # fetch data + write manifest.csv  (START HERE)
+python -m instrument_robustness.step0_filter      # filter manifest to the 12 target classes
 python -m instrument_robustness.step1_resample    # 22050 Hz mono (kills bitrate confound)
 python -m instrument_robustness.step2_trim        # silence trim
-python -m instrument_robustness.step3_split       # split BY SOURCE FILE (70/15/15)
-python -m instrument_robustness.step4_window      # 3.0 s windows (kills phrase-length confound)
+python -m instrument_robustness.step3_split       # split BY PITCH GROUP (70/15/15)
+python -m instrument_robustness.step4_window      # 3.0 s windows, short notes TILED not padded
 python -m instrument_robustness.step5_normalize   # per-window RMS normalize
 python -m instrument_robustness.step6_stats       # TRAIN-ONLY normalization stats
 python -m instrument_robustness.step7_featurize   # SVM / CNN / CRNN features

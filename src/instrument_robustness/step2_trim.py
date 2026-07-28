@@ -4,12 +4,13 @@
 - Keep note onsets: if trimming would leave < MIN_TRIM_S of audio (e.g. very soft notes
   where the whole thing reads as "quiet"), keep the untrimmed resampled audio and flag it.
 - Recompute and store post-trim duration.
-Output: work/trimmed/*.wav and manifest_9_trimmed.csv
+Output: work/trimmed/*.wav and manifest_trimmed.csv
 """
 import warnings
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np, pandas as pd, librosa, soundfile as sf
-from instrument_robustness.config import ROOT, TRIMMED, PIPE, SR, TRIM_TOP_DB, MIN_TRIM_S
+from instrument_robustness.config import (ROOT, TRIMMED, PIPE, SR, TRIM_TOP_DB, MIN_TRIM_S,
+                                          MANIFEST_RESAMPLED, MANIFEST_TRIMMED)
 warnings.filterwarnings("ignore")
 
 def trim_one(rel_resampled):
@@ -28,7 +29,7 @@ def trim_one(rel_resampled):
         return (rel_resampled, None, 0.0, f"error:{type(e).__name__}")
 
 def main():
-    df = pd.read_csv(PIPE / "manifest_9_resampled.csv")
+    df = pd.read_csv(MANIFEST_RESAMPLED)
     df = df[df.status == "ok"].copy()
     paths = df["resampled_path"].tolist()
     print(f"trimming {len(paths)} files (top_db={TRIM_TOP_DB}) ...")
@@ -50,7 +51,7 @@ def main():
           f"{df.resampled_dur_s.median():.3f}s -> {df.trimmed_dur_s.median():.3f}s")
     print("median trimmed duration per class:")
     print(df.groupby("label").trimmed_dur_s.median().round(3).to_string())
-    out = PIPE / "manifest_9_trimmed.csv"
+    out = MANIFEST_TRIMMED
     df.to_csv(out, index=False)
     print(f"\nwrote {out}")
 

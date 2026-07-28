@@ -1,9 +1,14 @@
-"""Shared config for the instrument-robustness pipeline (9-class Philharmonia).
+"""Shared config for the instrument-robustness pipeline (12-class Philharmonia).
 
-Code now lives in the `instrument_robustness` package; DATA lives separately under the data root
+This module is the SINGLE SOURCE OF TRUTH. Change constants here, never inline in a step script.
+
+Code lives in the `instrument_robustness` package; DATA lives separately under the data root
 (default: <repo>/all-samples). The two are decoupled so the package can be installed/imported from
 anywhere while still finding the audio + artifacts. Override the data location with the
 RISE_DATA_ROOT environment variable (see .env.example).
+
+The audio itself is fetched by `python -m instrument_robustness.prep_data`, which is the only
+supported way to obtain the dataset -- it writes `manifest.csv`, the index every step reads.
 """
 import os
 from pathlib import Path
@@ -13,32 +18,65 @@ _REPO = Path(__file__).resolve().parents[2]
 DATA_ROOT = Path(os.environ.get("RISE_DATA_ROOT", _REPO / "all-samples")).resolve()
 
 ROOT = DATA_ROOT                       # kept for back-compat: step scripts resolve paths against ROOT
-PIPE = DATA_ROOT / "pipeline"          # pipeline ARTIFACTS: manifest_9*.csv, splits/windows.csv, stats, report
+PIPE = DATA_ROOT / "pipeline"          # pipeline ARTIFACTS: manifest_*.csv, splits/windows.csv, stats, report
 WORK = DATA_ROOT / "work"
 RESAMPLED = WORK / "resampled"
 TRIMMED = WORK / "trimmed"
 WINDOWS = WORK / "windows"
 FEATURES = DATA_ROOT / "features"
 
-# Oboe is absent from this Philharmonia copy; bassoon substitutes as the 9th class.
+# 12 classes: 4 strings, 4 woodwinds, 4 brass. Kept ALPHABETICAL -- this ordering fixes the label
+# indices, so reordering silently invalidates every saved checkpoint.
+#
+# This replaces the previous 9-class set. Oboe, double-bass and french-horn were absent from the
+# older local Philharmonia copy; prep_data.py fetches all 12 from the Internet Archive mirror, so
+# they are no longer missing. Any checkpoint trained under the 9-class set is INVALID here --
+# label indices have shifted and must be retrained.
 TARGET_LABELS = [
-    "violin", "viola", "cello",          # strings
-    "flute", "clarinet", "bassoon",      # woodwinds
-    "trumpet", "tuba", "trombone",       # brass
+    "bassoon", "cello", "clarinet", "double-bass", "flute", "french-horn",
+    "oboe", "trombone", "trumpet", "tuba", "viola", "violin",
 ]
+
+# --- Acquisition (prep_data.py) ---
+# The official philharmonia.co.uk/assets/... URLs predate their site redesign and no longer
+# resolve. The Internet Archive mirror is the working source. CC-BY-SA 4.0.
+ARCHIVE_BASE = "https://archive.org/download/philharmonicorchestrasamples"
+DATA_RAW = DATA_ROOT / "raw"
+
+# The archive's zip/dir names are NOT the instrument field: zips use spaces where filenames use
+# hyphens, and `cor anglais.zip` contains `english-horn_*.mp3`.
+ZIP_NAME = {"double-bass": "double bass", "french-horn": "french horn"}
+
+# One articulation per class, so the model cannot separate classes on playing technique.
+# `normal`/`arco-normal` dominates (84-89% of files), so this costs almost nothing.
+STRICT_ARTICULATIONS = {
+    "bassoon": {"normal"}, "cello": {"arco-normal"}, "clarinet": {"normal"},
+    "double-bass": {"arco-normal"}, "flute": {"normal"}, "french-horn": {"normal"},
+    "oboe": {"normal"}, "trombone": {"normal"}, "trumpet": {"normal"},
+    "tuba": {"normal"}, "viola": {"arco-normal"}, "violin": {"arco-normal"},
+}
+MIN_STRICT_N = 200      # per-class floor before falling back to the sustained family
+MAX_IMBALANCE = 1.5     # above this ratio, apply class weights
 
 SR = 22050            # common resample rate; Nyquist 11025 Hz sits below the lowest MP3 brick wall (~16 kHz)
 TRIM_TOP_DB = 30      # silence-trim threshold
 MIN_TRIM_S = 0.10     # if trimming leaves less than this, keep the untrimmed (resampled) audio and flag
 
 # --- Step 3: split ---
-SPLIT_FRACS = (0.70, 0.15, 0.15)   # train / val / test, stratified by label, split BY SOURCE FILE
+SPLIT_FRACS = (0.70, 0.15, 0.15)   # train / val / test, stratified by label, split BY PITCH GROUP
+                                   # (all files sharing label+note move together -- see step3)
 SEED = 0
 
 # --- Step 4: window ---
 WINDOW_S = 3.0        # fixed window length (matches IEEE baseline)
 HOP_S = 3.0           # NO overlap (hop == window). Chosen to avoid amplifying phrase-window imbalance
-                      # and to avoid near-duplicate correlated windows. Short/only windows are zero-padded.
+                      # and to avoid near-duplicate correlated windows.
+                      # Short/only windows are TILED (looped) to fill the window -- never zero-padded.
+                      # Zero-padding is not a style choice: power_to_db(ref=np.max) clamps digital
+                      # silence to the -80 dB floor, injected noise fills it, and the clip lands
+                      # outside the training distribution. Measured effect is majority-class collapse
+                      # at EVERY SNR, i.e. it destroys any noise-robustness result. Tiling keeps every
+                      # sample real signal. See step4_window.py and FINDINGS S6 on cnn-ensemble.
 MIN_WINDOW_CONTENT_S = 0.5   # drop a trailing window with less real content than this, UNLESS it is a
                              # source's only window (every source must contribute >= 1 window)
 
@@ -62,6 +100,69 @@ AST_MODEL = "MIT/ast-finetuned-audioset-10-10-0.4593"
 MERT_SR = 24000
 MERT_MODEL = "m-a-p/MERT-v1-95M"
 
-MANIFEST_IN = DATA_ROOT / "manifest.csv"
-MANIFEST_9 = PIPE / "manifest_9.csv"
+MANIFEST_IN = DATA_ROOT / "manifest.csv"          # written by prep_data.py -- the canonical index
 REPORT = PIPE / "pipeline_report.txt"
+
+# Intermediate manifests. Previously these were named manifest_9*.csv and steps 1-3 hard-coded the
+# filenames as string literals, so config did not actually own the paths it claimed to. Both are
+# fixed here: the names no longer assert a class count that can drift, and every step reads its
+# input path from this module.
+MANIFEST_LABELED = PIPE / "manifest_labeled.csv"          # step 0 out
+MANIFEST_RESAMPLED = PIPE / "manifest_resampled.csv"      # step 1 out
+MANIFEST_TRIMMED = PIPE / "manifest_trimmed.csv"          # step 2 out
+SPLITS_CSV = PIPE / "splits.csv"                          # step 3 out
+WINDOWS_CSV = PIPE / "windows.csv"                        # step 4 out
+
+
+# --------------------------------------------------------------------------- provenance
+
+def config_fingerprint():
+    """The settings that define what a cached array, manifest, or checkpoint MEANS.
+
+    Postcondition: returns a JSON-serialisable dict. Only fields that change the meaning of the
+    data belong here. Training hyperparameters (learning rate, epochs, dropout) deliberately do
+    NOT -- two models trained at different learning rates on the same data are comparable; two
+    trained on different CLASS SETS or window lengths are not.
+    """
+    return {
+        "sr": SR,
+        "window_s": WINDOW_S,
+        "hop_s": HOP_S,
+        "trim_top_db": TRIM_TOP_DB,
+        "min_window_content_s": MIN_WINDOW_CONTENT_S,
+        "n_mels": N_MELS,
+        "n_fft": N_FFT,
+        "hop_length": HOP,
+        "n_frames": N_FRAMES,
+        "labels": list(TARGET_LABELS),
+    }
+
+
+class StaleArtifactError(RuntimeError):
+    """An artifact was built under a different config than the one now in effect."""
+
+
+def assert_fingerprint(found, source, expected=None):
+    """Crash unless `found` matches the current config fingerprint.
+
+    Preconditions: `found` is the fingerprint dict read back from an artifact, or None if the
+    artifact predates fingerprinting. `source` names the artifact, for the error message.
+    Postcondition: returns None if the artifact is consistent with the current config.
+    Raises: StaleArtifactError, naming every field that differs.
+
+    This exists because the failure it guards is silent. A checkpoint or feature array built under
+    a different label set or window length still loads, still runs, and still produces plausible
+    numbers -- there is no crash and no warning, only a wrong result that gets believed. Never rely
+    on noticing a file timestamp.
+    """
+    expected = expected if expected is not None else config_fingerprint()
+    if found is None:
+        raise StaleArtifactError(
+            f"{source} predates config fingerprinting, so it cannot be checked against the "
+            f"current config. Rebuild it: python -m instrument_robustness.prep_data")
+    diffs = [f"    {k}: artifact={found.get(k, '<missing>')!r} current={v!r}"
+             for k, v in expected.items() if found.get(k) != v]
+    if diffs:
+        raise StaleArtifactError(
+            f"{source} was built under a different config:\n" + "\n".join(diffs) +
+            "\n  Rebuild the pipeline, or check out the config that produced it.")

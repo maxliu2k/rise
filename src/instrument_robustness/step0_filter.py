@@ -3,10 +3,10 @@
 - Keep only rows whose label is one of the 9 targets.
 - Drop zero-byte / missing files (verified on disk, not just via inventory).
 - duration_s is carried through and is the authoritative duration field (never `length`).
-Output: manifest_9.csv
+Output: manifest_labeled.csv
 """
 import pandas as pd
-from instrument_robustness.config import ROOT, MANIFEST_IN, MANIFEST_9, TARGET_LABELS
+from instrument_robustness.config import ROOT, MANIFEST_IN, MANIFEST_LABELED, TARGET_LABELS
 
 def main():
     df = pd.read_csv(MANIFEST_IN)
@@ -25,7 +25,7 @@ def main():
     df = df[sizes > 0].copy()
 
     df = df.sort_values("path").reset_index(drop=True)
-    df.to_csv(MANIFEST_9, index=False)
+    df.to_csv(MANIFEST_LABELED, index=False)
 
     print(f"\nrows in manifest.csv        : {n0}")
     print(f"rows after label filter     : {n_label}")
@@ -35,7 +35,7 @@ def main():
     tab.columns = [("note" if c == 0 else "phrase") for c in tab.columns]
     tab["total"] = tab.sum(axis=1)
     print(tab.to_string())
-    print(f"\nwrote {MANIFEST_9}")
+    print(f"\nwrote {MANIFEST_LABELED}")
 
 if __name__ == "__main__":
     main()

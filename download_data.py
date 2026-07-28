@@ -1,5 +1,26 @@
 #!/usr/bin/env python3
 """
+DEPRECATED — do not use. Run `python -m instrument_robustness.prep_data` instead.
+
+The archives this script fetches are derived artifacts (feature arrays and pre-windowed audio)
+built under the OLD pipeline:
+
+  * the file-level split, in which 406 of 436 pitch-groups (93.1%) spanned more than one split,
+    so the same note at a different dynamic appeared in both train and test;
+  * zero-padded windows, which put clips outside the training distribution once noise is added
+    and collapse any noise-robustness measurement to the majority class;
+  * the 9-class label set, so every label index is shifted relative to the current 12.
+
+None of them carry a config fingerprint, so nothing downstream can detect any of the above. They
+load cleanly and produce plausible, wrong numbers.
+
+`prep_data.py` fetches SOURCE AUDIO from the Internet Archive and rebuilds everything
+deterministically, which takes minutes and can be checked against config_fingerprint().
+
+Kept in the tree only so old instructions fail loudly rather than silently doing the wrong thing.
+
+--- original documentation follows ---
+
 download_data.py — fetch the large data artifacts from Google Drive and unpack
 them into the layout the `instrument_robustness` package expects.
 
@@ -230,6 +251,21 @@ def verify_audio() -> bool:
 
 
 def main():
+    # Deprecation is enforced, not advisory. The archives this fetches are built against the old
+    # file-level split, zero-padded windows and the 9-class label set, and carry no fingerprint --
+    # so if they land on disk nothing downstream can tell. Refusing here is the only place the
+    # mistake is still visible.
+    sys.exit(
+        "download_data.py is DEPRECATED and refuses to run.\n\n"
+        "  Its archives were built under the old pipeline: file-level split (93.1% of pitch-groups\n"
+        "  leaked across train/test), zero-padded windows (which destroy the noise sweep), and the\n"
+        "  9-class label set (every label index has since shifted). They carry no config\n"
+        "  fingerprint, so nothing downstream can detect any of it.\n\n"
+        "  Use the canonical source instead:\n"
+        "      python -m instrument_robustness.prep_data\n\n"
+        "  If you genuinely need the old archives for comparison, check out a commit from before\n"
+        "  the 12-class migration -- do not re-enable this script.")
+
     ap = argparse.ArgumentParser(description="Download project data from Google Drive.")
     ap.add_argument(
         "--features-only",

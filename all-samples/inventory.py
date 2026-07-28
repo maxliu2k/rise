@@ -28,9 +28,12 @@ SEMITONES = {"C": 0, "Cs": 1, "D": 2, "Ds": 3, "E": 4, "F": 5,
 NOTE_RE = re.compile(r"^([A-G]s?)([0-8])$")
 
 # Everything under Strings/ is a string instrument; the rest are top-level.
-FAMILY = {"violin": "strings", "viola": "strings", "cello": "strings",
-          "flute": "woodwind", "clarinet": "woodwind", "bassoon": "woodwind",
-          "trumpet": "brass", "trombone": "brass", "tuba": "brass"}
+# All 12 target instruments. This previously listed 9, so double-bass, french-horn and oboe were
+# recorded as family "unknown" and silently excluded from every downstream count. Keep in sync
+# with instrument_robustness.config.TARGET_LABELS and prep_data.FAMILY.
+FAMILY = {"violin": "strings", "viola": "strings", "cello": "strings", "double-bass": "strings",
+          "flute": "woodwind", "clarinet": "woodwind", "bassoon": "woodwind", "oboe": "woodwind",
+          "trumpet": "brass", "trombone": "brass", "tuba": "brass", "french-horn": "brass"}
 
 
 def midi_number(note):
