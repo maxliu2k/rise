@@ -11,7 +11,9 @@ set to the desired class set.
 """
 import warnings
 import pandas as pd, soundfile as sf
-from instrument_robustness.config import ROOT, MANIFEST_IN, TARGET_LABELS
+from instrument_robustness.config import (ROOT, MANIFEST_IN, MANIFEST_FINGERPRINT,
+                                          TARGET_LABELS, STRICT_ARTICULATIONS,
+                                          write_artifact_fingerprint)
 warnings.filterwarnings("ignore")
 
 # TinySOL instrument-folder name -> canonical label (config.CANONICAL_LABELS, shared with
@@ -27,6 +29,28 @@ FAMILY = {
     "flute": "woodwind", "clarinet": "woodwind", "oboe": "woodwind", "bassoon": "woodwind",
     "trumpet": "brass", "french-horn": "brass", "trombone": "brass", "tuba": "brass",
 }
+
+
+def parse_technique(stem, label):
+    """`Fl-ord-A#4-ff-N-N` -> the canonical plain-articulation name for `label`.
+
+    step0 filters on `technique` against config.STRICT_ARTICULATIONS, which is written in the
+    Philharmonia archive's vocabulary (`normal`, or `arco-normal` for bowed strings). TinySOL calls
+    the same thing `ord` (ordinario), so the raw field would match nothing and step0's
+    "no rows survived" assert would fire on every class.
+
+    `ord` IS the plain articulation, and for bowed strings it is played arco, so translating it to
+    the class's STRICT entry is a rename, not a relabel. Anything that is not `ord` keeps its raw
+    name so the filter still drops it -- this must not become a blanket pass-through.
+    """
+    parts = stem.split("-")
+    tech = parts[1] if len(parts) > 1 else ""
+    if tech != "ord":
+        return tech
+    plain = STRICT_ARTICULATIONS.get(label)
+    if not plain or len(plain) != 1:
+        raise ValueError(f"expected exactly one strict articulation for {label!r}, got {plain!r}")
+    return next(iter(plain))
 
 
 def parse_note(stem):
@@ -65,6 +89,7 @@ def main():
             "path": str(wav.relative_to(ROOT)),
             "label": label,
             "note": parse_note(wav.stem),        # required by step3's pitch-group split
+            "technique": parse_technique(wav.stem, label),   # required by step0's filter
             "family": FAMILY[label],
             "duration_s": round(info.frames / info.samplerate, 4),
             "sample_rate": info.samplerate,
@@ -73,7 +98,16 @@ def main():
         })
     df = pd.DataFrame(rows).sort_values("path").reset_index(drop=True)
     df.to_csv(MANIFEST_IN, index=False)
+    # Provenance sidecar, same contract as prep_data.py: every downstream step asserts the
+    # manifest was produced under the current config, so without this step0 refuses to run.
+    write_artifact_fingerprint(
+        MANIFEST_IN,
+        "build_tinysol_manifest",
+        fingerprint_path=MANIFEST_FINGERPRINT,
+        metadata={"n_rows": int(len(df)), "dataset": "tinysol"},
+    )
     print(f"wrote {MANIFEST_IN}  ({len(df)} files, {df['label'].nunique()} classes)")
+    print(f"wrote {MANIFEST_FINGERPRINT.name}")
     print("\nper-class counts:")
     print(df.groupby("label").size().reindex(TARGET_LABELS).to_string())
     print(f"\nduration: median={df.duration_s.median():.2f}s  "

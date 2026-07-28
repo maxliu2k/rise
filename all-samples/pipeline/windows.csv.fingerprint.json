@@ -1,7 +1,7 @@
 {
-  "artifact": "manifest.csv",
-  "sha256": "83b0025c250f1c295a835e4c37e3e3deb0cc07a93020c0723202a374308a08b5",
-  "stage": "prep_data",
+  "artifact": "windows.csv",
+  "sha256": "2e9ac15752a0b500e8be3c1c6152c738f60cf12481c4b00043f24d59bc4da07b",
+  "stage": "step5_normalize",
   "fingerprint": {
     "fingerprint_version": 2,
     "archive_base": "https://archive.org/download/philharmonicorchestrasamples",
@@ -84,11 +84,5 @@
       "viola",
       "violin"
     ]
-  },
-  "metadata": {
-    "n_rows": 10196,
-    "excluded": {
-      "unreadable_audio": 1
-    }
   }
 }

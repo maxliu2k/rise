@@ -34,9 +34,12 @@ from instrument_robustness.config import (
 )
 
 def main():
+    # manifest.csv has two legitimate producers: prep_data (Philharmonia) and
+    # build_tinysol_manifest (TinySOL). Both emit the same schema and feed the identical
+    # downstream steps, so either is accepted; any other stage still fails the check.
     assert_artifact_fingerprint(
         MANIFEST_IN,
-        "prep_data",
+        ("prep_data", "build_tinysol_manifest"),
         fingerprint_path=MANIFEST_FINGERPRINT,
     )
     df = pd.read_csv(MANIFEST_IN)

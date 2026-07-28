@@ -328,9 +328,18 @@ def assert_artifact_fingerprint(
             "Rebuild the pipeline stage."
         )
     assert_fingerprint(payload.get("fingerprint"), str(artifact_path))
-    if payload.get("stage") != expected_stage:
+    # `expected_stage` may name one producer or several. An artifact can have more than one
+    # legitimate producer: manifest.csv comes from prep_data for Philharmonia and from
+    # build_tinysol_manifest for TinySOL, and both feed the identical downstream steps. Accepting
+    # a set keeps the provenance check strict -- an unrecognised stage still fails -- without
+    # forcing a second dataset to lie about which stage built it.
+    allowed = ({expected_stage} if isinstance(expected_stage, str)
+               else set(expected_stage))
+    if payload.get("stage") not in allowed:
+        expected_desc = (repr(expected_stage) if isinstance(expected_stage, str)
+                         else " or ".join(repr(s) for s in sorted(allowed)))
         raise StaleArtifactError(
             f"{artifact_path} was produced by stage {payload.get('stage')!r}; "
-            f"expected {expected_stage!r}. Run the missing pipeline step."
+            f"expected {expected_desc}. Run the missing pipeline step."
         )
     return payload["fingerprint"]

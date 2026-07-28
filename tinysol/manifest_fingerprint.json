@@ -1,7 +1,7 @@
 {
   "artifact": "manifest.csv",
-  "sha256": "83b0025c250f1c295a835e4c37e3e3deb0cc07a93020c0723202a374308a08b5",
-  "stage": "prep_data",
+  "sha256": "fa01c93a15a6336682894c11ccb7c51eb0ebc3bb655f202150098409786fffc9",
+  "stage": "build_tinysol_manifest",
   "fingerprint": {
     "fingerprint_version": 2,
     "archive_base": "https://archive.org/download/philharmonicorchestrasamples",
@@ -86,9 +86,7 @@
     ]
   },
   "metadata": {
-    "n_rows": 10196,
-    "excluded": {
-      "unreadable_audio": 1
-    }
+    "n_rows": 2125,
+    "dataset": "tinysol"
   }
 }
