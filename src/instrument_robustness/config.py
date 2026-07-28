@@ -150,6 +150,12 @@ def config_fingerprint():
         "split_policy": "label_note_pitch_group",
         "split_fracs": list(SPLIT_FRACS),
         "split_seed": SEED,
+        # Which articulations step0 keeps. Without this field an artifact built before the
+        # articulation filter existed (10196 rows, all techniques, 3.10:1 imbalance) produces a
+        # fingerprint IDENTICAL to one built after it (8378 rows, one technique per class,
+        # 1.97:1) -- so a stale feature array would pass assert_fingerprint and train silently on
+        # the technique shortcut. Sorted for a stable comparison across runs.
+        "articulations": {k: sorted(v) for k, v in sorted(STRICT_ARTICULATIONS.items())},
         "n_mels": N_MELS,
         "n_fft": N_FFT,
         "hop_length": HOP,
