@@ -1,0 +1,75 @@
+TINYSOL PREPROCESSING PIPELINE — REPORT
+Dataset: TinySOL (data root = <repo>/tinysol, override with RISE_TINYSOL_ROOT)
+Working rate: 22050 Hz mono | isolated sustained notes, lossless WAV.
+
+*** TINYSOL IS 12-CLASS. Philharmonia (all-samples/) is 9-class. Do not mix them. ***
+Run TinySOL with:  RISE_DATA_ROOT=$RISE_TINYSOL_ROOT
+                   RISE_TARGET_LABELS="violin,viola,cello,double bass,flute,clarinet,oboe,bassoon,trumpet,french horn,trombone,tuba"
+
+12 classes (4 strings / 4 woodwinds / 4 brass):
+  strings   : violin, viola, cello, double bass
+  woodwinds : flute, clarinet, oboe, bassoon
+  brass     : trumpet, french horn, trombone, tuba
+(These are config.TINYSOL_LABELS. Philharmonia's 9 = config.PHILHARMONIA_LABELS.)
+
+NOTE ON FILE NAMING: the filtered manifest is named `manifest_9.csv` — this is a legacy filename
+from the shared pipeline code (config.MANIFEST_9), NOT a class count. Its contents are the 12
+TinySOL classes. Same for the '9' in some intermediate paths.
+
+================================================================
+STEP 0-2 — filter / resample / trim
+================================================================
+Source files: 2125 (12 classes, all isolated notes; is_phrase=0 for every file).
+Per-class source files:
+  violin 284 | viola 309 | cello 291 | double bass 309
+  flute 118 | clarinet 126 | oboe 107 | bassoon 126
+  trumpet 96 | french horn 134 | trombone 117 | tuba 108
+Duration: median 6.70 s, 97% >= 3 s (isolated sustained notes -> windows are FULL of content,
+  unlike Philharmonia where ~half of each 3 s window is silence padding).
+Resample to 22050 Hz mono. Post-resample frequency-ceiling check: uniform ~10.4-11.0 kHz across
+  all 12 instruments (spread 619 Hz), NO brick walls -> no bitrate confound (lossless WAV).
+Trim silence (top_db=30): median trimmed duration 6.3 s.
+
+================================================================
+STEP 3 — split BY SOURCE FILE (stratified 70/15/15, seed 0)
+================================================================
+train 1487 / val 319 / test 319 source files. All 12 classes in all three splits; no source in >1 split.
+
+================================================================
+STEP 4 — window to 3.0 s, no overlap
+================================================================
+total windows: 4863  (train 3417 / val 723 / test 723)
+Per-class WINDOW counts (total):
+  violin 748 | viola 835 | cello 795 | double bass 558
+  flute 263 | clarinet 311 | oboe 274 | bassoon 252
+  trumpet 194 | french horn 279 | trombone 226 | tuba 128
+WINDOW-LEVEL IMBALANCE: 6.5x (viola 835 vs tuba 128). Higher than Philharmonia's 2.3x because
+  strings have ~300 long-note files each while brass/woodwinds have ~100. Use class weights + macro-F1.
+
+================================================================
+STEP 5-7 — normalize / train stats / featurize
+================================================================
+Per-window RMS normalize to 0.1. Train-ONLY stats (norm_stats.json): SVM 88-dim, log-mel per-bin (128).
+Features (git-ignored, regenerate or download): features/svm, features/cnn (+ CRNN reuses CNN).
+
+================================================================
+PANNs CNN14 RESULTS (test split)  — see panns_*_results.json
+================================================================
+probe (frozen trunk)    : test macro-F1 0.804  acc 0.815
+fine-tune (full)        : test macro-F1 0.984  acc 0.988
+(For reference, Philharmonia 9-class: probe 0.737, fine-tune 0.990.)
+
+CROSS-DATASET (definitive shortcut test; 9 shared classes, 9-way masked):
+  TinySOL model      -> Philharmonia audio : macro-F1 0.43  (from 0.99 within)
+  Philharmonia model -> TinySOL audio      : macro-F1 0.37  (from 0.99 within)
+  Both collapse -> within-dataset accuracy massively overstates real timbre generalization.
+  TinySOL transfers marginally better (0.43 vs 0.37). Caveat: part of the drop is the fixable
+  silence-structure mismatch between the datasets, not only recording-condition confound.
+
+================================================================
+REPRODUCE
+================================================================
+  python -m instrument_robustness.build_tinysol_manifest   # (RISE_DATA_ROOT + RISE_TARGET_LABELS set)
+  python -m instrument_robustness.step0_filter ... step7_featurize
+  python -m instrument_robustness.train_panns --mode probe | finetune
+Large data (audio, features/*.npz, *.pt) is NOT in git — see download_data.py.

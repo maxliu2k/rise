@@ -15,7 +15,35 @@ from pathlib import Path
 
 # config.py is at <repo>/src/instrument_robustness/config.py  ->  parents[2] == <repo>
 _REPO = Path(__file__).resolve().parents[2]
-DATA_ROOT = Path(os.environ.get("RISE_DATA_ROOT", _REPO / "all-samples")).resolve()
+
+# --- Canonical class list: 12 classes, 4 strings / 4 woodwinds / 4 brass. ALPHABETICAL --
+# this ordering fixes the label indices, so reordering silently invalidates every saved checkpoint.
+#
+# This replaces the previous 9-class set. Oboe, double-bass and french-horn were absent from the
+# older local Philharmonia copy; prep_data.py fetches all 12 from the Internet Archive mirror, so
+# they are no longer missing. Any checkpoint trained under the 9-class set is INVALID here --
+# label indices have shifted and must be retrained.
+#
+# BOTH datasets use these same 12 labels, so cross-dataset evaluation is index-compatible with no
+# remapping. TinySOL folder names map onto them in build_tinysol_manifest.py (Violoncello->cello,
+# Contrabass->double-bass, Horn->french-horn, Bass_Tuba->tuba, ...). Note the HYPHENS:
+# "double-bass" / "french-horn" match the Philharmonia archive's filename field.
+CANONICAL_LABELS = [
+    "bassoon", "cello", "clarinet", "double-bass", "flute", "french-horn",
+    "oboe", "trombone", "trumpet", "tuba", "viola", "violin",
+]
+# Kept as names for readability at call sites; both now refer to the SAME 12 labels above.
+PHILHARMONIA_LABELS = CANONICAL_LABELS
+TINYSOL_LABELS = CANONICAL_LABELS
+
+# --- Per-dataset data roots. Each mirrors the DATA_ROOT layout (pipeline/ tracked in git;
+#     work/, features/, checkpoints/ are git-ignored). Overridable via env; never hardcode paths. ---
+PHILHARMONIA_ROOT = Path(os.environ.get("RISE_PHIL_ROOT", _REPO / "all-samples")).resolve()
+TINYSOL_ROOT = Path(os.environ.get("RISE_TINYSOL_ROOT", _REPO / "tinysol")).resolve()
+
+# --- Active data root for the pipeline steps. Set RISE_DATA_ROOT to select the dataset;
+#     defaults to Philharmonia. For TinySOL: RISE_DATA_ROOT=$RISE_TINYSOL_ROOT (see .env.example). ---
+DATA_ROOT = Path(os.environ.get("RISE_DATA_ROOT", PHILHARMONIA_ROOT)).resolve()
 
 ROOT = DATA_ROOT                       # kept for back-compat: step scripts resolve paths against ROOT
 PIPE = DATA_ROOT / "pipeline"          # pipeline ARTIFACTS: manifest_*.csv, splits/windows.csv, stats, report
@@ -25,22 +53,7 @@ TRIMMED = WORK / "trimmed"
 WINDOWS = WORK / "windows"
 FEATURES = DATA_ROOT / "features"
 
-# 12 classes: 4 strings, 4 woodwinds, 4 brass. Kept ALPHABETICAL -- this ordering fixes the label
-# indices, so reordering silently invalidates every saved checkpoint.
-#
-# This replaces the previous 9-class set. Oboe, double-bass and french-horn were absent from the
-# older local Philharmonia copy; prep_data.py fetches all 12 from the Internet Archive mirror, so
-# they are no longer missing. Any checkpoint trained under the 9-class set is INVALID here --
-# label indices have shifted and must be retrained.
-#
-# TinySOL uses these SAME 12 labels (see tinysol/pipeline/pipeline_report.txt), so cross-dataset
-# evaluation is index-compatible without remapping. RISE_TARGET_LABELS (comma-separated) overrides
-# the set, mirroring how RISE_DATA_ROOT overrides the data location -- but an override that
-# reorders these names invalidates existing checkpoints, so keep it alphabetical.
-_DEFAULT_LABELS = [
-    "bassoon", "cello", "clarinet", "double-bass", "flute", "french-horn",
-    "oboe", "trombone", "trumpet", "tuba", "viola", "violin",
-]
+_DEFAULT_LABELS = CANONICAL_LABELS
 TARGET_LABELS = ([s.strip() for s in os.environ["RISE_TARGET_LABELS"].split(",") if s.strip()]
                  if os.environ.get("RISE_TARGET_LABELS") else _DEFAULT_LABELS)
 
