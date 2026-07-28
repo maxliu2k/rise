@@ -178,9 +178,27 @@ SPECAUG_TIME_WIDTH = 12      # max width of each (frames); capped at T//2 for sh
 # Keeping the full range makes the knee visible instead of plotting three identical points.
 # Weighted toward the HIGH-SNR (minimal-noise) end, because that is where instrument ID
 # breaks: the 2-class pilot's knee was 40-50dB — inaudible noise — and 12 confusable classes
-# fail even earlier. Below ~20dB everything has long since collapsed, so the low levels are
-# kept only to confirm the floor, not to resolve it.
-SNR_LEVELS_DB = (60, 50, 45, 40, 35, 30, 20, 10, 0)
+# fail even earlier.
+#
+# Re-gridded 2026-07-28 for MODEL DISCRIMINATION rather than curve description. The measured
+# 3-seed sweep showed three regimes (FINDINGS §5a): 60-30dB the model still uses all 12 classes
+# (top-class share 10.7-21.5% against a uniform 8.3%); at 20dB it has shed 5 classes; by 10dB
+# it predicts one class 46.8% of the time and by 0dB 75.4%. A collapsed model cannot rank
+# models — every architecture scores near chance — so the old grid spent 3 of its 9 points
+# where no comparison is possible and only 4 in the band that resolves anything.
+#
+# 2.5dB steps from 50 to 25 put 11 points across the steep region (balanced accuracy falls
+# 0.90 -> ~0.50 there). 60/55 anchor the near-clean end. 20/10/0 are RETAINED to document the
+# collapse, not to resolve it.
+#
+# CAVEAT on comparing to the previous sweep: noise_eval seeds its per-clip RNG on the condition's
+# INDEX in this tuple (default_rng([NOISE_SEED, cond_idx, clip_idx])), so inserting levels shifts
+# the noise realisation of every point after the first. Numbers at a shared SNR will therefore
+# differ slightly from the old grid — same target SNR, different draw, averaged over 1284 clips x
+# 3 seeds. Statistically comparable, NOT bit-identical. Seeding on the SNR value rather than the
+# position would decouple the grid from the realisation and is worth doing before the six-model
+# comparison, so that grid edits stop perturbing every other point.
+SNR_LEVELS_DB = (60, 55, 50, 47.5, 45, 42.5, 40, 37.5, 35, 32.5, 30, 27.5, 25, 20, 10, 0)
 NOISE_SEED = 1234
 
 # Noise colours as 1/f**exponent power spectra: 0 = white (flat), 1 = pink (-3dB/oct,
