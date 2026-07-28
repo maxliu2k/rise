@@ -14,16 +14,18 @@ import pandas as pd, soundfile as sf
 from instrument_robustness.config import ROOT, MANIFEST_IN, TARGET_LABELS
 warnings.filterwarnings("ignore")
 
-# TinySOL instrument-folder name -> canonical label (matching the Philharmonia build)
+# TinySOL instrument-folder name -> canonical label (config.CANONICAL_LABELS, shared with
+# Philharmonia). Note the HYPHENS in "double-bass"/"french-horn": these match the Philharmonia
+# archive's filename field, so both datasets share one label space and one label->index mapping.
 FOLDER2LABEL = {
-    "Violin": "violin", "Viola": "viola", "Violoncello": "cello", "Contrabass": "double bass",
+    "Violin": "violin", "Viola": "viola", "Violoncello": "cello", "Contrabass": "double-bass",
     "Flute": "flute", "Clarinet_Bb": "clarinet", "Oboe": "oboe", "Bassoon": "bassoon",
-    "Trumpet_C": "trumpet", "Horn": "french horn", "Trombone": "trombone", "Bass_Tuba": "tuba",
+    "Trumpet_C": "trumpet", "Horn": "french-horn", "Trombone": "trombone", "Bass_Tuba": "tuba",
 }
 FAMILY = {
-    "violin": "strings", "viola": "strings", "cello": "strings", "double bass": "strings",
+    "violin": "strings", "viola": "strings", "cello": "strings", "double-bass": "strings",
     "flute": "woodwind", "clarinet": "woodwind", "oboe": "woodwind", "bassoon": "woodwind",
-    "trumpet": "brass", "french horn": "brass", "trombone": "brass", "tuba": "brass",
+    "trumpet": "brass", "french-horn": "brass", "trombone": "brass", "tuba": "brass",
 }
 
 

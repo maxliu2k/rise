@@ -2,19 +2,30 @@ TINYSOL PREPROCESSING PIPELINE — REPORT
 Dataset: TinySOL (data root = <repo>/tinysol, override with RISE_TINYSOL_ROOT)
 Working rate: 22050 Hz mono | isolated sustained notes, lossless WAV.
 
-*** TINYSOL IS 12-CLASS. Philharmonia (all-samples/) is 9-class. Do not mix them. ***
+*** BOTH DATASETS ARE NOW 12-CLASS AND SHARE ONE LABEL SPACE (config.CANONICAL_LABELS). ***
+Philharmonia moved from 9 to 12 classes when prep_data.py began fetching oboe / double-bass /
+french-horn from the Internet Archive mirror. TinySOL already had all 12, so the two datasets are
+now index-compatible and cross-dataset evaluation needs no label remapping.
+
 Run TinySOL with:  RISE_DATA_ROOT=$RISE_TINYSOL_ROOT
-                   RISE_TARGET_LABELS="violin,viola,cello,double bass,flute,clarinet,oboe,bassoon,trumpet,french horn,trombone,tuba"
+(no RISE_TARGET_LABELS needed — the canonical 12 are the default)
 
-12 classes (4 strings / 4 woodwinds / 4 brass):
-  strings   : violin, viola, cello, double bass
+12 classes, ALPHABETICAL (this order fixes the label indices; reordering invalidates checkpoints):
+  bassoon, cello, clarinet, double-bass, flute, french-horn,
+  oboe, trombone, trumpet, tuba, viola, violin
+  strings   : violin, viola, cello, double-bass
   woodwinds : flute, clarinet, oboe, bassoon
-  brass     : trumpet, french horn, trombone, tuba
-(These are config.TINYSOL_LABELS. Philharmonia's 9 = config.PHILHARMONIA_LABELS.)
+  brass     : trumpet, french-horn, trombone, tuba
+Note the HYPHENS in double-bass / french-horn: they match the Philharmonia archive's filename
+field. TinySOL folder names map onto these in build_tinysol_manifest.py.
 
-NOTE ON FILE NAMING: the filtered manifest is named `manifest_9.csv` — this is a legacy filename
-from the shared pipeline code (config.MANIFEST_9), NOT a class count. Its contents are the 12
-TinySOL classes. Same for the '9' in some intermediate paths.
+*** CHECKPOINTS BELOW ARE INVALID — RETRAIN REQUIRED ***
+The PANNs results in this report were produced BEFORE the label set was unified. They used a
+family-grouped 12-label order (violin, viola, cello, double bass, ...); the canonical order is now
+ALPHABETICAL, so every saved label->index mapping has shifted. panns_probe.pt / panns_finetune.pt
+predict under the old indices and must be retrained before their numbers are quoted again. The
+artifacts here (windows.csv, splits.csv, manifest_labeled.csv) have been relabeled to the
+canonical names and remain valid — only the model checkpoints are stale.
 
 ================================================================
 STEP 0-2 — filter / resample / trim
