@@ -15,6 +15,7 @@ dependencies = [
     "scikit-learn",
     "librosa",
     "soundfile",
+    "mutagen",
 ]
 
 [project.optional-dependencies]

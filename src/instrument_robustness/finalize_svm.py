@@ -114,7 +114,7 @@ def main() -> None:
 
     expected_labels = set(range(len(TARGET_LABELS)))
     if set(np.concatenate([y_train, y_val]).tolist()) != expected_labels:
-        raise ValueError("The final development data does not contain all nine classes")
+        raise ValueError("The final development data does not contain all configured classes")
 
     X_final = np.concatenate([X_train, X_val], axis=0)
     y_final = np.concatenate([y_train, y_val], axis=0)
