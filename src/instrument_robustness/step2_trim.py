@@ -10,7 +10,9 @@ import warnings
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np, pandas as pd, librosa, soundfile as sf
 from instrument_robustness.config import (ROOT, TRIMMED, PIPE, SR, TRIM_TOP_DB, MIN_TRIM_S,
-                                          MANIFEST_RESAMPLED, MANIFEST_TRIMMED)
+                                          MANIFEST_RESAMPLED, MANIFEST_TRIMMED,
+                                          assert_artifact_fingerprint,
+                                          write_artifact_fingerprint)
 warnings.filterwarnings("ignore")
 
 def trim_one(rel_resampled):
@@ -29,6 +31,7 @@ def trim_one(rel_resampled):
         return (rel_resampled, None, 0.0, f"error:{type(e).__name__}")
 
 def main():
+    assert_artifact_fingerprint(MANIFEST_RESAMPLED, "step1_resample")
     df = pd.read_csv(MANIFEST_RESAMPLED)
     df = df[df.status == "ok"].copy()
     paths = df["resampled_path"].tolist()
@@ -53,6 +56,7 @@ def main():
     print(df.groupby("label").trimmed_dur_s.median().round(3).to_string())
     out = MANIFEST_TRIMMED
     df.to_csv(out, index=False)
+    write_artifact_fingerprint(out, "step2_trim")
     print(f"\nwrote {out}")
 
 if __name__ == "__main__":

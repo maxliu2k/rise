@@ -21,10 +21,24 @@ are trumpet -- violin nearly doubles (852 -> 1502) while trumpet barely moves. I
 Filtering costs little: `normal`/`arco-normal` is 82% of the archive, not a slice of it.
 """
 import pandas as pd
-from instrument_robustness.config import (ROOT, MANIFEST_IN, MANIFEST_LABELED,
-                                          STRICT_ARTICULATIONS, TARGET_LABELS)
+
+from instrument_robustness.config import (
+    MANIFEST_FINGERPRINT,
+    MANIFEST_IN,
+    MANIFEST_LABELED,
+    ROOT,
+    STRICT_ARTICULATIONS,
+    TARGET_LABELS,
+    assert_artifact_fingerprint,
+    write_artifact_fingerprint,
+)
 
 def main():
+    assert_artifact_fingerprint(
+        MANIFEST_IN,
+        "prep_data",
+        fingerprint_path=MANIFEST_FINGERPRINT,
+    )
     df = pd.read_csv(MANIFEST_IN)
     n0 = len(df)
 
@@ -78,6 +92,7 @@ def main():
     missing = set(TARGET_LABELS) - set(df["label"])
     assert not missing, f"no rows survived for {sorted(missing)} -- check STRICT_ARTICULATIONS"
 
+    write_artifact_fingerprint(MANIFEST_LABELED, "step0_filter")
     print(f"\nwrote {MANIFEST_LABELED}")
 
 if __name__ == "__main__":

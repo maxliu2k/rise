@@ -1,5 +1,4 @@
 """On-the-fly AST dataset and DataLoader for Step-5 normalized windows."""
-import json
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Callable, Optional
@@ -16,8 +15,7 @@ from instrument_robustness.config import (
     TARGET_LABELS,
     WINDOW_S,
     WINDOWS_CSV,
-    WINDOWS_FINGERPRINT,
-    assert_fingerprint,
+    assert_artifact_fingerprint,
 )
 from instrument_robustness.pretrained_extractors import ast_input, build_ast_extractor
 
@@ -42,26 +40,12 @@ def resolve_ast_labels(
 ) -> list[str]:
     """Require the configured label set and verify every class exists in every split."""
     path = Path(manifest_path or WINDOWS_CSV)
+    assert_artifact_fingerprint(path, "step5_normalize")
     rows = pd.read_csv(path, usecols=["label", "split"])
     if rows.empty:
         raise ValueError(f"No windows found in {path}")
     if rows[["label", "split"]].isna().any().any():
         raise ValueError(f"Missing AST label or split value in {path}")
-
-    fingerprint_path = (
-        WINDOWS_FINGERPRINT
-        if path.resolve() == WINDOWS_CSV.resolve()
-        else path.with_name("windows_fingerprint.json")
-    )
-    if not fingerprint_path.exists():
-        assert_fingerprint(None, fingerprint_path)
-    provenance = json.loads(fingerprint_path.read_text())
-    assert_fingerprint(provenance.get("fingerprint"), fingerprint_path)
-    if provenance.get("n_rows") != len(rows):
-        raise ValueError(
-            f"{fingerprint_path} records {provenance.get('n_rows')} windows, "
-            f"but {path} contains {len(rows)}"
-        )
 
     unknown_splits = set(rows["split"]) - SPLITS
     if unknown_splits:

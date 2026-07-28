@@ -10,6 +10,8 @@ RISE_DATA_ROOT environment variable (see .env.example).
 The audio itself is fetched by `python -m instrument_robustness.prep_data`, which is the only
 supported way to obtain the dataset -- it writes `manifest.csv`, the index every step reads.
 """
+import hashlib
+import json
 import os
 from pathlib import Path
 
@@ -116,6 +118,7 @@ MERT_SR = 24000
 MERT_MODEL = "m-a-p/MERT-v1-95M"
 
 MANIFEST_IN = DATA_ROOT / "manifest.csv"          # written by prep_data.py -- the canonical index
+MANIFEST_FINGERPRINT = DATA_ROOT / "manifest_fingerprint.json"
 REPORT = PIPE / "pipeline_report.txt"
 
 # Intermediate manifests. Previously these were named manifest_9*.csv and steps 1-3 hard-coded the
@@ -127,7 +130,6 @@ MANIFEST_RESAMPLED = PIPE / "manifest_resampled.csv"      # step 1 out
 MANIFEST_TRIMMED = PIPE / "manifest_trimmed.csv"          # step 2 out
 SPLITS_CSV = PIPE / "splits.csv"                          # step 3 out
 WINDOWS_CSV = PIPE / "windows.csv"                        # step 4 out
-WINDOWS_FINGERPRINT = PIPE / "windows_fingerprint.json"   # step 4 provenance
 
 
 # --------------------------------------------------------------------------- provenance
@@ -141,15 +143,21 @@ def config_fingerprint():
     trained on different CLASS SETS or window lengths are not.
     """
     return {
+        "fingerprint_version": 2,
+        "archive_base": ARCHIVE_BASE,
         "sr": SR,
+        "waveform_subtype": "PCM_16",
         "window_s": WINDOW_S,
         "hop_s": HOP_S,
         "short_window_policy": "tile",
         "trim_top_db": TRIM_TOP_DB,
-        "min_window_content_s": MIN_WINDOW_CONTENT_S,
+        "min_trim_s": MIN_TRIM_S,
+        "split_group_fields": ["label", "note"],
         "split_policy": "label_note_pitch_group",
         "split_fracs": list(SPLIT_FRACS),
         "split_seed": SEED,
+        "min_window_content_s": MIN_WINDOW_CONTENT_S,
+        "target_rms": TARGET_RMS,
         # Which articulations step0 keeps. Without this field an artifact built before the
         # articulation filter existed (10196 rows, all techniques, 3.10:1 imbalance) produces a
         # fingerprint IDENTICAL to one built after it (8378 rows, one technique per class,
@@ -160,6 +168,9 @@ def config_fingerprint():
         "n_fft": N_FFT,
         "hop_length": HOP,
         "n_frames": N_FRAMES,
+        "n_mfcc": N_MFCC,
+        "svm_standardization": "per_feature_train",
+        "logmel_standardization": "per_mel_bin_train",
         "labels": list(TARGET_LABELS),
     }
 
@@ -186,9 +197,120 @@ def assert_fingerprint(found, source, expected=None):
         raise StaleArtifactError(
             f"{source} predates config fingerprinting, so it cannot be checked against the "
             f"current config. Rebuild it: python -m instrument_robustness.prep_data")
+    if not isinstance(found, dict):
+        raise StaleArtifactError(
+            f"{source} contains an invalid config fingerprint; expected a JSON object."
+        )
     diffs = [f"    {k}: artifact={found.get(k, '<missing>')!r} current={v!r}"
              for k, v in expected.items() if found.get(k) != v]
     if diffs:
         raise StaleArtifactError(
             f"{source} was built under a different config:\n" + "\n".join(diffs) +
             "\n  Rebuild the pipeline, or check out the config that produced it.")
+
+
+def config_fingerprint_json(fingerprint=None):
+    """Return a deterministic JSON representation suitable for NPZ metadata."""
+    value = config_fingerprint() if fingerprint is None else fingerprint
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def assert_serialized_fingerprint(value, source):
+    """Decode fingerprint JSON from an NPZ scalar and verify it against current config."""
+    if value is None:
+        found = None
+    else:
+        if hasattr(value, "item"):
+            value = value.item()
+        if isinstance(value, bytes):
+            value = value.decode("utf-8")
+        try:
+            found = json.loads(value) if isinstance(value, str) else value
+        except (TypeError, json.JSONDecodeError) as error:
+            raise StaleArtifactError(
+                f"{source} contains an unreadable config fingerprint"
+            ) from error
+    assert_fingerprint(found, source)
+    return found
+
+
+def artifact_fingerprint_path(artifact_path):
+    """Return the default sidecar path for a generated CSV artifact."""
+    path = Path(artifact_path)
+    return path.with_name(f"{path.name}.fingerprint.json")
+
+
+def _sha256(path):
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def write_artifact_fingerprint(
+    artifact_path,
+    stage,
+    *,
+    fingerprint_path=None,
+    metadata=None,
+):
+    """Write provenance for a generated artifact without inflating its tabular schema."""
+    sidecar = (
+        Path(fingerprint_path)
+        if fingerprint_path is not None
+        else artifact_fingerprint_path(artifact_path)
+    )
+    payload = {
+        "artifact": str(Path(artifact_path).name),
+        "sha256": _sha256(artifact_path),
+        "stage": stage,
+        "fingerprint": config_fingerprint(),
+    }
+    if metadata:
+        payload["metadata"] = metadata
+    sidecar.parent.mkdir(parents=True, exist_ok=True)
+    sidecar.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return sidecar
+
+
+def assert_artifact_fingerprint(
+    artifact_path,
+    expected_stage,
+    *,
+    fingerprint_path=None,
+):
+    """Verify both the config and producing stage recorded beside an artifact."""
+    sidecar = (
+        Path(fingerprint_path)
+        if fingerprint_path is not None
+        else artifact_fingerprint_path(artifact_path)
+    )
+    if not sidecar.exists():
+        raise StaleArtifactError(
+            f"{artifact_path} has no provenance sidecar at {sidecar}. Rebuild the pipeline."
+        )
+    try:
+        payload = json.loads(sidecar.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise StaleArtifactError(
+            f"{artifact_path} has an unreadable provenance sidecar at {sidecar}"
+        ) from error
+    if not isinstance(payload, dict):
+        raise StaleArtifactError(
+            f"{artifact_path} has an invalid provenance sidecar at {sidecar}"
+        )
+    recorded_hash = payload.get("sha256")
+    current_hash = _sha256(artifact_path)
+    if recorded_hash != current_hash:
+        raise StaleArtifactError(
+            f"{artifact_path} does not match its provenance sidecar at {sidecar}. "
+            "Rebuild the pipeline stage."
+        )
+    assert_fingerprint(payload.get("fingerprint"), str(artifact_path))
+    if payload.get("stage") != expected_stage:
+        raise StaleArtifactError(
+            f"{artifact_path} was produced by stage {payload.get('stage')!r}; "
+            f"expected {expected_stage!r}. Run the missing pipeline step."
+        )
+    return payload["fingerprint"]

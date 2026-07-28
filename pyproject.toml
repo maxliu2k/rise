@@ -19,6 +19,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+mert = [
+    "torch",
+    "transformers",
+]
 ast = [
     "torch",
     "transformers",

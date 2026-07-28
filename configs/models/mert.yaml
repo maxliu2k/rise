@@ -1,0 +1,28 @@
+model:
+  backbone: m-a-p/MERT-v1-95M
+  checkpoint_license: CC-BY-NC-4.0
+  sample_rate: 24000
+  transformer_layers: 12
+  returned_hidden_states: 13
+  hidden_size: 768
+  backbone_frozen: true
+  pooling: mean_over_time_per_hidden_layer
+  probe: learned_layer_weighted_sum_then_linear_9_way_head
+
+selection:
+  metric: validation_macro_f1
+  learning_rates: [0.0001, 0.0005, 0.001, 0.005, 0.01]
+  batch_size: 64
+  max_epochs: 100
+  early_stopping_patience: 10
+  seed: 0
+
+data:
+  source: all-samples/pipeline/windows.csv
+  extraction_splits: [train, val]
+  use_step6_statistics: false
+  test_policy: sealed_until_probe_selection_is_complete
+
+outputs:
+  embeddings: all-samples/features/mert/{train,val}.npz
+  artifacts: artifacts/mert/

@@ -11,7 +11,13 @@ import torch
 import torch.nn.functional as F
 
 from instrument_robustness.ast_data import make_ast_dataloader, resolve_ast_labels
-from instrument_robustness.config import DATA_ROOT, INSTRUMENT_FAMILY, WINDOWS_CSV
+from instrument_robustness.config import (
+    DATA_ROOT,
+    INSTRUMENT_FAMILY,
+    WINDOWS_CSV,
+    assert_fingerprint,
+    config_fingerprint,
+)
 from instrument_robustness.pretrained_extractors import build_ast_extractor, build_ast_model
 
 
@@ -228,6 +234,7 @@ def train(
     test_loader = make_ast_dataloader("test", **loader_args, shuffle=False)
 
     model = build_ast_model(labels).to(target_device)
+    model.config.instrument_robustness_fingerprint = config_fingerprint()
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -292,6 +299,10 @@ def train(
     from transformers import ASTForAudioClassification
 
     best_model = ASTForAudioClassification.from_pretrained(output_dir).to(target_device)
+    assert_fingerprint(
+        getattr(best_model.config, "instrument_robustness_fingerprint", None),
+        str(output_dir),
+    )
     test_metrics, true_labels, predicted_labels = _run_epoch(
         best_model,
         test_loader,
@@ -319,6 +330,7 @@ def train(
             "val": val_loader.dataset.class_counts,
             "test": test_loader.dataset.class_counts,
         },
+        "config_fingerprint": config_fingerprint(),
         "history": history,
         "test": test_metrics,
         "per_instrument": reports["per_instrument"],
