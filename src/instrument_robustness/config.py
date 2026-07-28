@@ -1,4 +1,4 @@
-"""Shared config for the instrument-robustness pipeline (9-class Philharmonia).
+"""Shared config for the instrument-robustness pipeline.
 
 Code now lives in the `instrument_robustness` package; DATA lives separately under the data root
 (default: <repo>/all-samples). The two are decoupled so the package can be installed/imported from
@@ -20,12 +20,66 @@ TRIMMED = WORK / "trimmed"
 WINDOWS = WORK / "windows"
 FEATURES = DATA_ROOT / "features"
 
-# Oboe is absent from this Philharmonia copy; bassoon substitutes as the 9th class.
-TARGET_LABELS = [
+PHILHARMONIA_LABELS = [
     "violin", "viola", "cello",          # strings
     "flute", "clarinet", "bassoon",      # woodwinds
     "trumpet", "tuba", "trombone",       # brass
 ]
+
+TINYSOL_LABELS = [
+    "violin", "viola", "cello", "double bass",
+    "flute", "clarinet", "oboe", "bassoon",
+    "trumpet", "french horn", "trombone", "tuba",
+]
+
+INSTRUMENT_LABEL_ALIASES = {
+    "double-bass": "double bass",
+    "french-horn": "french horn",
+}
+
+INSTRUMENT_FAMILY = {
+    "violin": "strings",
+    "viola": "strings",
+    "cello": "strings",
+    "double bass": "strings",
+    "flute": "woodwinds",
+    "clarinet": "woodwinds",
+    "oboe": "woodwinds",
+    "bassoon": "woodwinds",
+    "trumpet": "brass",
+    "french horn": "brass",
+    "trombone": "brass",
+    "tuba": "brass",
+}
+
+# Keep the original nine AST label IDs stable and append newly supported classes.
+AST_LABEL_ORDER = PHILHARMONIA_LABELS + [
+    label for label in TINYSOL_LABELS if label not in PHILHARMONIA_LABELS
+]
+
+
+def normalize_instrument_label(label: str) -> str:
+    normalized = str(label).strip().lower()
+    return INSTRUMENT_LABEL_ALIASES.get(normalized, normalized)
+
+
+def _target_labels_from_environment():
+    value = os.environ.get("RISE_TARGET_LABELS")
+    if not value:
+        return list(PHILHARMONIA_LABELS)
+
+    labels = [label.strip().lower() for label in value.split(",") if label.strip()]
+    if not labels:
+        raise ValueError("RISE_TARGET_LABELS must contain at least one label")
+    if len(labels) != len(set(labels)):
+        raise ValueError("RISE_TARGET_LABELS contains duplicate labels")
+    return labels
+
+
+# Preprocessing defaults to the original Philharmonia nine classes. Set the comma-separated
+# RISE_TARGET_LABELS when rebuilding another dataset. AST training additionally discovers and
+# validates its classes directly from pipeline/windows.csv.
+TARGET_LABELS = _target_labels_from_environment()
 
 SR = 22050            # common resample rate; Nyquist 11025 Hz sits below the lowest MP3 brick wall (~16 kHz)
 TRIM_TOP_DB = 30      # silence-trim threshold
