@@ -37,6 +37,21 @@ TARGET_LABELS = [
     "oboe", "trombone", "trumpet", "tuba", "viola", "violin",
 ]
 
+INSTRUMENT_FAMILY = {
+    "bassoon": "woodwinds",
+    "cello": "strings",
+    "clarinet": "woodwinds",
+    "double-bass": "strings",
+    "flute": "woodwinds",
+    "french-horn": "brass",
+    "oboe": "woodwinds",
+    "trombone": "brass",
+    "trumpet": "brass",
+    "tuba": "brass",
+    "viola": "strings",
+    "violin": "strings",
+}
+
 # --- Acquisition (prep_data.py) ---
 # The official philharmonia.co.uk/assets/... URLs predate their site redesign and no longer
 # resolve. The Internet Archive mirror is the working source. CC-BY-SA 4.0.
@@ -112,6 +127,7 @@ MANIFEST_RESAMPLED = PIPE / "manifest_resampled.csv"      # step 1 out
 MANIFEST_TRIMMED = PIPE / "manifest_trimmed.csv"          # step 2 out
 SPLITS_CSV = PIPE / "splits.csv"                          # step 3 out
 WINDOWS_CSV = PIPE / "windows.csv"                        # step 4 out
+WINDOWS_FINGERPRINT = PIPE / "windows_fingerprint.json"   # step 4 provenance
 
 
 # --------------------------------------------------------------------------- provenance
@@ -128,8 +144,12 @@ def config_fingerprint():
         "sr": SR,
         "window_s": WINDOW_S,
         "hop_s": HOP_S,
+        "short_window_policy": "tile",
         "trim_top_db": TRIM_TOP_DB,
         "min_window_content_s": MIN_WINDOW_CONTENT_S,
+        "split_policy": "label_note_pitch_group",
+        "split_fracs": list(SPLIT_FRACS),
+        "split_seed": SEED,
         "n_mels": N_MELS,
         "n_fft": N_FFT,
         "hop_length": HOP,
