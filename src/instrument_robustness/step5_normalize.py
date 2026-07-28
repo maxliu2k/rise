@@ -40,6 +40,7 @@ def main():
                 print(f"  {done}/{len(paths)}")
     win["pre_norm_rms"] = win["window_path"].map(lambda p: round(res[p][0], 5))
     win["post_norm_rms"] = win["window_path"].map(lambda p: round(res[p][1], 5))
+    PIPE.mkdir(parents=True, exist_ok=True)
     win.to_csv(PIPE / "windows.csv", index=False)
     peaked = (np.abs(win["post_norm_rms"] - TARGET_RMS) > 1e-3).sum()
     print(f"\ndone. windows below target due to peak-guard: {peaked} "

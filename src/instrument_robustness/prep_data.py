@@ -36,9 +36,9 @@ from collections import Counter
 
 from mutagen.mp3 import MP3
 
-from instrument_robustness.config import (ARCHIVE_BASE, DATA_RAW, DATA_ROOT, MANIFEST_IN,
-                                          STRICT_ARTICULATIONS, TARGET_LABELS, ZIP_NAME,
-                                          config_fingerprint)
+from instrument_robustness.config import (ARCHIVE_BASE, DATA_RAW, DATA_ROOT, FEATURES, MANIFEST_IN,
+                                          PIPE, STRICT_ARTICULATIONS, TARGET_LABELS, WORK,
+                                          ZIP_NAME, config_fingerprint)
 
 # Philharmonia uses 's' for sharps (As4 = A#4). No flats appear in this set.
 SEMITONES = {"C": 0, "Cs": 1, "D": 2, "Ds": 3, "E": 4, "F": 5,
@@ -166,10 +166,23 @@ def build_rows():
     return rows, problems
 
 
+def ensure_skeleton():
+    """Create the directory layout every later step writes into.
+
+    Steps 0-6 write into PIPE and WORK without creating them. That went unnoticed while the only
+    data root in use was the committed all-samples/ tree, which already had pipeline/ present --
+    against a FRESH root (which this script now produces) step0 died on a missing directory. The
+    entry point that creates the root is the right place to establish its shape.
+    """
+    for d in (PIPE, WORK, FEATURES, DATA_RAW):
+        d.mkdir(parents=True, exist_ok=True)
+
+
 def main():
     print(f"data root: {DATA_ROOT}")
     print(f"{len(TARGET_LABELS)} classes: {', '.join(TARGET_LABELS)}\n")
 
+    ensure_skeleton()
     print("acquiring archives ...")
     download_and_extract()
 
@@ -203,6 +216,20 @@ def main():
             print(f"  {reason:24s} {n}")
     else:
         print("excluded: none")
+
+    # A handful of bad files is a known property of the archive: viola_D6_05_piano_arco-normal.mp3
+    # is corrupt upstream, and all-samples/manifest.py independently drops the same one. Do NOT
+    # delete it -- it would just be re-downloaded, and the count is the record that it exists.
+    # But a LARGE exclusion rate is a broken download or a missing decoder wearing the same
+    # costume, and that must not pass as a normal run.
+    excluded_frac = sum(problems.values()) / max(total_seen, 1)
+    if excluded_frac > 0.01:
+        raise SystemExit(
+            f"ERROR: {sum(problems.values())} of {total_seen} files excluded "
+            f"({excluded_frac:.1%}) -- above the 1% tolerance for known-bad archive files.\n"
+            f"  {dict(problems)}\n"
+            f"  This looks like a truncated download or a decoder problem, not archive rot. "
+            f"Delete {DATA_RAW} and re-run rather than accepting a quietly smaller dataset.")
 
     ratio = max(per_class.values()) / max(min(per_class.values()), 1)
     print(f"\nclass imbalance (all articulations): {ratio:.2f}:1")

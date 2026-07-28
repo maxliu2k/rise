@@ -25,6 +25,7 @@ def main():
     df = df[sizes > 0].copy()
 
     df = df.sort_values("path").reset_index(drop=True)
+    MANIFEST_LABELED.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(MANIFEST_LABELED, index=False)
 
     print(f"\nrows in manifest.csv        : {n0}")

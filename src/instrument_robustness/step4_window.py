@@ -85,6 +85,7 @@ def main():
     win = pd.DataFrame(rows, columns=["window_path", "label", "split",
                                       "source_path", "start_time", "content_s"])
     win = win.sort_values(["source_path", "start_time"]).reset_index(drop=True)
+    PIPE.mkdir(parents=True, exist_ok=True)
     win.to_csv(PIPE / "windows.csv", index=False)
 
     print(f"\ntotal windows: {len(win)}  (from {len(args)} sources)")
