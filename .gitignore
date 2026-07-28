@@ -229,10 +229,13 @@ all-samples/*
 # Keep large / binary / generated data ignored everywhere
 work/
 features/
+checkpoints/
 *.npz
 *.mp3
 *.wav
 *.zip
+*.pt
+*.pth
 .venv/
 *.egg-info/
 .DS_Store

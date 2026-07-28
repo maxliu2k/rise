@@ -43,7 +43,11 @@ def sanity_check(df):
     rows = []
     for inst in TARGET_LABELS:
         sub = df[(df.label == inst) & (df.status == "ok")]
-        bright = sub[sub.dynamic.astype(str).str.contains("forte|fortissimo", case=False, na=False)]
+        # prefer loud/bright notes to expose any brick wall; fall back to all if no `dynamic` column
+        if "dynamic" in sub.columns:
+            bright = sub[sub.dynamic.astype(str).str.contains("forte|fortissimo", case=False, na=False)]
+        else:
+            bright = sub.iloc[0:0]
         pool = (bright if len(bright) >= 30 else sub)["resampled_path"].tolist()
         sample = rng.choice(pool, size=min(40, len(pool)), replace=False)
         ceils = np.array([c for p in sample if (c := brickwall_hz(str(ROOT / p), SR)) is not None])

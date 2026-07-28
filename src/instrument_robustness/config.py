@@ -10,27 +10,33 @@ from pathlib import Path
 
 # config.py is at <repo>/src/instrument_robustness/config.py  ->  parents[2] == <repo>
 _REPO = Path(__file__).resolve().parents[2]
-DATA_ROOT = Path(os.environ.get("RISE_DATA_ROOT", _REPO / "all-samples")).resolve()
 
-ROOT = DATA_ROOT                       # kept for back-compat: step scripts resolve paths against ROOT
-PIPE = DATA_ROOT / "pipeline"          # pipeline ARTIFACTS: manifest_9*.csv, splits/windows.csv, stats, report
-WORK = DATA_ROOT / "work"
-RESAMPLED = WORK / "resampled"
-TRIMMED = WORK / "trimmed"
-WINDOWS = WORK / "windows"
-FEATURES = DATA_ROOT / "features"
-
+# Keep per-dataset class lists explicit so Philharmonia-9 and TinySOL-12 cannot be mixed silently.
 PHILHARMONIA_LABELS = [
-    "violin", "viola", "cello",          # strings
-    "flute", "clarinet", "bassoon",      # woodwinds
-    "trumpet", "tuba", "trombone",       # brass
+    "violin", "viola", "cello",
+    "flute", "clarinet", "bassoon",
+    "trumpet", "tuba", "trombone",
 ]
-
 TINYSOL_LABELS = [
     "violin", "viola", "cello", "double bass",
     "flute", "clarinet", "oboe", "bassoon",
     "trumpet", "french horn", "trombone", "tuba",
 ]
+
+# Each dataset root mirrors the same pipeline/work/features layout.
+PHILHARMONIA_ROOT = Path(os.environ.get("RISE_PHIL_ROOT", _REPO / "all-samples")).resolve()
+TINYSOL_ROOT = Path(os.environ.get("RISE_TINYSOL_ROOT", _REPO / "tinysol")).resolve()
+
+# RISE_DATA_ROOT selects the active dataset for preprocessing and training.
+DATA_ROOT = Path(os.environ.get("RISE_DATA_ROOT", PHILHARMONIA_ROOT)).resolve()
+
+ROOT = DATA_ROOT                       # kept for back-compat: step scripts resolve paths against ROOT
+PIPE = DATA_ROOT / "pipeline"          # pipeline ARTIFACTS: manifest_*.csv, splits/windows.csv, stats, report
+WORK = DATA_ROOT / "work"
+RESAMPLED = WORK / "resampled"
+TRIMMED = WORK / "trimmed"
+WINDOWS = WORK / "windows"
+FEATURES = DATA_ROOT / "features"
 
 INSTRUMENT_LABEL_ALIASES = {
     "double-bass": "double bass",
