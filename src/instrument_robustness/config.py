@@ -10,24 +10,39 @@ from pathlib import Path
 
 # config.py is at <repo>/src/instrument_robustness/config.py  ->  parents[2] == <repo>
 _REPO = Path(__file__).resolve().parents[2]
-DATA_ROOT = Path(os.environ.get("RISE_DATA_ROOT", _REPO / "all-samples")).resolve()
+
+# --- Per-dataset class lists (EXPLICIT so Philharmonia-9 and TinySOL-12 never get mixed up) ---
+PHILHARMONIA_LABELS = [                   # 9-class (oboe absent in this Philharmonia copy -> bassoon)
+    "violin", "viola", "cello",           # strings
+    "flute", "clarinet", "bassoon",       # woodwinds
+    "trumpet", "tuba", "trombone",        # brass
+]
+TINYSOL_LABELS = [                        # 12-class (adds double bass, oboe, french horn)
+    "violin", "viola", "cello", "double bass",     # strings
+    "flute", "clarinet", "oboe", "bassoon",        # woodwinds
+    "trumpet", "french horn", "trombone", "tuba",  # brass
+]
+
+# --- Per-dataset data roots. Each mirrors the DATA_ROOT layout (pipeline/ tracked in git;
+#     work/, features/, checkpoints/ are git-ignored). Overridable via env; never hardcode paths. ---
+PHILHARMONIA_ROOT = Path(os.environ.get("RISE_PHIL_ROOT", _REPO / "all-samples")).resolve()
+TINYSOL_ROOT = Path(os.environ.get("RISE_TINYSOL_ROOT", _REPO / "tinysol")).resolve()
+
+# --- Active data root for the pipeline steps. Set RISE_DATA_ROOT to select the dataset;
+#     defaults to Philharmonia. For TinySOL: RISE_DATA_ROOT=$RISE_TINYSOL_ROOT (see .env.example). ---
+DATA_ROOT = Path(os.environ.get("RISE_DATA_ROOT", PHILHARMONIA_ROOT)).resolve()
 
 ROOT = DATA_ROOT                       # kept for back-compat: step scripts resolve paths against ROOT
-PIPE = DATA_ROOT / "pipeline"          # pipeline ARTIFACTS: manifest_9*.csv, splits/windows.csv, stats, report
+PIPE = DATA_ROOT / "pipeline"          # pipeline ARTIFACTS: manifest_*.csv, splits/windows.csv, stats, report
 WORK = DATA_ROOT / "work"
 RESAMPLED = WORK / "resampled"
 TRIMMED = WORK / "trimmed"
 WINDOWS = WORK / "windows"
 FEATURES = DATA_ROOT / "features"
 
-# Class set. Default = the 9-class Philharmonia build (oboe absent -> bassoon substitutes).
-# Override for other datasets/scopes (e.g. 12-class TinySOL) via RISE_TARGET_LABELS
-# (comma-separated), the same way RISE_DATA_ROOT overrides the data location.
-_DEFAULT_LABELS = [
-    "violin", "viola", "cello",          # strings
-    "flute", "clarinet", "bassoon",      # woodwinds
-    "trumpet", "tuba", "trombone",       # brass
-]
+# Active class set for the pipeline steps. Default = Philharmonia 9; override with RISE_TARGET_LABELS
+# (comma-separated), e.g. the 12 TINYSOL_LABELS when running TinySOL.
+_DEFAULT_LABELS = PHILHARMONIA_LABELS
 TARGET_LABELS = ([s.strip() for s in os.environ["RISE_TARGET_LABELS"].split(",") if s.strip()]
                  if os.environ.get("RISE_TARGET_LABELS") else _DEFAULT_LABELS)
 
