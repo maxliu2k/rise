@@ -34,7 +34,7 @@ test -f "$RISE_DATA_ROOT/pipeline/windows.csv"
 test -d "$RISE_DATA_ROOT/work/windows"
 
 python -c "import torch; print('PyTorch:', torch.__version__); print('GPU:', torch.cuda.get_device_name()); assert torch.cuda.is_available()"
-python -c "from instrument_robustness.ast_data import resolve_ast_labels; print('AST labels:', resolve_ast_labels())"
+python -c "from instrument_robustness.ast_data import resolve_ast_labels, validate_ast_window_files; print('AST labels:', resolve_ast_labels()); print('AST windows:', validate_ast_window_files())"
 
 python -m instrument_robustness.train_ast \
     --epochs "$AST_EPOCHS" \

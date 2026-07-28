@@ -74,6 +74,29 @@ def resolve_ast_labels(
     return label_names
 
 
+def validate_ast_window_files(
+    manifest_path: Optional[Path] = None,
+    root: Optional[Path] = None,
+) -> int:
+    """Fail before model download if a manifest references unavailable window audio."""
+    path = Path(manifest_path or WINDOWS_CSV)
+    data_root = Path(root or ROOT)
+    rows = pd.read_csv(path, usecols=["window_path"])
+    missing = [
+        data_root / window_path
+        for window_path in rows["window_path"]
+        if not (data_root / window_path).is_file()
+    ]
+    if missing:
+        preview = "\n".join(f"  {missing_path}" for missing_path in missing[:10])
+        suffix = f"\n  ... and {len(missing) - 10} more" if len(missing) > 10 else ""
+        raise FileNotFoundError(
+            f"{len(missing)} AST window file(s) listed in {path} are missing:\n"
+            f"{preview}{suffix}"
+        )
+    return len(rows)
+
+
 def _load_window(path) -> np.ndarray:
     waveform, sample_rate = sf.read(path, dtype="float32", always_2d=False)
     if sample_rate != SR:
@@ -84,9 +107,12 @@ def _load_window(path) -> np.ndarray:
         raise ValueError(f"Expected mono audio at {path}, got shape {waveform.shape}")
 
     target_samples = int(round(WINDOW_S * SR))
-    if waveform.size < target_samples:
-        waveform = np.pad(waveform, (0, target_samples - waveform.size))
-    return waveform[:target_samples]
+    if waveform.size != target_samples:
+        raise ValueError(
+            f"Expected exactly {target_samples} samples at {path}, got {waveform.size}. "
+            "Rebuild Step 4 so short windows are tiled rather than padded."
+        )
+    return waveform
 
 
 class ASTWindowDataset(Dataset):

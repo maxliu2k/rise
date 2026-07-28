@@ -195,7 +195,7 @@ def main():
         w.writeheader()
         w.writerows(rows)
 
-    write_artifact_fingerprint(
+    fingerprint_path = write_artifact_fingerprint(
         MANIFEST_IN,
         "prep_data",
         fingerprint_path=MANIFEST_FINGERPRINT,
@@ -236,7 +236,7 @@ def main():
     ratio = max(per_class.values()) / max(min(per_class.values()), 1)
     print(f"\nclass imbalance (all articulations): {ratio:.2f}:1")
     print(f"\nwrote {MANIFEST_IN}")
-    print(f"wrote {fp_path}")
+    print(f"wrote {fingerprint_path}")
     print("\nnext: python -m instrument_robustness.step0_filter")
 
 

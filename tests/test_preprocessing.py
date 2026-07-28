@@ -3,6 +3,7 @@ from __future__ import annotations
 import random
 import tempfile
 import unittest
+from collections import Counter
 from pathlib import Path
 from unittest.mock import patch
 
@@ -10,9 +11,11 @@ import numpy as np
 import pandas as pd
 import soundfile as sf
 
+from instrument_robustness import prep_data
 from instrument_robustness.config import (
     SR,
     StaleArtifactError,
+    TARGET_LABELS,
     assert_artifact_fingerprint,
     config_fingerprint,
     write_artifact_fingerprint,
@@ -150,6 +153,53 @@ class FingerprintRegressionTests(unittest.TestCase):
 
             with self.assertRaises(StaleArtifactError):
                 assert_artifact_fingerprint(artifact, "step3_split")
+
+
+class PrepDataRegressionTests(unittest.TestCase):
+    def test_main_writes_manifest_and_its_fingerprint(self) -> None:
+        rows = [
+            {
+                "path": f"{label}/A4/{label}_A4_1_forte_normal.mp3",
+                "label": label,
+                "family": prep_data.FAMILY[label],
+                "duration_s": 1.0,
+                "sample_rate": SR,
+                "note": "A4",
+                "midi": 69,
+                "dynamic": "forte",
+                "technique": "normal",
+                "is_plain": 1,
+                "is_phrase": 0,
+            }
+            for label in TARGET_LABELS
+        ]
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir)
+            manifest_path = root / "manifest.csv"
+            fingerprint_path = root / "manifest_fingerprint.json"
+            with (
+                patch.multiple(
+                    prep_data,
+                    DATA_ROOT=root,
+                    PIPE=root / "pipeline",
+                    WORK=root / "work",
+                    FEATURES=root / "features",
+                    DATA_RAW=root / "raw",
+                    MANIFEST_IN=manifest_path,
+                    MANIFEST_FINGERPRINT=fingerprint_path,
+                ),
+                patch.object(prep_data, "download_and_extract"),
+                patch.object(prep_data, "build_rows", return_value=(rows, Counter())),
+            ):
+                prep_data.main()
+
+            self.assertTrue(manifest_path.is_file())
+            self.assertTrue(fingerprint_path.is_file())
+            assert_artifact_fingerprint(
+                manifest_path,
+                "prep_data",
+                fingerprint_path=fingerprint_path,
+            )
 
 
 if __name__ == "__main__":
