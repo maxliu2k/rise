@@ -64,12 +64,17 @@ def ast_input(y, extractor):
         raise ValueError(f"AST expects a mono waveform, got shape {y16.shape}")
     return extractor(y16, sampling_rate=AST_SR, return_tensors="pt")["input_values"]
 
-def build_ast_model():
+def build_ast_model(label_names=None):
     from transformers import ASTConfig, ASTForAudioClassification
-    label2id = {label: index for index, label in enumerate(TARGET_LABELS)}
+    labels = list(TARGET_LABELS if label_names is None else label_names)
+    if len(labels) < 2:
+        raise ValueError("AST classification requires at least two labels")
+    if len(labels) != len(set(labels)):
+        raise ValueError(f"AST labels must be unique, got {labels}")
+    label2id = {label: index for index, label in enumerate(labels)}
     id2label = {index: label for label, index in label2id.items()}
     config = ASTConfig.from_pretrained(AST_MODEL)
-    config.num_labels = N_CLASSES
+    config.num_labels = len(labels)
     config.label2id = label2id
     config.id2label = id2label
     return ASTForAudioClassification.from_pretrained(
