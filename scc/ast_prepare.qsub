@@ -6,12 +6,13 @@
 #$ -l mem_per_core=8G
 #$ -l h_rt=8:00:00
 
-set -euo pipefail
+set -eo pipefail
 cd "$SGE_O_WORKDIR"
 
 module load miniconda
 module load academic-ml/spring-2026
 conda activate spring-2026-pyt
+set -u
 
 export PYTHONPATH="$PWD/src${PYTHONPATH:+:$PYTHONPATH}"
 export RISE_DATA_ROOT="${RISE_DATA_ROOT:?Submit with qsub -v RISE_DATA_ROOT=/projectnb/... scc/ast_prepare.qsub}"

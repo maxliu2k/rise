@@ -9,12 +9,13 @@
 #$ -l gpu_memory=16G
 #$ -l h_rt=12:00:00
 
-set -euo pipefail
+set -eo pipefail
 cd "$SGE_O_WORKDIR"
 
 module load miniconda
 module load academic-ml/spring-2026
 conda activate spring-2026-pyt
+set -u
 
 export PYTHONPATH="$PWD/src${PYTHONPATH:+:$PYTHONPATH}"
 export HF_HOME="$PWD/.cache/huggingface"
