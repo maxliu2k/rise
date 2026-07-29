@@ -68,20 +68,32 @@ carry no fingerprint, and cover only 9 of the 12 classes.
 
 ## Run the pipeline
 
+One command. Nine stages, ~8 minutes warm (~13 with the first download):
+
 ```bash
-python -m instrument_robustness.prep_data         # fetch data + write manifest.csv  (START HERE)
-python -m instrument_robustness.step0_filter      # keep 12 classes and one articulation per class
+python -m instrument_robustness.run_pipeline
+```
+
+It sets the thread limits itself, stops at the first failure, prints per-stage timings, and tells
+you exactly how to resume. `--from <stage>` continues without re-downloading, `--list` shows the
+order, `--dry-run` shows what would run.
+
+The stages remain individually runnable for debugging, and must be run in this order:
+
+```bash
+python -m instrument_robustness.prep_data         # fetch audio + manifest.csv  (START HERE)
+python -m instrument_robustness.step0_filter      # 12 classes, one articulation per class
 python -m instrument_robustness.step1_resample    # 22050 Hz mono (kills bitrate confound)
 python -m instrument_robustness.step2_trim        # silence trim
 python -m instrument_robustness.step3_split       # split BY PITCH GROUP (70/15/15)
-python -m instrument_robustness.step4_window      # 3.0 s windows, short notes TILED not padded
+python -m instrument_robustness.step4_window      # 3.0 s window, short notes TILED not padded
 python -m instrument_robustness.step5_normalize   # per-window RMS normalize
 python -m instrument_robustness.step6_stats       # TRAIN-ONLY normalization stats
 python -m instrument_robustness.step7_featurize   # SVM / CNN / CRNN features
 ```
 
-> Set `OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMBA_NUM_THREADS=1` for the
-> parallel librosa steps (6–7) to avoid thread oversubscription.
+The order is enforced, not merely documented: every stage asserts its predecessor's fingerprint
+sidecar, so running them out of order fails loudly instead of producing a plausible wrong answer.
 
 See `all-samples/pipeline/pipeline_report.txt` for the full run report (shapes, per-class per-split
 counts, confound checks, invariants).

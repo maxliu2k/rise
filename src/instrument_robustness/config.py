@@ -99,6 +99,29 @@ HOP_S = 3.0           # NO overlap (hop == window). Chosen to avoid amplifying p
 MIN_WINDOW_CONTENT_S = 0.5   # drop a trailing window with less real content than this, UNLESS it is a
                              # source's only window (every source must contribute >= 1 window)
 
+# How many windows a single source file may contribute. 1 = crop to the first WINDOW_S seconds.
+#
+# Set to 1 for three reasons, in order of importance:
+#
+#  1. ONLY THE FIRST WINDOW STARTS AT A NOTE ONSET. Step 2 trims to the attack, so window 0 begins
+#     at the note's start. Window 1 begins at exactly WINDOW_S, wherever that falls -- mid-sustain
+#     for a held note, mid-note for a phrase. Attack transient is a dominant instrument cue, so
+#     later windows are a structurally different kind of example: same label, no attack.
+#  2. THE MIX WAS CLASS-CORRELATED. Windowing whole files produced +127 windows for clarinet and
+#     +119 for flute against +10 for cello and +13 for violin -- winds and brass have the longer
+#     recordings, so they supplied nearly all the attack-less examples.
+#  3. IT OVER-WEIGHTED A FEW RECORDINGS. 2.6% of files produced 10.6% of windows, one file
+#     yielding 26. Those 26 are one performance counted 26 times: in training that recording gets
+#     26x the weight of a single note, and in test it inflates the effective sample size, since
+#     per-window scoring treats correlated windows as independent.
+#
+# Cost of cropping, stated honestly: 749 windows (8.9%) discarded, and class imbalance goes from
+# 1.73:1 back to 1.97:1 -- the extra windows happened to favour the smaller classes.
+#
+# Raise this to keep more of each recording; the trailing-window rule above still applies, so a
+# 3.01 s file yields one window rather than a 0.01 s fragment either way.
+MAX_WINDOWS_PER_SOURCE = 1
+
 # --- Step 5: loudness normalize ---
 TARGET_RMS = 0.1      # per-window RMS target; peak-guarded to avoid clipping
 
@@ -166,6 +189,10 @@ def config_fingerprint():
         "split_fracs": list(SPLIT_FRACS),
         "split_seed": SEED,
         "min_window_content_s": MIN_WINDOW_CONTENT_S,
+        # Reshapes the dataset (9116 windows unlimited vs 8378 cropped), so it MUST be here.
+        # Without it, a pre-crop feature array and a post-crop one produce identical fingerprints
+        # and the stale one loads clean -- the same hole the articulation policy had.
+        "max_windows_per_source": MAX_WINDOWS_PER_SOURCE,
         "target_rms": TARGET_RMS,
         # Which articulations step0 keeps. Without this field an artifact built before the
         # articulation filter existed (10196 rows, all techniques, 3.10:1 imbalance) produces a

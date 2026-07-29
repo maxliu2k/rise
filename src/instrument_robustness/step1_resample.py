@@ -33,7 +33,7 @@ def resample_one(rel_path):
         if y.size == 0:
             return (rel_path, None, 0, 0.0, "empty")
         sf.write(str(dst), y, SR, subtype="PCM_16")
-        return (rel_path, str(dst.relative_to(ROOT)), int(y.size), round(y.size / SR, 4), "ok")
+        return (rel_path, dst.relative_to(ROOT).as_posix(), int(y.size), round(y.size / SR, 4), "ok")
     except Exception as e:
         return (rel_path, None, 0, 0.0, f"error:{type(e).__name__}")
 

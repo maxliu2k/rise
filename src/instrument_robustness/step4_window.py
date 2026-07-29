@@ -1,6 +1,7 @@
 """Step 4 - Window every (resampled, trimmed) file to fixed 3.0 s (kills Flag 2).
 
-- 3.0 s windows, NO overlap (hop 3.0 s). See config for rationale.
+- 3.0 s windows, NO overlap (hop 3.0 s). At most MAX_WINDOWS_PER_SOURCE per file, which is
+  1 by default: only the first window is guaranteed to start at a note onset. See config.
 - Every window inherits its source's label AND its source's split tag from Step 3.
   Never re-split at window level.
 - Short/only windows are TILED (looped) to 3.0 s, never zero-padded. A trailing window with
@@ -22,14 +23,18 @@ Also writes per-class WINDOW counts per split into the report block returned to 
 """
 import warnings
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from pathlib import Path
+
 import numpy as np, pandas as pd, librosa, soundfile as sf
 
 from instrument_robustness.config import (
     HOP_S,
+    MAX_WINDOWS_PER_SOURCE,
     MIN_WINDOW_CONTENT_S,
     PIPE,
     ROOT,
     SPLITS_CSV,
+    TRIMMED,
     SR,
     TARGET_LABELS,
     WINDOWS,
@@ -64,10 +69,12 @@ def window_one(args):
     trimmed_rel, label, split, source_path = args
     y, _ = librosa.load(str(ROOT / trimmed_rel), sr=SR, mono=True)
     n = len(y)
-    stem = trimmed_rel.split("trimmed/", 1)[1].rsplit(".", 1)[0]
+    # pathlib rather than splitting on "trimmed/": see step2. Windows separators break the
+    # string form and take the stage down at the first file.
+    stem = Path(trimmed_rel).relative_to(TRIMMED.relative_to(ROOT)).with_suffix("").as_posix()
     out = []
     idx = 0
-    starts = list(range(0, max(1, n), HOP))
+    starts = list(range(0, max(1, n), HOP))[:MAX_WINDOWS_PER_SOURCE]
     for wi, start in enumerate(starts):
         seg = y[start:start + WIN]
         content = len(seg)
@@ -78,7 +85,7 @@ def window_one(args):
         wpath = WINDOWS / f"{stem}_w{idx:03d}.wav"
         wpath.parent.mkdir(parents=True, exist_ok=True)
         sf.write(str(wpath), seg, SR, subtype="PCM_16")
-        out.append((str(wpath.relative_to(ROOT)), label, split, source_path,
+        out.append((wpath.relative_to(ROOT).as_posix(), label, split, source_path,
                     round(start / SR, 4), round(content / SR, 4)))
         idx += 1
     return out
