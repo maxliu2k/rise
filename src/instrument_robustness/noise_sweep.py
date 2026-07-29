@@ -6,12 +6,20 @@ the data root changes. That is what makes the degradation curves comparable acro
 
 DESIGN RULES (these keep the experiment valid):
   * Generated ONCE and written to disk so every model featurizes the SAME noisy audio ->
-    predictions stay paired for McNemar / bootstrap across models.
+    predictions stay paired for McNemar / cluster bootstrap across models.
   * TEST SPLIT ONLY. train/val are never touched; models stay clean-trained.
-  * NO re-normalization after mixing (that would change the effective SNR). Written as
-    float32 WAV so values beyond +-1.0 keep headroom instead of clipping at low SNR.
-  * Deterministic per (window_id, noise_type, snr): the same window always gets the same
-    noise realization, reproducible across reruns and identical for every model.
+  * ONE noise realization per (window, noise_type), SCALED to every SNR. The seed deliberately
+    excludes the SNR: if each level drew fresh noise, the degradation curve would confound
+    "more noise" with "different noise", and part of the drop between 20 dB and 0 dB would be
+    noise variability rather than level. Scaling a single realization isolates the SNR axis.
+  * The seed also folds in the dataset/config fingerprint, so noise cannot be silently carried
+    across two different builds of the data.
+  * NO re-normalization after mixing. Note this is NOT because scaling changes the SNR -- SNR is
+    a power RATIO and is invariant to scaling the whole mixture. The reason is that the clean
+    signal has a fixed reference gain (Step 5 normalized every window to TARGET_RMS), and models
+    were trained at that gain; rescaling the mixture would present a different amplitude
+    distribution than training. Clipping is the genuinely destructive operation -- it is
+    nonlinear and really does corrupt the SNR -- hence float32 output.
   * Featurization later must use the EXISTING train-only stats — never recompute on noisy data.
 
 SNR math (power, not amplitude):
@@ -24,35 +32,81 @@ for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
            "NUMEXPR_NUM_THREADS", "NUMBA_NUM_THREADS"):
     os.environ.setdefault(_v, "1")
 
-import argparse, hashlib, warnings
+import argparse, hashlib, json, warnings
 from pathlib import Path
 import numpy as np, pandas as pd, soundfile as sf, librosa
-from instrument_robustness.config import ROOT, PIPE, WORK, SR, TARGET_RMS
+from instrument_robustness.config import (ROOT, WORK, SR, TARGET_RMS, WINDOWS_CSV,
+                                          config_fingerprint_json)
 warnings.filterwarnings("ignore")
 
-SNRS = [20, 10, 0, -5]                 # plus "clean", which is shared (not duplicated)
-NOISE_TYPES = ["white", "real"]
+SNRS = [20, 10, 5, 0, -5]
+NOISE_TYPES = ["white", "natural", "mechanical"]
 NOISY_DIR = WORK / "windows_noisy"
-ESC50_DIR = Path(os.environ.get("RISE_NOISE_ROOT", Path.home() / "Downloads/noise_sources")) \
-    / "ESC-50-master" / "audio"
+NOISE_ROOT = Path(os.environ.get("RISE_NOISE_ROOT", Path.home() / "Downloads/noise_sources"))
+ESC50_DIR = NOISE_ROOT / "ESC-50-master" / "audio"
+ESC50_META = NOISE_ROOT / "ESC-50-master" / "meta" / "esc50.csv"
 CLIP_LEN = int(round(3.0 * SR))
 
+# ESC-50 orders its 50 categories in five blocks of ten. We use two of them as distinct real-noise
+# characters and deliberately drop the third:
+#   0-9   animals            -> natural
+#   10-19 natural soundscapes/water -> natural
+#   20-29 human non-speech   -> EXCLUDED: neither ambient-natural nor mechanical, and speech-like
+#                               transients would be a third condition rather than part of either.
+#   30-39 interior/domestic  -> mechanical
+#   40-49 exterior/urban     -> mechanical
+# That leaves 800 clips per category, so neither is better sampled than the other.
+ESC50_TARGETS = {"natural": range(0, 20), "mechanical": range(30, 50)}
 
-def window_seed(window_id, noise_type, snr):
-    """Stable 32-bit seed from (window, noise type, SNR) — reproducible across machines/reruns."""
-    key = f"{window_id}|{noise_type}|{snr}".encode()
+
+def dataset_fingerprint():
+    """Short digest of the config that produced this data root's windows.
+
+    Folded into every noise seed so a noisy set generated against one build of the dataset can
+    never be silently reused against a different one.
+    """
+    return hashlib.sha256(config_fingerprint_json().encode()).hexdigest()[:16]
+
+
+def window_seed(window_id, noise_type, fingerprint=None):
+    """Stable 32-bit seed from (dataset fingerprint, window, noise type).
+
+    NOTE the absence of SNR: one realization is drawn per window and noise type, then scaled to
+    every SNR, so the only thing changing along the curve is level.
+    """
+    fp = dataset_fingerprint() if fingerprint is None else fingerprint
+    key = f"{fp}|{window_id}|{noise_type}".encode()
     return int.from_bytes(hashlib.sha256(key).digest()[:4], "big")
 
 
-def load_esc50_paths():
+def load_esc50_index():
+    """{noise_type: [paths]} for the real-noise categories, from ESC-50's own metadata."""
     if not ESC50_DIR.exists():
-        raise SystemExit(f"ESC-50 not found at {ESC50_DIR}. Set RISE_NOISE_ROOT or download it.")
-    return sorted(ESC50_DIR.glob("*.wav"))
+        raise SystemExit(f"ESC-50 audio not found at {ESC50_DIR}. Set RISE_NOISE_ROOT or download it.")
+    if not ESC50_META.exists():
+        raise SystemExit(
+            f"ESC-50 metadata not found at {ESC50_META}. It maps clips to categories and is what\n"
+            "splits natural from mechanical. Fetch it with:\n"
+            "  curl -sL -o '{}' https://raw.githubusercontent.com/karolpiczak/ESC-50/master/meta/esc50.csv"
+            .format(ESC50_META))
+    meta = pd.read_csv(ESC50_META)
+    index = {}
+    for nt, targets in ESC50_TARGETS.items():
+        sel = meta[meta.target.isin(list(targets))]
+        paths = [ESC50_DIR / f for f in sorted(sel.filename)]
+        missing = [p for p in paths if not p.exists()]
+        if missing:
+            raise SystemExit(f"{len(missing)} ESC-50 clips listed in metadata are missing, e.g. {missing[0].name}")
+        index[nt] = paths
+    return index
 
 
-def get_real_noise(rng, esc_paths):
-    """Random 3 s segment from a random ESC-50 clip, resampled to the working rate."""
-    p = esc_paths[rng.integers(len(esc_paths))]
+def draw_noise(noise_type, rng, esc_index):
+    """One CLIP_LEN noise realization for this window+type. Called ONCE per window, not per SNR."""
+    if noise_type == "white":
+        return rng.standard_normal(CLIP_LEN).astype(np.float32)
+    paths = esc_index[noise_type]
+    p = paths[rng.integers(len(paths))]
     n, sr_n = sf.read(str(p), dtype="float32", always_2d=False)
     if n.ndim > 1:
         n = n.mean(axis=1)
@@ -91,7 +145,7 @@ def load_clean(rel_path):
 
 
 def test_windows():
-    w = pd.read_csv(PIPE / "windows.csv")
+    w = pd.read_csv(WINDOWS_CSV)
     return w[w.split == "test"].reset_index(drop=True)
 
 
@@ -103,12 +157,15 @@ def window_id_of(rel_path):
     return Path(rel_path).stem
 
 
-# --------------------------------------------------------------------------- validate (B5)
+# --------------------------------------------------------------------------- validate
 def validate(n_samples=5):
     w = test_windows()
-    esc = load_esc50_paths()
-    print(f"data root : {ROOT}")
-    print(f"test windows: {len(w)} | ESC-50 clips: {len(esc)}")
+    esc = load_esc50_index()
+    fp = dataset_fingerprint()
+    print(f"data root  : {ROOT}")
+    print(f"fingerprint: {fp}")
+    print(f"test windows: {len(w)} | ESC-50: " +
+          ", ".join(f"{k} {len(v)}" for k, v in esc.items()))
     print(f"\nexpected P_signal = TARGET_RMS^2 = {TARGET_RMS**2:.6f} (windows are RMS-normalized)")
     rows = []
     rng_pick = np.random.default_rng(0)
@@ -118,73 +175,86 @@ def validate(n_samples=5):
         wid = window_id_of(rel)
         clean = load_clean(rel)
         p_sig = float(np.mean(clean ** 2))
-        # B3 assert: signal power should match the RMS-normalization contract
         assert abs(np.sqrt(p_sig) - TARGET_RMS) < 0.05, \
             f"{wid}: RMS {np.sqrt(p_sig):.4f} far from TARGET_RMS {TARGET_RMS}"
         for nt in NOISE_TYPES:
+            # ONE realization, reused across every SNR (see module docstring)
+            noise = draw_noise(nt, np.random.default_rng(window_seed(wid, nt, fp)), esc)
             for snr in SNRS:
-                rng = np.random.default_rng(window_seed(wid, nt, snr))
-                noise = (rng.standard_normal(CLIP_LEN).astype(np.float32) if nt == "white"
-                         else get_real_noise(rng, esc))
-                noisy, alpha, _ = mix_at_snr(clean, noise, snr)
-                rows.append({"window": wid[:34], "noise": nt, "target_dB": snr,
+                noisy, _, _ = mix_at_snr(clean, noise, snr)
+                rows.append({"window": wid[:30], "noise": nt, "target_dB": snr,
                              "measured_dB": round(measured_snr(clean, noisy), 4),
                              "err_dB": round(measured_snr(clean, noisy) - snr, 5),
                              "peak": round(float(np.abs(noisy).max()), 3)})
     df = pd.DataFrame(rows)
     print("\nmeasured vs target SNR (all sampled windows):")
     print(df.groupby(["noise", "target_dB"])
-            .agg(measured_dB=("measured_dB", "mean"), max_abs_err_dB=("err_dB", lambda s: s.abs().max()),
+            .agg(measured_dB=("measured_dB", "mean"),
+                 max_abs_err_dB=("err_dB", lambda s: s.abs().max()),
                  max_peak=("peak", "max")).round(5).to_string())
     worst = df["err_dB"].abs().max()
     print(f"\nworst |measured - target| = {worst:.6f} dB  -> {'PASS' if worst < 0.1 else 'FAIL'} (<0.1 dB)")
 
-    # B5: write a 0 dB sample to listen to (one white, one real)
+    # the realization must be identical across SNRs -- that is the point of the seed change
+    rel = w.iloc[idx[0]]["window_path"]; wid = window_id_of(rel); clean = load_clean(rel)
+    for nt in NOISE_TYPES:
+        noise = draw_noise(nt, np.random.default_rng(window_seed(wid, nt, fp)), esc)
+        added = [(mix_at_snr(clean, noise, s)[0] - clean) for s in SNRS]
+        # each added signal must be a pure rescaling of the same waveform
+        base = added[0] / (np.linalg.norm(added[0]) + 1e-12)
+        cos = [float(abs(np.dot(a / (np.linalg.norm(a) + 1e-12), base))) for a in added]
+        ok = all(c > 1 - 1e-6 for c in cos)
+        print(f"  {nt:<11} same realization across all SNRs: {ok}  (min cos {min(cos):.8f})")
+
     listen = NOISY_DIR / "_validation_samples"
     listen.mkdir(parents=True, exist_ok=True)
-    rel = w.iloc[idx[0]]["window_path"]
-    wid = window_id_of(rel)
-    clean = load_clean(rel)
     sf.write(str(listen / f"{wid}__clean.wav"), clean, SR, subtype="FLOAT")
     for nt in NOISE_TYPES:
-        rng = np.random.default_rng(window_seed(wid, nt, 0))
-        noise = (rng.standard_normal(CLIP_LEN).astype(np.float32) if nt == "white"
-                 else get_real_noise(rng, esc))
+        noise = draw_noise(nt, np.random.default_rng(window_seed(wid, nt, fp)), esc)
         noisy, _, _ = mix_at_snr(clean, noise, 0)
         sf.write(str(listen / f"{wid}__{nt}_snr0.wav"), noisy, SR, subtype="FLOAT")
     print(f"\nlisten to these (0 dB = instrument and noise at EQUAL power):\n  {listen}")
-    for f in sorted(listen.glob("*.wav")):
-        print(f"    {f.name}")
 
 
-# --------------------------------------------------------------------------- generate (B6)
+# --------------------------------------------------------------------------- generate
 def generate():
     w = test_windows()
-    esc = load_esc50_paths()
+    esc = load_esc50_index()
+    fp = dataset_fingerprint()
     total = len(w) * len(NOISE_TYPES) * len(SNRS)
     print(f"generating {total} noisy windows ({len(w)} test windows x "
           f"{len(NOISE_TYPES)} noise types x {len(SNRS)} SNRs) under {NOISY_DIR}")
-    made = 0
+    print(f"dataset fingerprint: {fp}")
     for nt in NOISE_TYPES:
         for snr in SNRS:
             (NOISY_DIR / nt / f"snr{snr}").mkdir(parents=True, exist_ok=True)
-            for rel in w["window_path"]:
-                wid = window_id_of(rel)
-                clean = load_clean(rel)
-                rng = np.random.default_rng(window_seed(wid, nt, snr))
-                noise = (rng.standard_normal(CLIP_LEN).astype(np.float32) if nt == "white"
-                         else get_real_noise(rng, esc))
+    made = 0
+    for rel in w["window_path"]:
+        wid = window_id_of(rel)
+        clean = load_clean(rel)
+        for nt in NOISE_TYPES:
+            # draw ONCE per (window, noise type), then scale to every SNR
+            noise = draw_noise(nt, np.random.default_rng(window_seed(wid, nt, fp)), esc)
+            for snr in SNRS:
                 noisy, _, _ = mix_at_snr(clean, noise, snr)
-                # float32 WAV: no re-normalization, no clipping at low SNR
                 sf.write(str(out_path(nt, snr, wid)), noisy, SR, subtype="FLOAT")
                 made += 1
-            print(f"  {nt} snr{snr}: {len(w)} files")
+        if made % 3000 < len(NOISE_TYPES) * len(SNRS):
+            print(f"  {made}/{total}")
+    meta = {"dataset_fingerprint": fp, "snrs": SNRS, "noise_types": NOISE_TYPES,
+            "n_test_windows": int(len(w)), "n_files": made,
+            "esc50_counts": {k: len(v) for k, v in esc.items()},
+            "esc50_targets": {k: [min(v), max(v)] for k, v in ESC50_TARGETS.items()},
+            "seed_scheme": "sha256(dataset_fingerprint|window_id|noise_type)[:4] — SNR excluded",
+            "one_realization_scaled_to_all_snrs": True}
+    (NOISY_DIR / "noise_manifest.json").write_text(json.dumps(meta, indent=2) + "\n")
     print(f"done: {made} files. 'clean' is NOT duplicated — it points at {WORK/'windows'}.")
+    print(f"wrote {NOISY_DIR/'noise_manifest.json'}")
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--validate", action="store_true", help="B5 check on a few windows, then stop")
+    ap.add_argument("--validate", action="store_true", help="check SNR math on a few windows, then stop")
     ap.add_argument("--generate", action="store_true", help="write all conditions")
     a = ap.parse_args()
     if a.validate:
