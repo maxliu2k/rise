@@ -33,7 +33,7 @@ def resample_one(rel_path):
         if y.size == 0:
             return (rel_path, None, 0, 0.0, "empty")
         sf.write(str(dst), y, SR, subtype="PCM_16")
-        return (rel_path, str(dst.relative_to(ROOT)), int(y.size), round(y.size / SR, 4), "ok")
+        return (rel_path, dst.relative_to(ROOT).as_posix(), int(y.size), round(y.size / SR, 4), "ok")
     except Exception as e:
         return (rel_path, None, 0, 0.0, f"error:{type(e).__name__}")
 
@@ -61,13 +61,31 @@ def sanity_check(df):
         pool = (bright if len(bright) >= 30 else sub)["resampled_path"].tolist()
         sample = rng.choice(pool, size=min(40, len(pool)), replace=False)
         ceils = np.array([c for p in sample if (c := brickwall_hz(str(ROOT / p), SR)) is not None])
+        assert len(ceils), (
+            f"no measurable ceiling for {inst}: every sampled file was under 0.2s. The Nyquist "
+            f"check below cannot pass judgement on a class it did not measure.")
         rows.append((inst, round(np.percentile(ceils, 90)), round(ceils.max())))
     rep = pd.DataFrame(rows, columns=["instrument", "ceil_p90_Hz", "ceil_max_Hz"])
     print(rep.to_string(index=False))
     spread = rep.ceil_p90_Hz.max() - rep.ceil_p90_Hz.min()
+    # Diagnostic only, deliberately NOT asserted: a residual spread is expected (instruments
+    # genuinely differ in brightness) and there is no pre-registered threshold separating that from
+    # a codec artifact. Asserting a number picked after the fact would be noise. The bound below is
+    # the one with a defensible meaning.
     print(f"\np90 ceiling spread across instruments: {spread} Hz")
-    ok = rep.ceil_max_Hz.max() <= SR // 2 + 5
-    print("all ceilings <= Nyquist:", ok, "-> Flag 1 defused" if ok else "-> INVESTIGATE")
+
+    # This guards SR = 22050, the most load-bearing constant in the repo: per-instrument MP3
+    # bitrate (64/80/96 kbps) puts the codec brick wall ABOVE Nyquist at 22.05 kHz so it is
+    # discarded, and BELOW it at 44.1 kHz where it becomes a free per-class shortcut. It used to
+    # print "-> INVESTIGATE" and return, so the stage exited 0 and run_pipeline carried straight on
+    # to featurize against a confounded cache. An invariant that cannot fail the build is not a
+    # check.
+    worst = rep.ceil_max_Hz.max()
+    assert worst <= SR // 2 + 5, (
+        f"a resampled ceiling reached {worst} Hz, above Nyquist ({SR // 2} Hz). The bitrate "
+        f"confound is NOT defused and every downstream number would be suspect:\n"
+        + rep.to_string(index=False))
+    print(f"all ceilings <= Nyquist: True -> Flag 1 defused")
     return rep
 
 def main():
@@ -92,11 +110,14 @@ def main():
     print(f"\nresampled ok: {n_ok} | failures: {len(df) - n_ok}")
     if (df.status != "ok").any():
         print(df[df.status != "ok"][["path", "status"]].to_string(index=False))
+    # Check BEFORE stamping. The fingerprint sidecar is what every later stage treats as proof the
+    # stage succeeded, so writing it first and validating second means a failed Nyquist check still
+    # leaves a fully valid-looking manifest on disk -- and `--from step2_trim` would sail past it.
+    sanity_check(df)
     out = MANIFEST_RESAMPLED
     df.to_csv(out, index=False)
     write_artifact_fingerprint(out, "step1_resample")
-    print(f"wrote {out}")
-    sanity_check(df)
+    print(f"\nwrote {out}")
 
 if __name__ == "__main__":
     main()

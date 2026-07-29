@@ -89,8 +89,7 @@ STRICT_ARTICULATIONS = {
     "oboe": {"normal"}, "trombone": {"normal"}, "trumpet": {"normal"},
     "tuba": {"normal"}, "viola": {"arco-normal"}, "violin": {"arco-normal"},
 }
-MIN_STRICT_N = 200      # per-class floor before falling back to the sustained family
-MAX_IMBALANCE = 1.5     # above this ratio, apply class weights
+MAX_IMBALANCE = 1.5     # above this ratio, apply class weights (train_cnn, train_mert)
 
 SR = 22050            # common resample rate; Nyquist 11025 Hz sits below the lowest MP3 brick wall (~16 kHz)
 TRIM_TOP_DB = 30      # silence-trim threshold
@@ -114,6 +113,29 @@ HOP_S = 3.0           # NO overlap (hop == window). Chosen to avoid amplifying p
 MIN_WINDOW_CONTENT_S = 0.5   # drop a trailing window with less real content than this, UNLESS it is a
                              # source's only window (every source must contribute >= 1 window)
 
+# How many windows a single source file may contribute. 1 = crop to the first WINDOW_S seconds.
+#
+# Set to 1 for three reasons, in order of importance:
+#
+#  1. ONLY THE FIRST WINDOW STARTS AT A NOTE ONSET. Step 2 trims to the attack, so window 0 begins
+#     at the note's start. Window 1 begins at exactly WINDOW_S, wherever that falls -- mid-sustain
+#     for a held note, mid-note for a phrase. Attack transient is a dominant instrument cue, so
+#     later windows are a structurally different kind of example: same label, no attack.
+#  2. THE MIX WAS CLASS-CORRELATED. Windowing whole files produced +127 windows for clarinet and
+#     +119 for flute against +10 for cello and +13 for violin -- winds and brass have the longer
+#     recordings, so they supplied nearly all the attack-less examples.
+#  3. IT OVER-WEIGHTED A FEW RECORDINGS. 2.6% of files produced 10.6% of windows, one file
+#     yielding 26. Those 26 are one performance counted 26 times: in training that recording gets
+#     26x the weight of a single note, and in test it inflates the effective sample size, since
+#     per-window scoring treats correlated windows as independent.
+#
+# Cost of cropping, stated honestly: 749 windows (8.9%) discarded, and class imbalance goes from
+# 1.73:1 back to 1.97:1 -- the extra windows happened to favour the smaller classes.
+#
+# Raise this to keep more of each recording; the trailing-window rule above still applies, so a
+# 3.01 s file yields one window rather than a 0.01 s fragment either way.
+MAX_WINDOWS_PER_SOURCE = 1
+
 # --- Step 5: loudness normalize ---
 TARGET_RMS = 0.1      # per-window RMS target; peak-guarded to avoid clipping
 
@@ -124,6 +146,43 @@ STATS_JSON = PIPE / "norm_stats.json"
 # log-mel params (CNN/CRNN). All windows are exactly 3.0 s (66150 samples) -> exactly 130 frames.
 N_FFT = 2048
 HOP = 512
+
+# STFT edge padding. librosa's default is "constant", i.e. ZEROS: with center=True it pads
+# n_fft//2 = 1024 samples at each edge before framing, so every window's first and last ~2 frames
+# are computed over synthesised digital silence.
+#
+# That is the one thing this pipeline is built to avoid. Step 4 tiles short notes rather than
+# zero-padding them precisely because injected noise floods digital silence and pushes the window
+# out of the training distribution -- measured on cnn-ensemble as majority-class collapse at EVERY
+# SNR. Padding zeros back in at the STFT stage reintroduces a smaller dose of the same thing, and
+# featurelib is the SHARED clean/noisy path, so the noise sweep inherits it at every level.
+#
+# Measured cost of the default on a real 3.0 s window: 3 of 130 frames differ by more than 0.5 dB
+# from reflect, worst edge frame 2.8 dB. Reflecting the window's own audio keeps the edge frames
+# looking like the instrument rather than like a gap.
+STFT_PAD_MODE = "reflect"
+
+# power_to_db's dynamic-range clamp. librosa defaults to top_db=80, which floors everything below
+# (THIS spectrogram's peak - 80 dB). `ref=1.0` was chosen precisely so the transform would not
+# depend on the individual window; top_db silently reinstates that dependence, and it is the one
+# form of it that matters here, because it behaves differently on clean and noisy audio.
+#
+# Measured, 60 test windows, white noise, pre-registered before running:
+#
+#     condition      clamp floor    cells clamped
+#     clean            -55.70 dB          16.8%
+#     +20 dB SNR       -55.68 dB           0.0%
+#      -5 dB SNR       -55.11 dB           0.0%
+#
+# The floor barely moves. The COVERAGE collapses: 17% of every clean image is flattened to a
+# constant and 0% of every noisy image is, at every SNR tested including +20 dB where the noise is
+# barely present. So the clean->noisy step carries a discontinuity that is not noise -- 1.455 dB
+# mean per-cell, concentrated entirely in the quiet regions. featurelib is the shared clean/noisy
+# path, so every model and every SNR inherited it.
+#
+# None disables the clamp. power_to_db still floors at amin=1e-10 (-100 dB), which is a FIXED
+# floor -- identical for clean and noisy input, which is the whole requirement.
+LOGMEL_TOP_DB = None
 N_MELS = 128
 N_FRAMES = 130
 N_MFCC = 20           # SVM MFCC coefficients
@@ -181,6 +240,15 @@ def config_fingerprint():
         "split_fracs": list(SPLIT_FRACS),
         "split_seed": SEED,
         "min_window_content_s": MIN_WINDOW_CONTENT_S,
+        # Reshapes the dataset (9116 windows unlimited vs 8378 cropped), so it MUST be here.
+        # Without it, a pre-crop feature array and a post-crop one produce identical fingerprints
+        # and the stale one loads clean -- the same hole the articulation policy had.
+        "max_windows_per_source": MAX_WINDOWS_PER_SOURCE,
+        # Both change the VALUES in every feature array, so a pre-fix and post-fix array must not
+        # share a fingerprint. The rule these keep landing on: anything that changes which rows
+        # exist, or what a row contains, belongs here; training hyperparameters do not.
+        "stft_pad_mode": STFT_PAD_MODE,
+        "logmel_top_db": LOGMEL_TOP_DB,
         "target_rms": TARGET_RMS,
         # Which articulations step0 keeps. Without this field an artifact built before the
         # articulation filter existed (10196 rows, all techniques, 3.10:1 imbalance) produces a

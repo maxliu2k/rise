@@ -1,0 +1,49 @@
+#!/bin/bash -l
+
+#$ -P rise-grid
+#$ -N panns_train
+#$ -j y
+#$ -pe omp 4
+#$ -l gpus=1
+#$ -l gpu_c=7.0
+#$ -l gpu_memory=16G
+#$ -l h_rt=12:00:00
+#$ -l mem_per_core=8G
+
+set -euo pipefail
+
+panns_repo="${RISE_REPO:-$SGE_O_WORKDIR}"
+panns_venv="${PANNS_VENV:-$panns_repo/.venv}"
+panns_data_root="${RISE_DATA_ROOT:-$panns_repo/all-samples}"
+panns_mode="${PANNS_MODE:-probe}"          # probe | finetune (see train_panns.py --mode)
+panns_ckpt="$panns_data_root/checkpoints/Cnn14_mAP=0.431.pth"
+panns_windows_csv="$panns_data_root/pipeline/windows.csv"
+
+export RISE_DATA_ROOT="$panns_data_root"
+export OMP_NUM_THREADS="${NSLOTS:-4}"
+export MKL_NUM_THREADS="${NSLOTS:-4}"
+export PYTHONUNBUFFERED=1
+
+source "$panns_venv/bin/activate"
+cd "$panns_repo"
+export PYTHONPATH="$panns_repo/src${PYTHONPATH:+:$PYTHONPATH}"
+
+test -f "$panns_windows_csv" || {
+    echo "Missing $panns_windows_csv -- run the preprocessing pipeline first:" >&2
+    echo "    python -m instrument_robustness.run_pipeline" >&2
+    exit 1
+}
+test -d "$panns_data_root/work/windows" || {
+    echo "Missing $panns_data_root/work/windows -- rerun the preprocessing pipeline." >&2
+    exit 1
+}
+test -f "$panns_ckpt" || {
+    echo "Missing pretrained CNN14 checkpoint: $panns_ckpt" >&2
+    echo "train_panns.py loads this directly (no auto-download). Fetch Cnn14_mAP=0.431.pth" >&2
+    echo "from the audioset_tagging_cnn release and place it at that path before submitting." >&2
+    exit 1
+}
+
+python -c "import torch; print('PyTorch:', torch.__version__); print('GPU:', torch.cuda.get_device_name()); assert torch.cuda.is_available()"
+
+python -m instrument_robustness.train_panns --mode "$panns_mode"
