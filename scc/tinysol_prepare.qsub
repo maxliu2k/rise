@@ -1,0 +1,36 @@
+#!/bin/bash -l
+
+#$ -P rise-grid
+#$ -N tinysol_prepare
+#$ -j y
+#$ -pe omp 4
+#$ -l h_rt=8:00:00
+#$ -l mem_per_core=8G
+
+set -euo pipefail
+
+tinysol_repo="${RISE_REPO:-$SGE_O_WORKDIR}"
+tinysol_venv="${PANNS_VENV:-$tinysol_repo/.venv}"
+tinysol_data_root="${RISE_DATA_ROOT:?Submit with -v RISE_DATA_ROOT=/projectnb/rise-grid/\$USER/rise-data/tinysol}"
+
+export RISE_DATA_ROOT="$tinysol_data_root"
+export OMP_NUM_THREADS="${NSLOTS:-4}"
+export MKL_NUM_THREADS="${NSLOTS:-4}"
+export PYTHONUNBUFFERED=1
+
+source "$tinysol_venv/bin/activate"
+cd "$tinysol_repo"
+export PYTHONPATH="$tinysol_repo/src${PYTHONPATH:+:$PYTHONPATH}"
+
+test -d "$tinysol_data_root/Brass" && test -d "$tinysol_data_root/Strings" && test -d "$tinysol_data_root/Winds" || {
+    echo "Missing raw TinySOL audio under $tinysol_data_root (expected Brass/, Strings/, Winds/)." >&2
+    echo "Transfer it from the curated local copy before submitting -- there is no auto-download" >&2
+    echo "for TinySOL the way prep_data.py fetches Philharmonia." >&2
+    exit 1
+}
+
+# build_tinysol_manifest writes manifest.csv (the same schema/labels prep_data.py writes for
+# Philharmonia), then the shared run_pipeline runner takes over for every later fingerprinted
+# stage -- same code path validated on the Philharmonia side.
+python -m instrument_robustness.build_tinysol_manifest
+python -m instrument_robustness.run_pipeline --from step0_filter
