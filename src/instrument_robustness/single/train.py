@@ -306,7 +306,7 @@ def main():
     class_weights(ytr)
     nb = len(LengthBatcher(Xtr, ytr, BATCH_SIZE))
     print(f"length-bucketed batching: {nb} train batches/epoch, mean size {len(Xtr) / nb:.1f}")
-    print(f"model params: {sum(p.numel() for p in MediumCNN().parameters()):,}\n")
+    print(f"model params: {sum(p.numel() for p in model_cls().parameters()):,}\n")
 
     data = ((Xtr, ytr), (Xva, yva), (Xte, yte))
 
