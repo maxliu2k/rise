@@ -74,8 +74,7 @@ STRICT_ARTICULATIONS = {
     "oboe": {"normal"}, "trombone": {"normal"}, "trumpet": {"normal"},
     "tuba": {"normal"}, "viola": {"arco-normal"}, "violin": {"arco-normal"},
 }
-MIN_STRICT_N = 200      # per-class floor before falling back to the sustained family
-MAX_IMBALANCE = 1.5     # above this ratio, apply class weights
+MAX_IMBALANCE = 1.5     # above this ratio, apply class weights (train_cnn, train_mert)
 
 SR = 22050            # common resample rate; Nyquist 11025 Hz sits below the lowest MP3 brick wall (~16 kHz)
 TRIM_TOP_DB = 30      # silence-trim threshold
@@ -132,6 +131,43 @@ STATS_JSON = PIPE / "norm_stats.json"
 # log-mel params (CNN/CRNN). All windows are exactly 3.0 s (66150 samples) -> exactly 130 frames.
 N_FFT = 2048
 HOP = 512
+
+# STFT edge padding. librosa's default is "constant", i.e. ZEROS: with center=True it pads
+# n_fft//2 = 1024 samples at each edge before framing, so every window's first and last ~2 frames
+# are computed over synthesised digital silence.
+#
+# That is the one thing this pipeline is built to avoid. Step 4 tiles short notes rather than
+# zero-padding them precisely because injected noise floods digital silence and pushes the window
+# out of the training distribution -- measured on cnn-ensemble as majority-class collapse at EVERY
+# SNR. Padding zeros back in at the STFT stage reintroduces a smaller dose of the same thing, and
+# featurelib is the SHARED clean/noisy path, so the noise sweep inherits it at every level.
+#
+# Measured cost of the default on a real 3.0 s window: 3 of 130 frames differ by more than 0.5 dB
+# from reflect, worst edge frame 2.8 dB. Reflecting the window's own audio keeps the edge frames
+# looking like the instrument rather than like a gap.
+STFT_PAD_MODE = "reflect"
+
+# power_to_db's dynamic-range clamp. librosa defaults to top_db=80, which floors everything below
+# (THIS spectrogram's peak - 80 dB). `ref=1.0` was chosen precisely so the transform would not
+# depend on the individual window; top_db silently reinstates that dependence, and it is the one
+# form of it that matters here, because it behaves differently on clean and noisy audio.
+#
+# Measured, 60 test windows, white noise, pre-registered before running:
+#
+#     condition      clamp floor    cells clamped
+#     clean            -55.70 dB          16.8%
+#     +20 dB SNR       -55.68 dB           0.0%
+#      -5 dB SNR       -55.11 dB           0.0%
+#
+# The floor barely moves. The COVERAGE collapses: 17% of every clean image is flattened to a
+# constant and 0% of every noisy image is, at every SNR tested including +20 dB where the noise is
+# barely present. So the clean->noisy step carries a discontinuity that is not noise -- 1.455 dB
+# mean per-cell, concentrated entirely in the quiet regions. featurelib is the shared clean/noisy
+# path, so every model and every SNR inherited it.
+#
+# None disables the clamp. power_to_db still floors at amin=1e-10 (-100 dB), which is a FIXED
+# floor -- identical for clean and noisy input, which is the whole requirement.
+LOGMEL_TOP_DB = None
 N_MELS = 128
 N_FRAMES = 130
 N_MFCC = 20           # SVM MFCC coefficients
@@ -193,6 +229,11 @@ def config_fingerprint():
         # Without it, a pre-crop feature array and a post-crop one produce identical fingerprints
         # and the stale one loads clean -- the same hole the articulation policy had.
         "max_windows_per_source": MAX_WINDOWS_PER_SOURCE,
+        # Both change the VALUES in every feature array, so a pre-fix and post-fix array must not
+        # share a fingerprint. The rule these keep landing on: anything that changes which rows
+        # exist, or what a row contains, belongs here; training hyperparameters do not.
+        "stft_pad_mode": STFT_PAD_MODE,
+        "logmel_top_db": LOGMEL_TOP_DB,
         "target_rms": TARGET_RMS,
         # Which articulations step0 keeps. Without this field an artifact built before the
         # articulation filter existed (10196 rows, all techniques, 3.10:1 imbalance) produces a

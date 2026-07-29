@@ -118,7 +118,11 @@ def main():
         tag.update(assign_groups(sizes, fracs, rng))
     df["split"] = df["grp"].map(tag)
 
-    out = df[["path", "trimmed_path", "label", "split", "is_phrase"]].rename(
+    # `note` is carried through so step 4 can re-run the leak check at WINDOW level. Without it,
+    # the only downstream check possible was "each source's windows share a split", which is true
+    # by construction and therefore guards nothing -- the same dead check this docstring warns
+    # about, one stage later.
+    out = df[["path", "trimmed_path", "label", "note", "split", "is_phrase"]].rename(
         columns={"path": "source_path"})
     SPLITS_CSV.parent.mkdir(parents=True, exist_ok=True)
     out.to_csv(SPLITS_CSV, index=False)

@@ -55,6 +55,11 @@ MANIFEST_COLUMNS = ["path", "label", "family", "duration_s", "sample_rate", "not
                     "dynamic", "technique", "is_plain", "is_phrase"]
 
 
+def mp3_count(directory):
+    """How many real mp3s sit under `directory` (macOS resource forks excluded)."""
+    return sum(1 for p in directory.rglob("*.mp3") if "__MACOSX" not in p.parts)
+
+
 def zip_stem(inst):
     """Instrument key -> the archive's zip/dir name.
 
@@ -87,7 +92,24 @@ def download_and_extract(force=False):
         zip_path = DATA_RAW / f"{stem}.zip"
         dest = DATA_ROOT / inst
         if dest.exists() and not force:
-            print(f"  {inst:14s} already extracted")
+            # "the directory exists" is not "the class is complete". An extraction interrupted
+            # partway leaves dest present, so this branch skipped it forever and the class stayed
+            # quietly short -- the mp3-count check below only ever ran when extraction DID happen.
+            # Count against the zip, which is the only available statement of what should be there.
+            have = mp3_count(dest)
+            if zip_path.exists():
+                with zipfile.ZipFile(zip_path) as zf:
+                    want = sum(1 for n in zf.namelist()
+                               if n.lower().endswith(".mp3") and "__MACOSX" not in n.split("/"))
+                if have != want:
+                    sys.exit(
+                        f"ERROR: {dest} holds {have} mp3s but {zip_path.name} contains {want}. "
+                        f"This is a partially extracted class, which would silently shrink the "
+                        f"dataset. Delete {dest} and re-run.")
+            elif have == 0:
+                sys.exit(f"ERROR: {dest} exists but contains no mp3s, and {zip_path.name} is gone. "
+                         f"Delete {dest} and re-run to re-download.")
+            print(f"  {inst:14s} already extracted ({have} files)")
             continue
         if not zip_path.exists() or force:
             url = f"{ARCHIVE_BASE}/{stem.replace(' ', '%20')}.zip"
@@ -111,7 +133,14 @@ def download_and_extract(force=False):
             out_dir.mkdir(parents=True, exist_ok=True)
             shutil.move(str(src), str(out_dir / src.name))
         shutil.rmtree(staging)
-        print(f"  {inst:14s} extracted {len(found)} files")
+        # shutil.move overwrites, so two archive entries landing on the same <note>/<name> would
+        # leave one file where there were two -- a silent shrink with no error anywhere.
+        placed = mp3_count(dest)
+        if placed != len(found):
+            sys.exit(f"ERROR: extracted {len(found)} mp3s from {zip_path.name} but {placed} are "
+                     f"present under {dest}. Filename collision during the move; the dataset would "
+                     f"be silently short.")
+        print(f"  {inst:14s} extracted {placed} files")
 
 
 def build_rows():

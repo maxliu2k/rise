@@ -54,6 +54,15 @@ def main():
     df["trim_flag"] = df["resampled_path"].map(lambda p: res[p][2])
 
     print("\ntrim flags:", df["trim_flag"].value_counts().to_dict())
+
+    # Step 1 filters its own failures (status == "ok"); this stage never filtered or checked its
+    # own. A row that failed to decode here kept trimmed_path = None, flowed into step 3 -- where
+    # it counted toward the 70/15/15 fractions as a phantom source -- and then took step 4 down two
+    # stages later with a TypeError on `ROOT / nan`. Fail here, where the cause is legible.
+    failed = df[df["trim_flag"].str.startswith("error:")]
+    assert failed.empty, (
+        f"{len(failed)} file(s) failed to trim. They would be split as phantom sources and crash "
+        f"step 4:\n" + failed[["resampled_path", "trim_flag"]].head(10).to_string(index=False))
     print(f"duration  resampled -> trimmed (median): "
           f"{df.resampled_dur_s.median():.3f}s -> {df.trimmed_dur_s.median():.3f}s")
     print("median trimmed duration per class:")

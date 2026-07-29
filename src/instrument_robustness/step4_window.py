@@ -66,7 +66,7 @@ def tile_to_length(seg, n):
 
 
 def window_one(args):
-    trimmed_rel, label, split, source_path = args
+    trimmed_rel, label, note, split, source_path = args
     y, _ = librosa.load(str(ROOT / trimmed_rel), sr=SR, mono=True)
     n = len(y)
     # pathlib rather than splitting on "trimmed/": see step2. Windows separators break the
@@ -85,7 +85,7 @@ def window_one(args):
         wpath = WINDOWS / f"{stem}_w{idx:03d}.wav"
         wpath.parent.mkdir(parents=True, exist_ok=True)
         sf.write(str(wpath), seg, SR, subtype="PCM_16")
-        out.append((wpath.relative_to(ROOT).as_posix(), label, split, source_path,
+        out.append((wpath.relative_to(ROOT).as_posix(), label, note, split, source_path,
                     round(start / SR, 4), round(content / SR, 4)))
         idx += 1
     return out
@@ -93,7 +93,7 @@ def window_one(args):
 def main():
     assert_artifact_fingerprint(SPLITS_CSV, "step3_split")
     sp = pd.read_csv(SPLITS_CSV)
-    args = list(zip(sp["trimmed_path"], sp["label"], sp["split"], sp["source_path"]))
+    args = list(zip(sp["trimmed_path"], sp["label"], sp["note"], sp["split"], sp["source_path"]))
     print(f"windowing {len(args)} source files -> {WINDOW_S}s windows (no overlap) ...")
     rows, done = [], 0
     with ProcessPoolExecutor() as ex:
@@ -103,7 +103,7 @@ def main():
             done += 1
             if done % 1500 == 0:
                 print(f"  {done}/{len(args)} sources")
-    win = pd.DataFrame(rows, columns=["window_path", "label", "split",
+    win = pd.DataFrame(rows, columns=["window_path", "label", "note", "split",
                                       "source_path", "start_time", "content_s"])
     win = win.sort_values(["source_path", "start_time"]).reset_index(drop=True)
     PIPE.mkdir(parents=True, exist_ok=True)
@@ -120,10 +120,23 @@ def main():
           f"[{counts['total'].idxmax()} {counts['total'].max()} vs "
           f"{counts['total'].idxmin()} {counts['total'].min()}]")
 
-    # verify split inheritance: each source's windows all share one split tag
-    bad = win.groupby("source_path")["split"].nunique().max()
-    print("max distinct split tags within a single source (must be 1):", bad)
-    assert bad == 1
+    # Verify the leak guarantee at WINDOW level -- the level the models actually see.
+    #
+    # The previous check here was `win.groupby("source_path")["split"].nunique().max() == 1`. With
+    # MAX_WINDOWS_PER_SOURCE = 1 each source yields exactly one window, so that maximum is 1 by
+    # construction and the assert could not fail for any input. It is the same dead check step 3's
+    # docstring retired, surviving one stage later and reading as reassurance.
+    #
+    # Grouping by PITCH instead can fail: it catches a window mis-tagged against its source, a
+    # step-3 grouping regression, and any future windowing scheme that re-splits.
+    grp = win["label"].astype(str) + "_" + win["note"].astype(str)
+    spans = win.groupby(grp)["split"].nunique()
+    leaked = spans[spans > 1]
+    assert leaked.empty, (
+        f"{len(leaked)} pitch-group(s) span more than one split AT WINDOW LEVEL:\n"
+        + "\n".join(f"    {k}" for k in list(leaked.index)[:10])
+        + ("\n    ..." if len(leaked) > 10 else ""))
+    print(f"window-level leak check passed: {len(spans)} pitch-groups, none spanning splits")
 
     # persist the report block for pipeline_report.txt
     block = ["STEP 4 — WINDOW  (-> windows.csv, work/windows/)",

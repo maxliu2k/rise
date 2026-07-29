@@ -35,7 +35,8 @@ from sklearn.metrics import balanced_accuracy_score, matthews_corrcoef
 from instrument_robustness.cnn_data import CNN as CNN_FEATURE_DIR
 from instrument_robustness.cnn_data import load_cnn
 from instrument_robustness.cnn_model import MediumCNN, hard_vote, predict_probs, soft_vote
-from instrument_robustness.config import ARTIFACTS, TARGET_LABELS, config_fingerprint
+from instrument_robustness.config import (ARTIFACTS, MAX_IMBALANCE, TARGET_LABELS,
+                                          config_fingerprint)
 
 DEFAULT_OUTPUT_DIR = ARTIFACTS / "cnn"
 DEFAULT_SEEDS = (42, 43, 44, 45, 46)
@@ -43,7 +44,9 @@ MAX_EPOCHS = 40
 EARLY_STOP_PATIENCE = 8
 BATCH_SIZE = 32
 LEARNING_RATE = 1e-3
-MAX_IMBALANCE = 1.5
+# MAX_IMBALANCE is NOT redefined here. It used to be, at the same value config already held, while
+# train_mert imported it -- so changing config would have silently given the two models different
+# class weighting, in the head-to-head comparison that is this project's entire output.
 
 
 def sha256(path: Path) -> str:
