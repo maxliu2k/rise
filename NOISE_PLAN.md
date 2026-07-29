@@ -3,8 +3,9 @@
 How we measure the degradation of a **clean-trained** model as noise increases. Inference only:
 no model is retrained, and the training and validation splits are never touched.
 
-Implemented in `noise_sweep.py` (generates the audio), `noise_eval_panns.py` (runs one model over
-it), and `noise_stats.py` (paired cluster bootstrap + McNemar). Read this before adding a model.
+Implemented in `noise_sweep.py` (generates and fingerprints the audio),
+`noise_eval_{svm,mert,panns}.py` (model adapters), `noise_eval_common.py` (the shared fail-closed
+evaluation contract), and `noise_stats.py` (paired cluster bootstrap + cluster sign test).
 
 ---
 
@@ -28,6 +29,9 @@ Run `noise_sweep.py --generate` once per dataset, then point every model at `wor
 | **mechanical** (ESC-50) | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 plus **clean**, shared rather than duplicated → 3 × 5 + 1 = **16**.
+
+For the current 1,310-window Philharmonia test split, the 15 float32 noisy conditions require
+roughly 5.2 GB before filesystem overhead. Keep them under the external data root, never in Git.
 
 Lower SNR = more noise. 20 dB is mild, 0 dB is signal and noise at *equal power*, −5 dB means the
 noise is louder than the instrument.
@@ -71,8 +75,9 @@ Scaling one realization isolates the SNR axis.
 `--validate` asserts this directly: the added component at each SNR must be a pure rescaling of
 the same waveform (cosine similarity 1.0 across all levels).
 
-The `dataset_fingerprint` in the seed means a noisy set built against one build of the data can
-never be silently reused against another.
+The `dataset_fingerprint` hashes the actual `manifest.csv` and Step-5 `windows.csv` identities in
+addition to the configuration. A noisy set built against one data build therefore cannot be
+silently reused against another.
 
 ## 5. Two invariants that are easy to break
 
@@ -94,25 +99,35 @@ noisy conditions. It also confirms the single-realization property (§4) and wri
 samples to `work/windows_noisy/_validation_samples/` — a 0 dB clip should sound like an instrument
 buried in noise, not silence or garbage.
 
+Generation writes `noise_provenance.csv`, with the clean hash, ESC-50 source/hash, deterministic
+seed, crop offset, scaling factor, realized SNR, peak, and output hash for every noisy file.
+`noise_manifest.json` is written last as the completion marker and records the actual dataset
+build, ESC-50 metadata/corpus identity, archive hash when the downloaded zip is retained, protocol,
+file counts, provenance hash, and software versions. Evaluators refuse missing, partial, stale, or
+mismatched manifests.
+
 ## 7. Clean-parity gate
 
 Before any noisy condition is scored, the evaluator runs the **clean** files and must reproduce the
-model's official clean macro-F1 (from its training results) to within `1e-3`. If it does not, the
-evaluator is reading different audio or a different preprocessing path than training used, and
-every noisy number below it would be measuring the wrong thing. It **aborts** rather than reporting.
+model's official clean macro-F1 to within `1e-3` **and** the official test-example count. A missing
+official result is an error, not a skipped gate. Any mismatch aborts before noisy results are
+written.
 
 ## 8. Featurization must match training
 
 Each model featurizes the noisy window through **the exact code path it was trained with** — noise
-is added to the 22050 Hz window *first*, then the model's own extractor runs. For PANNs that is
-`panns_input` (resample to 32 kHz; CNN14 computes its own log-mel internally).
+is added to the 22050 Hz window *first*, then the model's own extractor runs:
+
+- SVM computes the same 88 handcrafted features and applies the saved train-only mean/std.
+- MERT uses the same pinned 24 kHz processor/backbone, hidden-state mean pooling, and final probe.
+- PANNs uses `panns_input` at 32 kHz and the final fine-tuned CNN14.
 
 Never recompute dataset normalization statistics on noisy audio. The Step-6 stats are part of the
 trained model's contract.
 
 ## 9. Outputs
 
-Per dataset, under **`artifacts/<model>/noise/`** (alongside `artifacts/svm/`, `artifacts/mert/`):
+Under the repository's **`artifacts/<model>/noise/`** directory (not the external data root):
 
 - `*_test_{condition}.csv` — one row per test window: `window_id`, `source_path`, `pitch_group`,
   `true_label`, `predicted_label`, `correct`, and one column per class.
@@ -132,16 +147,25 @@ Windows are **not independent**. Several come from one recording, and every reco
 windows treats near-duplicates as fresh evidence and yields confidence intervals that are too
 narrow.
 
-`noise_stats.py` resamples whole **clusters** with replacement, paired across the two conditions:
+`noise_stats.py` resamples whole **clusters** with replacement, paired across the two conditions,
+and always computes macro-F1 over the fixed 12-class label order:
 
 ```bash
-python -m instrument_robustness.noise_stats --a clean --b white_20
+python -m instrument_robustness.noise_stats --a clean --b white_20 \
+  --dir artifacts/svm/noise --prefix-a svm_test_ --prefix-b svm_test_
 python -m instrument_robustness.noise_stats --a clean --b natural_0 --cluster source_path
+
+# SVM versus MERT on the same condition
+python -m instrument_robustness.noise_stats --a white_0 --b white_0 \
+  --dir-a artifacts/svm/noise --prefix-a svm_test_ \
+  --dir-b artifacts/mert/noise --prefix-b mert_test_
 ```
 
 `pitch_group` is the default and the conservative choice; `source_path` is the looser one. Window-
-level point estimates are still reported — only the uncertainty around them changes. McNemar is
-available in the same module, with an exact binomial on the discordant pairs.
+not called cluster-aware: the primary paired test is explicitly an exact cluster sign test.
+Ordinary window-level McNemar is available only with `--window-mcnemar` and is labeled a
+correlation-ignoring sensitivity analysis. Separate `--dir-a/--prefix-a` and
+`--dir-b/--prefix-b` arguments support direct model-to-model comparison.
 
 ## 11. How to run it
 
@@ -149,8 +173,11 @@ available in the same module, with an exact binomial on the discordant pairs.
 # once per dataset
 python -m instrument_robustness.noise_sweep --validate
 python -m instrument_robustness.noise_sweep --generate
+python -m instrument_robustness.noise_sweep --check-generated
 
 # per model
+python -m instrument_robustness.noise_eval_svm
+python -m instrument_robustness.noise_eval_mert --device cuda
 python -m instrument_robustness.noise_eval_panns
 ```
 
@@ -159,17 +186,21 @@ the audio **and** `meta/esc50.csv` are required — the metadata is what splits 
 mechanical:
 
 ```bash
-curl -L -o esc50.zip https://github.com/karoldvl/ESC-50/archive/master.zip
-unzip -q esc50.zip 'ESC-50-master/audio/*' -d ~/Downloads/noise_sources
+mkdir -p ~/Downloads/noise_sources/ESC-50-master/meta
+curl -L -o ~/Downloads/noise_sources/esc50.zip \
+  https://github.com/karoldvl/ESC-50/archive/master.zip
+unzip -q ~/Downloads/noise_sources/esc50.zip \
+  'ESC-50-master/audio/*' -d ~/Downloads/noise_sources
 curl -sL -o ~/Downloads/noise_sources/ESC-50-master/meta/esc50.csv \
   https://raw.githubusercontent.com/karolpiczak/ESC-50/master/meta/esc50.csv
 ```
 
 ## 12. Adding your model to the sweep
 
-Copy `noise_eval_panns.py`. Change only two things: how the checkpoint is loaded, and how a window
-becomes model input. Keep the condition list, the shared file paths, the cluster columns, and the
-CSV schema so outputs stay comparable and paired.
+Add a thin model adapter that loads the frozen clean checkpoint and supplies a
+`predict_scores(paths)` callback to `noise_eval_common.run_noise_evaluation`. The shared runner
+owns the condition list, manifest validation, clean-parity gate, cluster columns, metrics, schema,
+and output paths, preventing model-specific copies from drifting.
 
 ## 13. Results
 
@@ -182,5 +213,3 @@ so changing the noise design is **re-testing only, never retraining**.
 
 - **Noise-augmented training** (training *with* noise, then re-evaluating) — a separate experiment
   that does require retraining.
-- **Full provenance capture** (ESC-50 archive hash, noise source filename, crop offset, realized
-  SNR per clip). The dataset fingerprint is recorded; the rest remains open.

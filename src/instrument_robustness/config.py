@@ -17,35 +17,16 @@ from pathlib import Path
 
 # config.py is at <repo>/src/instrument_robustness/config.py  ->  parents[2] == <repo>
 _REPO = Path(__file__).resolve().parents[2]
+REPO_ROOT = _REPO
+ARTIFACTS = REPO_ROOT / "artifacts"
+DATA_ROOT = Path(os.environ.get("RISE_DATA_ROOT", _REPO / "all-samples")).resolve()
 
-# --- Canonical class list: 12 classes, 4 strings / 4 woodwinds / 4 brass. ALPHABETICAL --
-# this ordering fixes the label indices, so reordering silently invalidates every saved checkpoint.
-#
-# This replaces the previous 9-class set. Oboe, double-bass and french-horn were absent from the
-# older local Philharmonia copy; prep_data.py fetches all 12 from the Internet Archive mirror, so
-# they are no longer missing. Any checkpoint trained under the 9-class set is INVALID here --
-# label indices have shifted and must be retrained.
-#
-# BOTH datasets use these same 12 labels, so cross-dataset evaluation is index-compatible with no
-# remapping. TinySOL folder names map onto them in build_tinysol_manifest.py (Violoncello->cello,
-# Contrabass->double-bass, Horn->french-horn, Bass_Tuba->tuba, ...). Note the HYPHENS:
-# "double-bass" / "french-horn" match the Philharmonia archive's filename field.
-CANONICAL_LABELS = [
-    "bassoon", "cello", "clarinet", "double-bass", "flute", "french-horn",
-    "oboe", "trombone", "trumpet", "tuba", "viola", "violin",
-]
-# Kept as names for readability at call sites; both now refer to the SAME 12 labels above.
-PHILHARMONIA_LABELS = CANONICAL_LABELS
-TINYSOL_LABELS = CANONICAL_LABELS
-
-# --- Per-dataset data roots. Each mirrors the DATA_ROOT layout (pipeline/ tracked in git;
-#     work/, features/, checkpoints/ are git-ignored). Overridable via env; never hardcode paths. ---
+# --- Per-dataset roots, for cross-dataset evaluation ---
+# Each mirrors the DATA_ROOT layout (pipeline/ tracked in git; work/, features/, checkpoints/
+# ignored). DATA_ROOT above selects which one the pipeline steps act on; these two name both so a
+# single process can read from each. Env-overridable; never hardcode a path.
 PHILHARMONIA_ROOT = Path(os.environ.get("RISE_PHIL_ROOT", _REPO / "all-samples")).resolve()
 TINYSOL_ROOT = Path(os.environ.get("RISE_TINYSOL_ROOT", _REPO / "tinysol")).resolve()
-
-# --- Active data root for the pipeline steps. Set RISE_DATA_ROOT to select the dataset;
-#     defaults to Philharmonia. For TinySOL: RISE_DATA_ROOT=$RISE_TINYSOL_ROOT (see .env.example). ---
-DATA_ROOT = Path(os.environ.get("RISE_DATA_ROOT", PHILHARMONIA_ROOT)).resolve()
 
 ROOT = DATA_ROOT                       # kept for back-compat: step scripts resolve paths against ROOT
 PIPE = DATA_ROOT / "pipeline"          # pipeline ARTIFACTS: manifest_*.csv, splits/windows.csv, stats, report
@@ -55,9 +36,25 @@ TRIMMED = WORK / "trimmed"
 WINDOWS = WORK / "windows"
 FEATURES = DATA_ROOT / "features"
 
-_DEFAULT_LABELS = CANONICAL_LABELS
-TARGET_LABELS = ([s.strip() for s in os.environ["RISE_TARGET_LABELS"].split(",") if s.strip()]
-                 if os.environ.get("RISE_TARGET_LABELS") else _DEFAULT_LABELS)
+# 12 classes: 4 strings, 4 woodwinds, 4 brass. Kept ALPHABETICAL -- this ordering fixes the label
+# indices, so reordering silently invalidates every saved checkpoint.
+#
+# This replaces the previous 9-class set. Oboe, double-bass and french-horn were absent from the
+# older local Philharmonia copy; prep_data.py fetches all 12 from the Internet Archive mirror, so
+# they are no longer missing. Any checkpoint trained under the 9-class set is INVALID here --
+# label indices have shifted and must be retrained.
+TARGET_LABELS = [
+    "bassoon", "cello", "clarinet", "double-bass", "flute", "french-horn",
+    "oboe", "trombone", "trumpet", "tuba", "viola", "violin",
+]
+
+# TinySOL maps its folder names onto these same 12 labels in build_tinysol_manifest.py
+# (Violoncello->cello, Contrabass->double-bass, Horn->french-horn, Bass_Tuba->tuba). Because both
+# datasets share one label order, cross-dataset evaluation is index-compatible with no remapping.
+# These aliases exist so call sites can say which dataset they mean; they are the SAME list.
+CANONICAL_LABELS = TARGET_LABELS
+PHILHARMONIA_LABELS = TARGET_LABELS
+TINYSOL_LABELS = TARGET_LABELS
 
 INSTRUMENT_FAMILY = {
     "bassoon": "woodwinds",
@@ -137,6 +134,12 @@ AST_MODEL = "MIT/ast-finetuned-audioset-10-10-0.4593"
 MERT_SR = 24000
 MERT_MODEL = "m-a-p/MERT-v1-95M"
 MERT_REVISION = "12af15fef9d0ac838c3f475bfbbf26d2060dd4f5"
+
+# manifest.csv has two legitimate producers: prep_data (Philharmonia, fetched from the
+# Internet Archive) and build_tinysol_manifest (TinySOL, indexed from local WAVs). Both emit
+# the same schema and feed the identical downstream steps, so every stage that verifies the
+# manifest's provenance accepts either. Kept here so those call sites cannot drift apart.
+MANIFEST_PRODUCER_STAGES = ("prep_data", "build_tinysol_manifest")
 
 MANIFEST_IN = DATA_ROOT / "manifest.csv"          # written by prep_data.py -- the canonical index
 MANIFEST_FINGERPRINT = DATA_ROOT / "manifest_fingerprint.json"
@@ -329,18 +332,24 @@ def assert_artifact_fingerprint(
             "Rebuild the pipeline stage."
         )
     assert_fingerprint(payload.get("fingerprint"), str(artifact_path))
-    # `expected_stage` may name one producer or several. An artifact can have more than one
-    # legitimate producer: manifest.csv comes from prep_data for Philharmonia and from
+    # `expected_stage` may name one producer or several. An artifact can legitimately have more
+    # than one: manifest.csv comes from prep_data for Philharmonia and from
     # build_tinysol_manifest for TinySOL, and both feed the identical downstream steps. Accepting
-    # a set keeps the provenance check strict -- an unrecognised stage still fails -- without
-    # forcing a second dataset to lie about which stage built it.
-    allowed = ({expected_stage} if isinstance(expected_stage, str)
-               else set(expected_stage))
+    # a collection keeps the check strict -- an unrecognised stage still fails -- without forcing
+    # a second dataset to misreport which stage built it.
+    allowed = (
+        {expected_stage}
+        if isinstance(expected_stage, str)
+        else set(expected_stage)
+    )
     if payload.get("stage") not in allowed:
-        expected_desc = (repr(expected_stage) if isinstance(expected_stage, str)
-                         else " or ".join(repr(s) for s in sorted(allowed)))
+        expected_description = (
+            repr(expected_stage)
+            if isinstance(expected_stage, str)
+            else " or ".join(repr(stage) for stage in sorted(allowed))
+        )
         raise StaleArtifactError(
             f"{artifact_path} was produced by stage {payload.get('stage')!r}; "
-            f"expected {expected_desc}. Run the missing pipeline step."
+            f"expected {expected_description}. Run the missing pipeline step."
         )
     return payload["fingerprint"]

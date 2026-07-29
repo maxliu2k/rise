@@ -20,11 +20,12 @@ src/instrument_robustness/     # installable package (all CODE)
   mert_data.py, mert_probe.py  # MERT data contract + layer-weighted linear probe
   train_mert.py                # validation-only MERT probe selection
   ast_data.py, train_ast.py    # AST on-the-fly DataLoader and fine-tuning command
-all-samples/                   # DATA + ARTIFACTS (not code)
+all-samples/                   # DATA (not code)
   manifest.csv, <instrument>/<note>/         # raw audio + catalog
   pipeline/                    # stage manifests, splits.csv, windows.csv, stats, fingerprints
-  work/                        # resampled / trimmed / windowed audio
+  work/                        # resampled / trimmed / clean and noisy windowed audio
   features/                    # svm/ cnn/ (npz) + crnn/ ast/ mert/ panns/ (docs)
+artifacts/                     # versioned model checkpoints, clean results, and noise results
 configs/                       # svm.yaml, irmas.yaml
 ```
 
@@ -156,3 +157,33 @@ On BU SCC, submit `scc/mert_probe.qsub` first and submit `scc/mert_finalize.qsub
 validation review. The MERT checkpoint is licensed CC-BY-NC-4.0; this branch is appropriate for
 the project's non-commercial research use, but that license must be reviewed before any
 commercial use.
+
+## Evaluate clean-trained models under noise
+
+The noise branch starts from the canonical Step-5 **test** windows; train and validation are never
+noised and no model is retrained. It creates one shared float32 noisy test set containing white,
+ESC-50 natural, and ESC-50 mechanical noise at 20, 10, 5, 0, and -5 dB. One realization per
+window/noise type is scaled across the SNR curve so every model receives exactly the same paired
+inputs.
+
+Set `RISE_NOISE_ROOT` to an ESC-50 extraction containing both `audio/` and `meta/esc50.csv`, then
+validate, generate once, and verify the completed manifest:
+
+```bash
+python -m instrument_robustness.noise_sweep --validate
+python -m instrument_robustness.noise_sweep --generate
+python -m instrument_robustness.noise_sweep --check-generated
+```
+
+Run each frozen model through the shared evaluation contract:
+
+```bash
+python -m instrument_robustness.noise_eval_svm
+python -m instrument_robustness.noise_eval_mert --device cuda
+python -m instrument_robustness.noise_eval_panns
+```
+
+Each adapter must reproduce its official clean macro-F1 and test count before noisy inference is
+allowed. Results go to `artifacts/<model>/noise/`; generated audio and its per-file provenance
+remain under `$RISE_DATA_ROOT/work/windows_noisy/`. See `NOISE_PLAN.md` for the fixed protocol and
+cluster-aware statistical analysis.
