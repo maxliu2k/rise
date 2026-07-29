@@ -62,6 +62,40 @@ def choose_device(requested: str, torch) -> str:
     return requested
 
 
+def extract_mert_batch(
+    waveforms,
+    *,
+    processor,
+    model,
+    target_device: str,
+    torch,
+) -> np.ndarray:
+    """Run the canonical MERT processor/backbone path for one waveform batch."""
+    processed = mert_batch_input(waveforms, processor)
+    model_inputs = {
+        name: value.to(target_device)
+        for name, value in processed.items()
+    }
+    with torch.inference_mode():
+        output = model(**model_inputs, output_hidden_states=True)
+        hidden_states = output.hidden_states
+        if len(hidden_states) != MERT_NUM_LAYERS:
+            raise ValueError(
+                f"Expected {MERT_NUM_LAYERS} hidden states, "
+                f"received {len(hidden_states)}"
+            )
+        pooled = torch.stack(
+            [hidden.mean(dim=1) for hidden in hidden_states],
+            dim=1,
+        )
+        if pooled.shape[2] != MERT_HIDDEN_SIZE:
+            raise ValueError(
+                f"Expected hidden size {MERT_HIDDEN_SIZE}, "
+                f"received {pooled.shape[2]}"
+            )
+    return pooled.float().cpu().numpy()
+
+
 def extract_mert_splits(
     *,
     splits,
@@ -134,30 +168,15 @@ def extract_mert_splits(
         for start in range(0, len(examples), batch_size):
             batch_examples = examples[start : start + batch_size]
             waveforms = [load_window(example.window_path) for example in batch_examples]
-            processed = mert_batch_input(waveforms, processor)
-            model_inputs = {
-                name: value.to(target_device)
-                for name, value in processed.items()
-            }
-
-            with torch.inference_mode():
-                output = model(**model_inputs, output_hidden_states=True)
-                hidden_states = output.hidden_states
-                if len(hidden_states) != MERT_NUM_LAYERS:
-                    raise ValueError(
-                        f"Expected {MERT_NUM_LAYERS} hidden states, "
-                        f"received {len(hidden_states)}"
-                    )
-                pooled = torch.stack(
-                    [hidden.mean(dim=1) for hidden in hidden_states],
-                    dim=1,
+            batches.append(
+                extract_mert_batch(
+                    waveforms,
+                    processor=processor,
+                    model=model,
+                    target_device=target_device,
+                    torch=torch,
                 )
-                if pooled.shape[2] != MERT_HIDDEN_SIZE:
-                    raise ValueError(
-                        f"Expected hidden size {MERT_HIDDEN_SIZE}, "
-                        f"received {pooled.shape[2]}"
-                    )
-                batches.append(pooled.float().cpu().numpy())
+            )
 
             completed = min(start + len(batch_examples), len(examples))
             print(f"[{split}] {completed}/{len(examples)}", flush=True)

@@ -80,3 +80,41 @@ qsub -v RISE_DATA_ROOT="$RISE_DATA_ROOT" scc/mert_finalize.qsub
 
 The final job refits on train+validation, extracts test with the exact saved MERT revision, evaluates
 test once, and writes a guard record that prevents a second test access.
+
+## Shared noise sweep, SVM, and MERT
+
+The clean final models above remain frozen. Put ESC-50 on the shared filesystem with both its
+`audio/` directory and `meta/esc50.csv`, then set:
+
+```bash
+cd /project/rise-grid/Tariq/instrument-robustness
+git switch main
+git pull --ff-only origin main
+
+export RISE_DATA_ROOT=/projectnb/rise-grid/rise-data
+export RISE_NOISE_ROOT=/projectnb/rise-grid/noise-sources
+```
+
+Generate the shared noisy test set once:
+
+```bash
+noise_job=$(qsub -terse \
+  -v RISE_DATA_ROOT="$RISE_DATA_ROOT",RISE_NOISE_ROOT="$RISE_NOISE_ROOT" \
+  scc/noise_generate.qsub)
+```
+
+Hold the CPU SVM evaluation and GPU MERT evaluation behind that same generation job:
+
+```bash
+qsub -hold_jid "$noise_job" \
+  -v RISE_DATA_ROOT="$RISE_DATA_ROOT" \
+  scc/svm_noise.qsub
+
+qsub -hold_jid "$noise_job" \
+  -v RISE_DATA_ROOT="$RISE_DATA_ROOT" \
+  scc/mert_noise.qsub
+```
+
+Generated WAVs and provenance remain under
+`$RISE_DATA_ROOT/work/windows_noisy/`. Compact predictions, metrics, and summaries are written to
+the repository under `artifacts/svm/noise/` and `artifacts/mert/noise/`.

@@ -17,6 +17,8 @@ from pathlib import Path
 
 # config.py is at <repo>/src/instrument_robustness/config.py  ->  parents[2] == <repo>
 _REPO = Path(__file__).resolve().parents[2]
+REPO_ROOT = _REPO
+ARTIFACTS = REPO_ROOT / "artifacts"
 DATA_ROOT = Path(os.environ.get("RISE_DATA_ROOT", _REPO / "all-samples")).resolve()
 
 ROOT = DATA_ROOT                       # kept for back-compat: step scripts resolve paths against ROOT

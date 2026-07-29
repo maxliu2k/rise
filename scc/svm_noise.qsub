@@ -1,0 +1,35 @@
+#!/bin/bash -l
+
+#$ -P rise-grid
+#$ -N svm_noise
+#$ -j y
+#$ -pe omp 4
+#$ -l h_rt=12:00:00
+#$ -l mem_per_core=8G
+
+set -euo pipefail
+
+noise_repo="${NOISE_REPO:-$SGE_O_WORKDIR}"
+noise_data_root="${RISE_DATA_ROOT:?Submit with -v RISE_DATA_ROOT=/projectnb/...}"
+noise_venv="${NOISE_VENV:-/projectnb/rise-grid/venvs/$USER/mert}"
+
+source "$noise_venv/bin/activate"
+cd "$noise_repo"
+
+export PYTHONPATH="$noise_repo/src${PYTHONPATH:+:$PYTHONPATH}"
+export RISE_DATA_ROOT="$noise_data_root"
+export OMP_NUM_THREADS="${NSLOTS:-4}"
+export MKL_NUM_THREADS="${NSLOTS:-4}"
+export OPENBLAS_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+export NUMBA_NUM_THREADS=1
+export PYTHONUNBUFFERED=1
+
+test -f "$RISE_DATA_ROOT/work/windows_noisy/noise_manifest.json"
+test -f "$RISE_DATA_ROOT/pipeline/norm_stats.npz"
+test -f "$noise_repo/artifacts/svm/final_model.joblib"
+test -f "$noise_repo/artifacts/svm/test_summary.json"
+
+python -m unittest tests.test_noise tests.test_svm -q
+python -m instrument_robustness.noise_sweep --check-generated
+python -m instrument_robustness.noise_eval_svm

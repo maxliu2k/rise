@@ -1,0 +1,38 @@
+#!/bin/bash -l
+
+#$ -P rise-grid
+#$ -N noise_generate
+#$ -j y
+#$ -pe omp 1
+#$ -l h_rt=12:00:00
+#$ -l mem_per_core=8G
+
+set -euo pipefail
+
+noise_repo="${NOISE_REPO:-$SGE_O_WORKDIR}"
+noise_data_root="${RISE_DATA_ROOT:?Submit with -v RISE_DATA_ROOT=/projectnb/...}"
+noise_source_root="${RISE_NOISE_ROOT:?Submit with -v RISE_NOISE_ROOT=/projectnb/...}"
+noise_venv="${NOISE_VENV:-/projectnb/rise-grid/venvs/$USER/mert}"
+
+source "$noise_venv/bin/activate"
+cd "$noise_repo"
+
+export PYTHONPATH="$noise_repo/src${PYTHONPATH:+:$PYTHONPATH}"
+export RISE_DATA_ROOT="$noise_data_root"
+export RISE_NOISE_ROOT="$noise_source_root"
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+export NUMBA_NUM_THREADS=1
+export PYTHONUNBUFFERED=1
+
+test -f "$RISE_DATA_ROOT/pipeline/windows.csv"
+test -d "$RISE_DATA_ROOT/work/windows"
+test -d "$RISE_NOISE_ROOT/ESC-50-master/audio"
+test -f "$RISE_NOISE_ROOT/ESC-50-master/meta/esc50.csv"
+
+python -m unittest tests.test_noise -q
+python -m instrument_robustness.noise_sweep --validate
+python -m instrument_robustness.noise_sweep --generate
+python -m instrument_robustness.noise_sweep --check-generated
