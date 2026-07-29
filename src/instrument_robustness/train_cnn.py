@@ -21,6 +21,7 @@ to load rather than silently produce plausible predictions.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import random
 import time
@@ -31,6 +32,7 @@ import torch
 import torch.nn as nn
 from sklearn.metrics import balanced_accuracy_score, matthews_corrcoef
 
+from instrument_robustness.cnn_data import CNN as CNN_FEATURE_DIR
 from instrument_robustness.cnn_data import load_cnn
 from instrument_robustness.cnn_model import MediumCNN, hard_vote, predict_probs, soft_vote
 from instrument_robustness.config import ARTIFACTS, TARGET_LABELS, config_fingerprint
@@ -42,6 +44,16 @@ EARLY_STOP_PATIENCE = 8
 BATCH_SIZE = 32
 LEARNING_RATE = 1e-3
 MAX_IMBALANCE = 1.5
+
+
+def sha256(path: Path) -> str:
+    """Content hash of a feature array, so finalize_* can prove the test split it evaluates is the
+    same data validation was selected against."""
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def set_seed(seed: int) -> None:
@@ -68,7 +80,7 @@ def iterate(X: np.ndarray, y: np.ndarray, batch_size: int, shuffle: bool, rng: r
         yield torch.from_numpy(X[b]), torch.from_numpy(y[b])
 
 
-def train_one_seed(seed, Xtr, ytr, Xva, yva, device, weights, out_dir):
+def train_one_seed(seed, Xtr, ytr, Xva, yva, device, weights, out_dir, model_cls):
     """Train one seed, keeping the best-validation-loss weights.
 
     Postcondition: writes out_dir/model_s{seed}.pt and returns a per-seed record. The test split
@@ -76,7 +88,7 @@ def train_one_seed(seed, Xtr, ytr, Xva, yva, device, weights, out_dir):
     """
     set_seed(seed)
     rng = random.Random(seed)
-    model = MediumCNN().to(device)
+    model = model_cls().to(device)
     criterion = nn.CrossEntropyLoss(weight=None if weights is None else weights.to(device))
     optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", patience=3)
@@ -120,6 +132,7 @@ def train_one_seed(seed, Xtr, ytr, Xva, yva, device, weights, out_dir):
     model.load_state_dict(best_state)
     path = out_dir / f"model_s{seed}.pt"
     torch.save({"state_dict": best_state, "seed": seed, "label_order": list(TARGET_LABELS),
+                "architecture": model_cls.__name__,
                 "config_fingerprint": config_fingerprint()}, path)
 
     probs = predict_probs(model, Xva, device, BATCH_SIZE)
@@ -143,24 +156,35 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def main() -> None:
-    args = parse_args()
-    args.output_dir.mkdir(parents=True, exist_ok=True)
+def run_training(model_cls, output_dir: Path, seeds, device: str) -> dict:
+    """Train `model_cls` once per seed on train, select on validation, write the summary.
+
+    Preconditions: Step-7 features exist for train and val under the current config.
+    Postcondition: writes output_dir/model_s{seed}.pt per seed plus validation_summary.json, and
+    returns that summary. The TEST split is never read here — finalize_* spends the single
+    permitted evaluation.
+
+    Shared by train_cnn and train_crnn, which differ only in architecture and output directory.
+    Duplicating a whole trainer would mean fixing every future bug in two places.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     Xtr, ytr = load_cnn("train")
     Xva, yva = load_cnn("val")
-    print(f"device: {args.device} | train {len(Xtr)} | val {len(Xva)} | "
+    print(f"device: {device} | train {len(Xtr)} | val {len(Xva)} | "
           f"{len(TARGET_LABELS)} classes | input {Xtr.shape[1:]}")
-    print(f"seeds: {args.seeds}\n")
+    print(f"architecture: {model_cls.__name__} -> {output_dir}")
+    print(f"seeds: {list(seeds)}\n")
 
     weights = class_weights(ytr)
     print("class weights: " + ("none" if weights is None else
                                f"[{weights.min():.3f}..{weights.max():.3f}]"))
-    print(f"params: {sum(p.numel() for p in MediumCNN().parameters()):,}\n")
+    print(f"params: {sum(p.numel() for p in model_cls().parameters()):,}\n")
 
     records, per_seed_probs = [], []
-    for seed in args.seeds:
-        rec, probs = train_one_seed(seed, Xtr, ytr, Xva, yva, args.device, weights, args.output_dir)
+    for seed in seeds:
+        rec, probs = train_one_seed(seed, Xtr, ytr, Xva, yva, device, weights, output_dir,
+                                    model_cls)
         records.append(rec)
         per_seed_probs.append(probs)
         print(f"  s{seed} | val balanced acc {rec['val_balanced_accuracy']:.4f}\n")
@@ -177,10 +201,18 @@ def main() -> None:
 
     summary = {
         "config_fingerprint": config_fingerprint(),
+        "architecture": model_cls.__name__,
         "label_order": list(TARGET_LABELS),
-        "seeds": list(args.seeds),
+        "seeds": list(seeds),
         "n_train": int(len(Xtr)), "n_val": int(len(Xva)),
-        "n_params": int(sum(p.numel() for p in MediumCNN().parameters())),
+        "n_params": int(sum(p.numel() for p in model_cls().parameters())),
+        # finalize_* refuses to run unless this is False, and re-hashes these inputs. Together
+        # they make "the test split was sealed while validation was selected" checkable rather
+        # than merely asserted.
+        "test_evaluated": False,
+        "inputs": {s: {"path": str(CNN_FEATURE_DIR / f"{s}.npz"),
+                       "sha256": sha256(CNN_FEATURE_DIR / f"{s}.npz")}
+                   for s in ("train", "val")},
         "per_seed": records,
         "single_seed_val": {"mean": float(np.mean(singles)),
                             "std": float(np.std(singles, ddof=1)) if len(singles) > 1 else 0.0,
@@ -188,7 +220,7 @@ def main() -> None:
         "ensemble_val": combiners,
         "selected_combiner": chosen,
     }
-    (args.output_dir / "validation_summary.json").write_text(json.dumps(summary, indent=2))
+    (output_dir / "validation_summary.json").write_text(json.dumps(summary, indent=2))
 
     print("=" * 66)
     print(f"single seed (val)  {summary['single_seed_val']['mean']:.4f} "
@@ -197,7 +229,13 @@ def main() -> None:
         print(f"ensemble {name:<10} {score:.4f}")
     print(f"selected combiner: {chosen}  (chosen on validation, before any test evaluation)")
     print("=" * 66)
-    print(f"\nwrote {args.output_dir / 'validation_summary.json'}")
+    print(f"\nwrote {output_dir / 'validation_summary.json'}")
+    return summary
+
+
+def main() -> None:
+    args = parse_args()
+    run_training(MediumCNN, args.output_dir, args.seeds, args.device)
     print("next: python -m instrument_robustness.finalize_cnn")
 
 
