@@ -1,47 +1,82 @@
-# BU SCC setup for the MERT probe
+# BU SCC jobs
 
-The job file assumes the repository is cloned at:
+## AST training on the 12-class Philharmonia data
 
-```text
-/project/rise-grid/repos/<SCC username>/instrument-robustness
-```
-
-Create a per-user clone from an SCC OnDemand terminal:
+Use `main` and keep the generated audio outside the repository:
 
 ```bash
-mkdir -p "/project/rise-grid/repos/$USER"
-cd "/project/rise-grid/repos/$USER"
-git clone https://github.com/maxliu2k/rise.git instrument-robustness
-cd instrument-robustness
-git switch allan/MERT
+cd /project/rise-grid/repos/$USER/instrument-robustness
+git switch main
+git pull --ff-only origin main
+export RISE_DATA_ROOT="/projectnb/rise-grid/$USER/rise-data/philharmonia"
 ```
 
-MERT needs the full Step-5 window audio, not only the saved SVM/CNN features. Keep the large data in
-the non-backed-up project space:
+Submit the CPU preprocessing job first. It downloads the configured Philharmonia
+sources and rebuilds every fingerprinted stage for all 12 instruments:
 
 ```bash
-mkdir -p /projectnb/rise-grid/rise-data
-export RISE_DATA_ROOT=/projectnb/rise-grid/rise-data
-python download_data.py
+prep_job=$(qsub -terse -v RISE_DATA_ROOT="$RISE_DATA_ROOT" scc/ast_prepare.qsub)
+qsub -hold_jid "$prep_job" -v RISE_DATA_ROOT="$RISE_DATA_ROOT" train_ast.qsub
+qstat -u "$USER"
 ```
 
-Create the environment after selecting an available SCC Python module:
+The GPU job verifies all 12 labels, provenance, and every window file before it
+downloads AST or begins training.
+
+## MERT probe
+
+Use the shared clone on `main`:
 
 ```bash
-module avail python3
-module load python3/<available-version>
-python -m venv "/projectnb/rise-grid/venvs/$USER/mert"
+cd /project/rise-grid/Tariq/instrument-robustness
+git switch main
+git pull --ff-only origin main
+```
+
+Create or reactivate the MERT environment:
+
+```bash
+python3 -m venv "/projectnb/rise-grid/venvs/$USER/mert"  # first time only
 source "/projectnb/rise-grid/venvs/$USER/mert/bin/activate"
 python -m pip install --upgrade pip
 python -m pip install -e ".[mert]"
 ```
 
-Submit from the repository root. The job requests one GPU, extracts only train/validation embeddings,
-and then tunes the frozen probe on validation macro-F1:
+MERT needs the current fingerprinted Step-5 window audio—not `download_data.py` and not the retired
+9-class archives. Use the shared project data root:
 
 ```bash
-qsub scc/mert_probe.qsub
+export RISE_DATA_ROOT=/projectnb/rise-grid/rise-data
+```
+
+If `$RISE_DATA_ROOT/pipeline/windows.csv` or `$RISE_DATA_ROOT/work/windows/` is absent, submit the
+CPU preparation job and hold the train/validation GPU job behind it:
+
+```bash
+prep_job=$(qsub -terse -v RISE_DATA_ROOT="$RISE_DATA_ROOT" scc/mert_prepare.qsub)
+qsub -hold_jid "$prep_job" -v RISE_DATA_ROOT="$RISE_DATA_ROOT" scc/mert_probe.qsub
 qstat -u "$USER"
 ```
 
-The job intentionally has no MERT test-extraction or test-evaluation path yet.
+If the corrected Step-5 data already exists, submit only:
+
+```bash
+qsub -v RISE_DATA_ROOT="$RISE_DATA_ROOT" scc/mert_probe.qsub
+```
+
+That GPU job extracts only train/validation embeddings and selects the probe using validation
+macro-F1. It cannot access test. When it finishes, inspect and freeze:
+
+```text
+artifacts/mert/validation_summary.json
+artifacts/mert/validation_search.csv
+```
+
+Only after accepting the validation choice, submit the separate final job:
+
+```bash
+qsub -v RISE_DATA_ROOT="$RISE_DATA_ROOT" scc/mert_finalize.qsub
+```
+
+The final job refits on train+validation, extracts test with the exact saved MERT revision, evaluates
+test once, and writes a guard record that prevents a second test access.

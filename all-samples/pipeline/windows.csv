@@ -705,7 +705,7 @@ work/windows/bassoon/Gs3/bassoon_Gs3_025_piano_normal_w000.wav,bassoon,train,bas
 work/windows/bassoon/Gs3/bassoon_Gs3_05_forte_normal_w000.wav,bassoon,train,bassoon/Gs3/bassoon_Gs3_05_forte_normal.mp3,0.0,1.37,0.05104,0.1
 work/windows/bassoon/Gs3/bassoon_Gs3_05_fortissimo_normal_w000.wav,bassoon,train,bassoon/Gs3/bassoon_Gs3_05_fortissimo_normal.mp3,0.0,1.37,0.05342,0.1
 work/windows/bassoon/Gs3/bassoon_Gs3_05_mezzo-forte_normal_w000.wav,bassoon,train,bassoon/Gs3/bassoon_Gs3_05_mezzo-forte_normal.mp3,0.0,0.2786,0.04524,0.1
-work/windows/bassoon/Gs3/bassoon_Gs3_05_mezzo-piano_normal_w000.wav,bassoon,train,bassoon/Gs3/bassoon_Gs3_05_mezzo-piano_normal.mp3,0.0,0.3019,0.03254,0.1
+work/windows/bassoon/Gs3/bassoon_Gs3_05_mezzo-piano_normal_w000.wav,bassoon,train,bassoon/Gs3/bassoon_Gs3_05_mezzo-piano_normal.mp3,0.0,0.3019,0.03253,0.1
 work/windows/bassoon/Gs3/bassoon_Gs3_05_piano_normal_w000.wav,bassoon,train,bassoon/Gs3/bassoon_Gs3_05_piano_normal.mp3,0.0,0.3918,0.01784,0.1
 work/windows/bassoon/Gs3/bassoon_Gs3_15_mezzo-piano_normal_w000.wav,bassoon,train,bassoon/Gs3/bassoon_Gs3_15_mezzo-piano_normal.mp3,0.0,1.3003,0.04316,0.1
 work/windows/bassoon/Gs3/bassoon_Gs3_15_piano_normal_w000.wav,bassoon,train,bassoon/Gs3/bassoon_Gs3_15_piano_normal.mp3,0.0,1.2539,0.02413,0.1
@@ -1055,7 +1055,7 @@ work/windows/cello/Cs4/cello_Cs4_15_fortissimo_arco-normal_w000.wav,cello,test,c
 work/windows/cello/Cs4/cello_Cs4_15_mezzo-piano_arco-normal_w000.wav,cello,test,cello/Cs4/cello_Cs4_15_mezzo-piano_arco-normal.mp3,0.0,2.2988,0.03543,0.1
 work/windows/cello/Cs4/cello_Cs4_15_pianissimo_arco-normal_w000.wav,cello,test,cello/Cs4/cello_Cs4_15_pianissimo_arco-normal.mp3,0.0,2.2059,0.02433,0.1
 work/windows/cello/Cs4/cello_Cs4_1_forte_arco-normal_w000.wav,cello,test,cello/Cs4/cello_Cs4_1_forte_arco-normal.mp3,0.0,1.0217,0.08017,0.1
-work/windows/cello/Cs4/cello_Cs4_1_fortissimo_arco-normal_w000.wav,cello,test,cello/Cs4/cello_Cs4_1_fortissimo_arco-normal.mp3,0.0,0.952,0.0933,0.1
+work/windows/cello/Cs4/cello_Cs4_1_fortissimo_arco-normal_w000.wav,cello,test,cello/Cs4/cello_Cs4_1_fortissimo_arco-normal.mp3,0.0,0.952,0.09329,0.1
 work/windows/cello/Cs4/cello_Cs4_1_mezzo-piano_arco-normal_w000.wav,cello,test,cello/Cs4/cello_Cs4_1_mezzo-piano_arco-normal.mp3,0.0,1.0913,0.06051,0.1
 work/windows/cello/Cs4/cello_Cs4_1_pianissimo_arco-normal_w000.wav,cello,test,cello/Cs4/cello_Cs4_1_pianissimo_arco-normal.mp3,0.0,1.1262,0.0273,0.1
 work/windows/cello/Cs5/cello_Cs5_025_forte_arco-normal_w000.wav,cello,val,cello/Cs5/cello_Cs5_025_forte_arco-normal.mp3,0.0,0.4876,0.05108,0.1
@@ -2984,7 +2984,7 @@ work/windows/double-bass/Fs1/double-bass_Fs1_15_molto-pianissimo_arco-normal_w00
 work/windows/double-bass/Fs1/double-bass_Fs1_1_forte_arco-normal_w000.wav,double-bass,train,double-bass/Fs1/double-bass_Fs1_1_forte_arco-normal.mp3,0.0,1.0681,0.17005,0.1
 work/windows/double-bass/Fs1/double-bass_Fs1_1_fortissimo_arco-normal_w000.wav,double-bass,train,double-bass/Fs1/double-bass_Fs1_1_fortissimo_arco-normal.mp3,0.0,1.1842,0.17973,0.1
 work/windows/double-bass/Fs1/double-bass_Fs1_1_mezzo-forte_arco-normal_w000.wav,double-bass,train,double-bass/Fs1/double-bass_Fs1_1_mezzo-forte_arco-normal.mp3,0.0,1.2771,0.11439,0.1
-work/windows/double-bass/Fs1/double-bass_Fs1_1_mezzo-piano_arco-normal_w000.wav,double-bass,train,double-bass/Fs1/double-bass_Fs1_1_mezzo-piano_arco-normal.mp3,0.0,1.4629,0.04739,0.1
+work/windows/double-bass/Fs1/double-bass_Fs1_1_mezzo-piano_arco-normal_w000.wav,double-bass,train,double-bass/Fs1/double-bass_Fs1_1_mezzo-piano_arco-normal.mp3,0.0,1.4629,0.0474,0.1
 work/windows/double-bass/Fs1/double-bass_Fs1_1_molto-pianissimo_arco-normal_w000.wav,double-bass,train,double-bass/Fs1/double-bass_Fs1_1_molto-pianissimo_arco-normal.mp3,0.0,1.5093,0.08932,0.1
 work/windows/double-bass/Fs2/double-bass_Fs2_025_forte_arco-normal_w000.wav,double-bass,train,double-bass/Fs2/double-bass_Fs2_025_forte_arco-normal.mp3,0.0,0.4644,0.14016,0.1
 work/windows/double-bass/Fs2/double-bass_Fs2_025_fortissimo_arco-normal_w000.wav,double-bass,train,double-bass/Fs2/double-bass_Fs2_025_fortissimo_arco-normal.mp3,0.0,0.5108,0.12641,0.1

@@ -84,6 +84,32 @@ def load_mert_examples(
     return examples
 
 
+def validate_mert_windows(
+    *,
+    splits=("train", "val", "test"),
+    windows_csv: str | Path = PIPE / "windows.csv",
+    data_root: str | Path = ROOT,
+) -> dict[str, int]:
+    """Verify that every requested split contains all configured labels and window files."""
+    counts = {}
+    expected = set(TARGET_LABELS)
+    for split in splits:
+        examples = load_mert_examples(
+            split,
+            windows_csv=windows_csv,
+            data_root=data_root,
+        )
+        observed = {example.label for example in examples}
+        if observed != expected:
+            raise ValueError(
+                f"{split} labels do not match TARGET_LABELS; "
+                f"missing={sorted(expected - observed)}, "
+                f"unexpected={sorted(observed - expected)}"
+            )
+        counts[split] = len(examples)
+    return counts
+
+
 def load_mert_embeddings(
     split: str,
     *,

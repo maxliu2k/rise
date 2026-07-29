@@ -10,7 +10,11 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 
-from instrument_robustness.ast_data import make_ast_dataloader, resolve_ast_labels
+from instrument_robustness.ast_data import (
+    make_ast_dataloader,
+    resolve_ast_labels,
+    validate_ast_window_files,
+)
 from instrument_robustness.config import (
     DATA_ROOT,
     INSTRUMENT_FAMILY,
@@ -37,6 +41,43 @@ def _macro_f1(
         recall = true_positive / support if support else 0.0
         scores.append(2 * precision * recall / (precision + recall) if precision + recall else 0.0)
     return float(np.mean(scores))
+
+
+def _balanced_accuracy(
+    true_labels: np.ndarray,
+    predicted_labels: np.ndarray,
+    num_labels: int,
+) -> float:
+    recalls = []
+    for index in range(num_labels):
+        actual = true_labels == index
+        support = int(actual.sum())
+        recall = (
+            float((actual & (predicted_labels == index)).sum()) / support
+            if support
+            else 0.0
+        )
+        recalls.append(recall)
+    return float(np.mean(recalls))
+
+
+def _matthews_correlation(
+    true_labels: np.ndarray,
+    predicted_labels: np.ndarray,
+    num_labels: int,
+) -> float:
+    confusion = np.zeros((num_labels, num_labels), dtype=np.int64)
+    np.add.at(confusion, (true_labels, predicted_labels), 1)
+    correct = float(np.trace(confusion))
+    total = float(confusion.sum())
+    true_totals = confusion.sum(axis=1, dtype=np.float64)
+    predicted_totals = confusion.sum(axis=0, dtype=np.float64)
+    numerator = correct * total - float(np.dot(true_totals, predicted_totals))
+    denominator = np.sqrt(
+        (total**2 - float(np.dot(predicted_totals, predicted_totals)))
+        * (total**2 - float(np.dot(true_totals, true_totals)))
+    )
+    return float(numerator / denominator) if denominator else 0.0
 
 
 def _balanced_class_weights(labels, num_labels: int) -> torch.Tensor:
@@ -104,10 +145,15 @@ def _run_epoch(
     true_array = np.asarray(true_labels)
     predicted_array = np.asarray(predicted_labels)
     macro_f1 = _macro_f1(true_array, predicted_array, num_labels)
+    balanced_accuracy = _balanced_accuracy(true_array, predicted_array, num_labels)
+    mcc = _matthews_correlation(true_array, predicted_array, num_labels)
     metrics = {
         "loss": total_loss / count,
         "accuracy": accuracy,
         "accuracy_pct": round(100 * accuracy, 2),
+        "balanced_accuracy": balanced_accuracy,
+        "balanced_accuracy_pct": round(100 * balanced_accuracy, 2),
+        "mcc": mcc,
         "macro_f1": macro_f1,
         "macro_f1_pct": round(100 * macro_f1, 2),
     }
@@ -153,10 +199,15 @@ def _write_test_reports(
 
     accuracy = float((true_labels == predicted_labels).mean())
     macro_f1 = float(np.mean(per_instrument_f1))
+    balanced_accuracy = _balanced_accuracy(true_labels, predicted_labels, len(label_names))
+    mcc = _matthews_correlation(true_labels, predicted_labels, len(label_names))
     summary = {
         "test_clips": int(true_labels.size),
         "accuracy": accuracy,
         "accuracy_pct": round(100 * accuracy, 2),
+        "balanced_accuracy": balanced_accuracy,
+        "balanced_accuracy_pct": round(100 * balanced_accuracy, 2),
+        "mcc": mcc,
         "macro_f1": macro_f1,
         "macro_f1_pct": round(100 * macro_f1, 2),
     }
@@ -220,6 +271,8 @@ def train(
     labels = resolve_ast_labels(manifest_path)
     num_labels = len(labels)
     print(f"AST classes ({num_labels}): {', '.join(labels)}", flush=True)
+    window_count = validate_ast_window_files(manifest_path)
+    print(f"AST windows verified: {window_count}", flush=True)
 
     extractor = build_ast_extractor()
     loader_args = {
@@ -252,8 +305,7 @@ def train(
             flush=True,
         )
 
-    best_macro_f1 = float("-inf")
-    best_accuracy = float("-inf")
+    best_score = (float("-inf"), float("-inf"), float("-inf"))
     best_epoch = None
     history = []
     for epoch in range(1, epochs + 1):
@@ -277,21 +329,20 @@ def train(
         history.append(result)
         print(
             f"epoch {epoch}/{epochs} | train loss {train_metrics['loss']:.4f} "
-            f"acc {train_metrics['accuracy']:.3f} macro-F1 {train_metrics['macro_f1']:.3f} | "
+            f"balanced-acc {train_metrics['balanced_accuracy']:.3f} "
+            f"MCC {train_metrics['mcc']:.3f} | "
             f"val loss {val_metrics['loss']:.4f} acc {val_metrics['accuracy']:.3f} "
-            f"macro-F1 {val_metrics['macro_f1']:.3f}"
+            f"balanced-acc {val_metrics['balanced_accuracy']:.3f} "
+            f"MCC {val_metrics['mcc']:.3f}"
         )
 
-        is_better = (
-            val_metrics["macro_f1"] > best_macro_f1
-            or (
-                val_metrics["macro_f1"] == best_macro_f1
-                and val_metrics["accuracy"] > best_accuracy
-            )
+        score = (
+            val_metrics["balanced_accuracy"],
+            val_metrics["mcc"],
+            val_metrics["accuracy"],
         )
-        if is_better:
-            best_macro_f1 = val_metrics["macro_f1"]
-            best_accuracy = val_metrics["accuracy"]
+        if score > best_score:
+            best_score = score
             best_epoch = epoch
             model.save_pretrained(output_dir)
             extractor.save_pretrained(output_dir)
@@ -315,7 +366,7 @@ def train(
     metrics = {
         "labels": labels,
         "num_labels": num_labels,
-        "selection_metric": "validation_macro_f1",
+        "selection_metric": "validation_balanced_accuracy",
         "best_epoch": best_epoch,
         "class_weights": (
             {
@@ -339,7 +390,8 @@ def train(
     (output_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
     print(
         f"test loss {test_metrics['loss']:.4f} | acc {test_metrics['accuracy']:.3f} "
-        f"| macro-F1 {test_metrics['macro_f1']:.3f}"
+        f"| balanced-acc {test_metrics['balanced_accuracy']:.3f} "
+        f"| MCC {test_metrics['mcc']:.3f}"
     )
     print(f"wrote test reports to {output_dir}")
     return metrics

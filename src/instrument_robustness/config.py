@@ -136,6 +136,7 @@ AST_SR = 16000
 AST_MODEL = "MIT/ast-finetuned-audioset-10-10-0.4593"
 MERT_SR = 24000
 MERT_MODEL = "m-a-p/MERT-v1-95M"
+MERT_REVISION = "12af15fef9d0ac838c3f475bfbbf26d2060dd4f5"
 
 MANIFEST_IN = DATA_ROOT / "manifest.csv"          # written by prep_data.py -- the canonical index
 MANIFEST_FINGERPRINT = DATA_ROOT / "manifest_fingerprint.json"

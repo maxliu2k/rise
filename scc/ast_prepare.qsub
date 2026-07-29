@@ -1,0 +1,36 @@
+#!/bin/bash -l
+
+#$ -N rise_ast_prepare
+#$ -j y
+#$ -pe omp 4
+#$ -l mem_per_core=8G
+#$ -l h_rt=8:00:00
+
+set -eo pipefail
+cd "$SGE_O_WORKDIR"
+
+module load miniconda
+module load academic-ml/spring-2026
+conda activate spring-2026-pyt
+set -u
+
+export PYTHONPATH="$PWD/src${PYTHONPATH:+:$PYTHONPATH}"
+export RISE_DATA_ROOT="${RISE_DATA_ROOT:?Submit with qsub -v RISE_DATA_ROOT=/projectnb/... scc/ast_prepare.qsub}"
+export OMP_NUM_THREADS="$NSLOTS"
+export MKL_NUM_THREADS="$NSLOTS"
+export OPENBLAS_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+export NUMBA_NUM_THREADS=1
+export PYTHONUNBUFFERED=1
+
+mkdir -p "$RISE_DATA_ROOT"
+
+python -m instrument_robustness.prep_data
+python -m instrument_robustness.step0_filter
+python -m instrument_robustness.step1_resample
+python -m instrument_robustness.step2_trim
+python -m instrument_robustness.step3_split
+python -m instrument_robustness.step4_window
+python -m instrument_robustness.step5_normalize
+
+python -c "from instrument_robustness.ast_data import resolve_ast_labels, validate_ast_window_files; print('AST labels:', resolve_ast_labels()); print('AST windows:', validate_ast_window_files())"

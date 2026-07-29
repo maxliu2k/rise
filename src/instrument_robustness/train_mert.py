@@ -14,7 +14,7 @@ import pandas as pd
 import sklearn
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score
 
-from instrument_robustness.config import TARGET_LABELS, config_fingerprint
+from instrument_robustness.config import MAX_IMBALANCE, TARGET_LABELS, config_fingerprint
 from instrument_robustness.mert_data import (
     MERT_FEATURE_DIR,
     load_mert_embedding_metadata,
@@ -24,6 +24,12 @@ from instrument_robustness.mert_data import (
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "artifacts" / "mert"
+VALIDATION_OUTPUT_NAMES = (
+    "validation_search.csv",
+    "validation_confusion_matrix.csv",
+    "best_probe.pt",
+    "validation_summary.json",
+)
 
 
 def sha256(path: Path) -> str:
@@ -79,6 +85,44 @@ def seed_everything(seed: int, torch) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
+def class_weight_vector(labels: np.ndarray) -> np.ndarray | None:
+    """Use inverse-frequency weights when the configured imbalance threshold is exceeded."""
+    counts = np.bincount(np.asarray(labels, dtype=np.int64), minlength=len(TARGET_LABELS))
+    missing = np.flatnonzero(counts == 0)
+    if len(missing):
+        raise ValueError(
+            "Cannot train the MERT probe with missing classes: "
+            f"{[TARGET_LABELS[index] for index in missing]}"
+        )
+    if counts.max() / counts.min() <= MAX_IMBALANCE:
+        return None
+    return (counts.sum() / (len(TARGET_LABELS) * counts)).astype(np.float32)
+
+
+def _train_epoch(
+    model,
+    optimizer,
+    criterion,
+    X,
+    y,
+    *,
+    batch_size: int,
+    generator,
+    device: str,
+    torch,
+) -> None:
+    model.train()
+    order = torch.randperm(len(y), generator=generator).numpy()
+    for start in range(0, len(order), batch_size):
+        indices = order[start : start + batch_size]
+        inputs = torch.from_numpy(X[indices]).to(device)
+        targets = torch.from_numpy(y[indices]).to(device)
+        optimizer.zero_grad(set_to_none=True)
+        loss = criterion(model(inputs), targets)
+        loss.backward()
+        optimizer.step()
+
+
 def predict(model, X, *, batch_size: int, device: str, torch) -> np.ndarray:
     model.eval()
     predictions: list[np.ndarray] = []
@@ -126,11 +170,17 @@ def train_candidate(
     device: str,
     torch,
     MERTProbe,
+    class_weights: np.ndarray | None,
 ):
     seed_everything(seed, torch)
     model = MERTProbe(len(TARGET_LABELS)).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-    criterion = torch.nn.CrossEntropyLoss()
+    weight = (
+        None
+        if class_weights is None
+        else torch.from_numpy(class_weights).to(device)
+    )
+    criterion = torch.nn.CrossEntropyLoss(weight=weight)
     generator = torch.Generator().manual_seed(seed)
 
     best_state = None
@@ -139,16 +189,17 @@ def train_candidate(
     stale_epochs = 0
 
     for epoch in range(1, max_epochs + 1):
-        model.train()
-        order = torch.randperm(len(y_train), generator=generator).numpy()
-        for start in range(0, len(order), batch_size):
-            indices = order[start : start + batch_size]
-            inputs = torch.from_numpy(X_train[indices]).to(device)
-            targets = torch.from_numpy(y_train[indices]).to(device)
-            optimizer.zero_grad(set_to_none=True)
-            loss = criterion(model(inputs), targets)
-            loss.backward()
-            optimizer.step()
+        _train_epoch(
+            model,
+            optimizer,
+            criterion,
+            X_train,
+            y_train,
+            batch_size=batch_size,
+            generator=generator,
+            device=device,
+            torch=torch,
+        )
 
         predictions = predict(
             model,
@@ -184,8 +235,61 @@ def train_candidate(
     return model, best_state, best_metrics, best_epoch, epoch
 
 
+def train_fixed_epochs(
+    X,
+    y,
+    *,
+    learning_rate: float,
+    batch_size: int,
+    epochs: int,
+    seed: int,
+    device: str,
+    torch,
+    MERTProbe,
+    class_weights: np.ndarray | None,
+):
+    """Fit the frozen-backbone probe for a validation-selected number of epochs."""
+    if epochs <= 0:
+        raise ValueError("epochs must be greater than zero")
+    seed_everything(seed, torch)
+    model = MERTProbe(len(TARGET_LABELS)).to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    weight = (
+        None
+        if class_weights is None
+        else torch.from_numpy(class_weights).to(device)
+    )
+    criterion = torch.nn.CrossEntropyLoss(weight=weight)
+    generator = torch.Generator().manual_seed(seed)
+    for epoch in range(1, epochs + 1):
+        _train_epoch(
+            model,
+            optimizer,
+            criterion,
+            X,
+            y,
+            batch_size=batch_size,
+            generator=generator,
+            device=device,
+            torch=torch,
+        )
+        print(f"[final fit] epoch {epoch}/{epochs}", flush=True)
+    return model
+
+
 def main() -> None:
     args = parse_args()
+    output_dir = Path(args.output_dir)
+    existing = [
+        output_dir / name
+        for name in VALIDATION_OUTPUT_NAMES
+        if (output_dir / name).exists()
+    ]
+    if existing:
+        raise FileExistsError(
+            "Refusing to overwrite an existing MERT validation run: "
+            + ", ".join(path.name for path in existing)
+        )
     try:
         import torch
         from instrument_robustness.mert_probe import MERTProbe
@@ -203,6 +307,7 @@ def main() -> None:
     val_metadata = load_mert_embedding_metadata("val", feature_dir=args.feature_dir)
     if train_metadata != val_metadata:
         raise ValueError("Train and validation MERT embeddings use different extractors")
+    class_weights = class_weight_vector(y_train)
 
     results = []
     checkpoints = []
@@ -221,6 +326,7 @@ def main() -> None:
             device=device,
             torch=torch,
             MERTProbe=MERTProbe,
+            class_weights=class_weights,
         )
         elapsed = perf_counter() - started
         results.append(
@@ -251,7 +357,6 @@ def main() -> None:
     best_index = int(best_row["candidate"]) - 1
     best_model, best_state, best_metrics = checkpoints[best_index]
 
-    output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     search_path = output_dir / "validation_search.csv"
     confusion_path = output_dir / "validation_confusion_matrix.csv"
@@ -274,6 +379,9 @@ def main() -> None:
             "label_order": TARGET_LABELS,
             "learning_rate": float(best_row["learning_rate"]),
             "layer_weights": best_model.layer_weights(),
+            "class_weights": (
+                None if class_weights is None else class_weights.tolist()
+            ),
             "config_fingerprint": config_fingerprint(),
         },
         model_path,
@@ -300,8 +408,29 @@ def main() -> None:
         "validation_examples": int(len(y_val)),
         "model_fit_splits": ["train"],
         "backbone_frozen": True,
+        "class_weight_policy": {
+            "name": "inverse_frequency_if_max_min_exceeds_threshold",
+            "threshold": MAX_IMBALANCE,
+            "train_max_min_ratio": float(
+                np.bincount(y_train, minlength=len(TARGET_LABELS)).max()
+                / np.bincount(y_train, minlength=len(TARGET_LABELS)).min()
+            ),
+            "weights": (
+                None
+                if class_weights is None
+                else {
+                    label: float(class_weights[index])
+                    for index, label in enumerate(TARGET_LABELS)
+                }
+            ),
+        },
         "embedding_schema": train_metadata,
         "test_evaluated": False,
+        "final_test_policy": {
+            "final_fit_splits": ["train", "val"],
+            "epochs": "validation-selected best_epoch",
+            "test_extraction_and_evaluations_allowed": 1,
+        },
         "input_files": {
             "train": {
                 "path": str(train_path.resolve()),

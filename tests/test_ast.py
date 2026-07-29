@@ -10,18 +10,31 @@ from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
+import soundfile as sf
 
 if importlib.util.find_spec("torch") is None:
     raise unittest.SkipTest("PyTorch is optional; install the ast extra to run AST tests")
 
-from instrument_robustness.ast_data import ASTWindowDataset, resolve_ast_labels
+from instrument_robustness.ast_data import (
+    ASTWindowDataset,
+    _load_window,
+    resolve_ast_labels,
+    validate_ast_window_files,
+)
 from instrument_robustness.config import (
+    SR,
     TARGET_LABELS,
+    WINDOW_S,
     artifact_fingerprint_path,
     write_artifact_fingerprint,
 )
 from instrument_robustness.pretrained_extractors import build_ast_model
-from instrument_robustness.train_ast import _balanced_class_weights, _write_test_reports
+from instrument_robustness.train_ast import (
+    _balanced_accuracy,
+    _balanced_class_weights,
+    _matthews_correlation,
+    _write_test_reports,
+)
 
 
 NEW_LABELS = {"double-bass", "french-horn", "oboe"}
@@ -109,6 +122,62 @@ class ASTLabelTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "no provenance sidecar"):
                 resolve_ast_labels(manifest_path)
 
+    def test_rejects_manifest_with_missing_window_audio(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir)
+            manifest_path = root / "windows.csv"
+            write_manifest(manifest_path, TWELVE_LABELS)
+
+            with self.assertRaisesRegex(FileNotFoundError, "AST window file"):
+                validate_ast_window_files(manifest_path, root)
+
+    def test_validates_all_manifest_window_audio(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir)
+            manifest_path = root / "windows.csv"
+            write_manifest(manifest_path, TWELVE_LABELS)
+            with manifest_path.open(newline="") as manifest:
+                rows = list(csv.DictReader(manifest))
+            for row in rows:
+                window_path = root / row["window_path"]
+                window_path.parent.mkdir(parents=True, exist_ok=True)
+                window_path.touch()
+
+            self.assertEqual(
+                validate_ast_window_files(manifest_path, root),
+                len(rows),
+            )
+
+    def test_rejects_window_with_wrong_sample_count(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            window_path = Path(temporary_dir) / "short.wav"
+            sf.write(window_path, np.ones(SR, dtype=np.float32), SR)
+
+            with self.assertRaisesRegex(ValueError, "Expected exactly"):
+                _load_window(window_path)
+
+    def test_imbalance_metrics_reward_per_class_recall(self) -> None:
+        true_labels = np.asarray([0, 0, 0, 1, 2])
+        perfect_predictions = true_labels.copy()
+        collapsed_predictions = np.zeros_like(true_labels)
+
+        self.assertEqual(
+            _balanced_accuracy(true_labels, perfect_predictions, 3),
+            1.0,
+        )
+        self.assertEqual(
+            _matthews_correlation(true_labels, perfect_predictions, 3),
+            1.0,
+        )
+        self.assertAlmostEqual(
+            _balanced_accuracy(true_labels, collapsed_predictions, 3),
+            1 / 3,
+        )
+        self.assertEqual(
+            _matthews_correlation(true_labels, collapsed_predictions, 3),
+            0.0,
+        )
+
     def test_balanced_weights_favor_underrepresented_classes(self) -> None:
         labels = [0] * 8 + [1] * 2 + [2]
         weights = _balanced_class_weights(labels, 3)
@@ -158,6 +227,8 @@ class ASTLabelTests(unittest.TestCase):
                 {"strings", "woodwinds", "brass"},
             )
             self.assertEqual(reports["summary"]["macro_f1"], 1.0)
+            self.assertEqual(reports["summary"]["balanced_accuracy"], 1.0)
+            self.assertEqual(reports["summary"]["mcc"], 1.0)
 
 
 if __name__ == "__main__":

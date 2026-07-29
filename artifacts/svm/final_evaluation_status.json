@@ -1,8 +1,9 @@
 {
-  "artifact": "windows.csv",
-  "sha256": "5f4bd83279a7623f473848beac03e0599f29490c0fa726ae3ff28b56f1dcb961",
-  "stage": "step5_normalize",
-  "fingerprint": {
+  "state": "complete",
+  "started_at_utc": "2026-07-28T19:47:04.266942+00:00",
+  "completed_at_utc": "2026-07-28T19:47:04.427506+00:00",
+  "test_evaluation_count": 1,
+  "config_fingerprint": {
     "fingerprint_version": 2,
     "archive_base": "https://archive.org/download/philharmonicorchestrasamples",
     "sr": 22050,
@@ -84,5 +85,9 @@
       "viola",
       "violin"
     ]
+  },
+  "test_summary": {
+    "path": "/Users/allanyu/RISE Projects/Music/artifacts/svm/test_summary.json",
+    "sha256": "5ef97e89f3b28e72d1966ea31cacaee8a001345a414e281089d2b0ca18c3d7b7"
   }
 }

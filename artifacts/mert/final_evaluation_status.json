@@ -1,8 +1,10 @@
 {
-  "artifact": "windows.csv",
-  "sha256": "5f4bd83279a7623f473848beac03e0599f29490c0fa726ae3ff28b56f1dcb961",
-  "stage": "step5_normalize",
-  "fingerprint": {
+  "state": "complete",
+  "started_at_utc": "2026-07-28T23:56:42.032468+00:00",
+  "completed_at_utc": "2026-07-28T23:57:36.050752+00:00",
+  "test_access_count": 1,
+  "test_evaluation_count": 1,
+  "config_fingerprint": {
     "fingerprint_version": 2,
     "archive_base": "https://archive.org/download/philharmonicorchestrasamples",
     "sr": 22050,
@@ -84,5 +86,9 @@
       "viola",
       "violin"
     ]
+  },
+  "test_summary": {
+    "path": "/project/rise-grid/Tariq/instrument-robustness/artifacts/mert/test_summary.json",
+    "sha256": "387845d6f42376df0789bbb4592cb1821042c6387839cdb6fe6a505f90c8d174"
   }
 }
