@@ -31,6 +31,7 @@ import soundfile as sf
 from instrument_robustness.config import (
     MANIFEST_FINGERPRINT,
     MANIFEST_IN,
+    MANIFEST_PRODUCER_STAGES,
     ROOT,
     SR,
     TARGET_RMS,
@@ -93,7 +94,7 @@ def dataset_build_identity(
     windows_csv = Path(windows_csv)
     assert_artifact_fingerprint(
         manifest_csv,
-        "prep_data",
+        MANIFEST_PRODUCER_STAGES,
         fingerprint_path=manifest_fingerprint,
     )
     assert_artifact_fingerprint(windows_csv, "step5_normalize")

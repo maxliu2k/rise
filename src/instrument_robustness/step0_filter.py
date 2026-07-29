@@ -26,6 +26,7 @@ from instrument_robustness.config import (
     MANIFEST_FINGERPRINT,
     MANIFEST_IN,
     MANIFEST_LABELED,
+    MANIFEST_PRODUCER_STAGES,
     ROOT,
     STRICT_ARTICULATIONS,
     TARGET_LABELS,
@@ -36,7 +37,7 @@ from instrument_robustness.config import (
 def main():
     assert_artifact_fingerprint(
         MANIFEST_IN,
-        "prep_data",
+        MANIFEST_PRODUCER_STAGES,
         fingerprint_path=MANIFEST_FINGERPRINT,
     )
     df = pd.read_csv(MANIFEST_IN)

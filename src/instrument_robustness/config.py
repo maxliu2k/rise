@@ -120,6 +120,12 @@ MERT_SR = 24000
 MERT_MODEL = "m-a-p/MERT-v1-95M"
 MERT_REVISION = "12af15fef9d0ac838c3f475bfbbf26d2060dd4f5"
 
+# manifest.csv has two legitimate producers: prep_data (Philharmonia, fetched from the
+# Internet Archive) and build_tinysol_manifest (TinySOL, indexed from local WAVs). Both emit
+# the same schema and feed the identical downstream steps, so every stage that verifies the
+# manifest's provenance accepts either. Kept here so those call sites cannot drift apart.
+MANIFEST_PRODUCER_STAGES = ("prep_data", "build_tinysol_manifest")
+
 MANIFEST_IN = DATA_ROOT / "manifest.csv"          # written by prep_data.py -- the canonical index
 MANIFEST_FINGERPRINT = DATA_ROOT / "manifest_fingerprint.json"
 REPORT = PIPE / "pipeline_report.txt"
@@ -311,9 +317,24 @@ def assert_artifact_fingerprint(
             "Rebuild the pipeline stage."
         )
     assert_fingerprint(payload.get("fingerprint"), str(artifact_path))
-    if payload.get("stage") != expected_stage:
+    # `expected_stage` may name one producer or several. An artifact can legitimately have more
+    # than one: manifest.csv comes from prep_data for Philharmonia and from
+    # build_tinysol_manifest for TinySOL, and both feed the identical downstream steps. Accepting
+    # a collection keeps the check strict -- an unrecognised stage still fails -- without forcing
+    # a second dataset to misreport which stage built it.
+    allowed = (
+        {expected_stage}
+        if isinstance(expected_stage, str)
+        else set(expected_stage)
+    )
+    if payload.get("stage") not in allowed:
+        expected_description = (
+            repr(expected_stage)
+            if isinstance(expected_stage, str)
+            else " or ".join(repr(stage) for stage in sorted(allowed))
+        )
         raise StaleArtifactError(
             f"{artifact_path} was produced by stage {payload.get('stage')!r}; "
-            f"expected {expected_stage!r}. Run the missing pipeline step."
+            f"expected {expected_description}. Run the missing pipeline step."
         )
     return payload["fingerprint"]
