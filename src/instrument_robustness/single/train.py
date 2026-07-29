@@ -26,8 +26,12 @@ from ..config import (
 )
 from ..cnn_core import (
     agg, class_weights, evaluate, get_device, LengthBatcher, load_manifest, load_split,
-    MediumCNN, set_seed, spec_augment, train_one_epoch,
+    MediumCNN, MediumCRNN, set_seed, spec_augment, train_one_epoch,
 )
+
+# Selectable architectures. "cnn" is the default and keeps the canonical output paths; anything
+# else writes into outputs/<name>/ so two architectures cannot overwrite each other's results.
+ARCHITECTURES = {"cnn": MediumCNN, "crnn": MediumCRNN}
 
 
 # --------------------------------------------------------------------------- plots
@@ -113,7 +117,7 @@ def plot_misclassified(ids, preds, targets, path, limit=8):
 
 # --------------------------------------------------------------------------- one seed
 
-def run_seed(seed, data, device, on_epoch=None, ckpt_path=None):
+def run_seed(seed, data, device, on_epoch=None, ckpt_path=None, model_cls=None):
     """Train and evaluate one seed. on_epoch(epoch) is called after each epoch (progress UI).
 
     The split is fixed across seeds (built once by prep_data at config.SEED), so only model
@@ -133,7 +137,7 @@ def run_seed(seed, data, device, on_epoch=None, ckpt_path=None):
     val_loader = LengthBatcher(Xva, yva, BATCH_SIZE)
     test_loader = LengthBatcher(Xte, yte, BATCH_SIZE)
 
-    model = MediumCNN().to(device)
+    model = (model_cls or MediumCNN)().to(device)
     criterion = nn.CrossEntropyLoss(weight=weights.to(device) if weights is not None else None)
     # AdamW with WEIGHT_DECAY=0 (the default) is identical to Adam, so the baseline is
     # unchanged; a non-zero config value turns on decoupled weight decay.
@@ -181,6 +185,7 @@ def run_seed(seed, data, device, on_epoch=None, ckpt_path=None):
     # fingerprint travels with the weights: evaluating these against a cache built under a
     # different config yields a plausible, meaningless number that nothing else would catch.
     torch.save({"state_dict": best_state, "seed": seed, "classes": list(CLASSES),
+                "arch": (model_cls or MediumCNN).__name__,
                 "fingerprint": config_fingerprint()}, path)
 
     te_loss, te_bacc, preds, targets = evaluate(model, test_loader, criterion, device)
@@ -213,15 +218,16 @@ def run_seed(seed, data, device, on_epoch=None, ckpt_path=None):
 # --------------------------------------------------------------------------- seed store
 
 
-def save_seed_metrics(seed, result, history, preds, targets):
+def save_seed_metrics(seed, result, history, preds, targets, store=None):
     """Persist one seed's complete result to outputs/seed_metrics/s{seed}.json.
 
     Precondition: `result`, `history`, `preds`, `targets` are run_seed()'s outputs for `seed`.
     Postcondition: the file holds everything needed to rebuild every aggregate, table and plot
     for this seed WITHOUT retraining it, plus the config fingerprint it was produced under.
     """
-    SEED_METRICS_DIR.mkdir(parents=True, exist_ok=True)
-    (SEED_METRICS_DIR / f"s{seed}.json").write_text(json.dumps({
+    store = store if store is not None else SEED_METRICS_DIR
+    store.mkdir(parents=True, exist_ok=True)
+    (store / f"s{seed}.json").write_text(json.dumps({
         "fingerprint": config_fingerprint(),
         "result": result,
         "history": history,
@@ -230,7 +236,7 @@ def save_seed_metrics(seed, result, history, preds, targets):
     }, indent=2))
 
 
-def load_seed_metrics(seeds):
+def load_seed_metrics(seeds, store=None):
     """Load persisted results for every seed in `seeds`, whenever they were trained.
 
     This is why metrics.json cannot silently cover a subset: aggregation reads the canonical
@@ -243,7 +249,8 @@ def load_seed_metrics(seeds):
     Raises StaleArtifactError naming the missing seeds and the exact command to produce them,
     or if any seed was trained under a different config.
     """
-    missing = [s for s in seeds if not (SEED_METRICS_DIR / f"s{s}.json").exists()]
+    store = store if store is not None else SEED_METRICS_DIR
+    missing = [s for s in seeds if not (store / f"s{s}.json").exists()]
     if missing:
         have = [s for s in seeds if s not in missing]
         raise StaleArtifactError(
@@ -253,8 +260,8 @@ def load_seed_metrics(seeds):
             f"{' '.join(str(s) for s in missing)}")
     results, histories, first = [], {}, None
     for s in seeds:
-        d = json.loads((SEED_METRICS_DIR / f"s{s}.json").read_text())
-        assert_fingerprint(d.get("fingerprint"), f"outputs/seed_metrics/s{s}.json")
+        d = json.loads((store / f"s{s}.json").read_text())
+        assert_fingerprint(d.get("fingerprint"), str(store / f"s{s}.json"))
         results.append(d["result"])
         histories[s] = d["history"]
         if first is None:
@@ -271,11 +278,21 @@ def main():
                     help="seeds to run (default: config.SEEDS)")
     ap.add_argument("--progress", action="store_true",
                     help="show a pop-up progress bar (auto-skips if no display)")
+    ap.add_argument("--model", choices=sorted(ARCHITECTURES), default="cnn",
+                    help="architecture to train (default: cnn)")
     args = ap.parse_args()
 
-    OUTPUTS.mkdir(parents=True, exist_ok=True)
+    # The CNN keeps the canonical top-level paths so nothing existing moves or is rewritten.
+    # Any other architecture writes into its own subtree -- outputs/crnn/{metrics,timing}.json,
+    # seed_metrics/, checkpoints and plots -- because a second model writing model_s{seed}.pt and
+    # metrics.json would silently overwrite the CNN results that noise_eval and ensemble_eval read.
+    model_cls = ARCHITECTURES[args.model]
+    out = OUTPUTS if args.model == "cnn" else OUTPUTS / args.model
+    store = SEED_METRICS_DIR if args.model == "cnn" else out / "seed_metrics"
+    out.mkdir(parents=True, exist_ok=True)
     device = get_device()
     print(f"device: {device} | torch {torch.__version__} | seeds {args.seeds}")
+    print(f"architecture: {model_cls.__name__} -> {out}")
     print(f"{len(CLASSES)} classes: {', '.join(CLASSES)}\n")
 
     manifest, splits, by_id = load_manifest()
@@ -309,13 +326,15 @@ def main():
         return cb
 
     for si, seed in enumerate(args.seeds):
-        r, h, preds, targets = run_seed(seed, data, device, on_epoch_for(si, seed))
-        save_seed_metrics(seed, r, h, preds, targets)
+        r, h, preds, targets = run_seed(seed, data, device, on_epoch_for(si, seed),
+                                        ckpt_path=out / f"model_s{seed}.pt",
+                                        model_cls=model_cls)
+        save_seed_metrics(seed, r, h, preds, targets, store=store)
 
     # Aggregate over the CANONICAL seed set, pulling in seeds trained by earlier invocations.
     # Aggregating this run's seeds instead is what let `--seeds 42` followed by
     # `--seeds 43 44` write a 2-seed metrics.json that looked like the full 3-seed result.
-    results, histories, first = load_seed_metrics(list(SEEDS))
+    results, histories, first = load_seed_metrics(list(SEEDS), store=store)
 
     chance = 1.0 / len(CLASSES)
     bacc = agg([r["test_balanced_accuracy"] for r in results])
@@ -361,12 +380,12 @@ def main():
         for n, t, p in top[:6]:
             print(f"    {t:>14} -> {p:<14} {n:>4}")
 
-    plot_confusion(cm_sum, OUTPUTS / "confusion_matrix.png",
+    plot_confusion(cm_sum, out / "confusion_matrix.png",
                    title=f"Confusion matrix — {len(CLASSES)} classes, {len(results)} seeds "
                          f"(row-normalised = recall)")
-    plot_curves(histories, OUTPUTS / "curves.png")
+    plot_curves(histories, out / "curves.png")
     preds, targets = first
-    n_wrong = plot_misclassified(test_ids, preds, targets, OUTPUTS / "misclassified.png")
+    n_wrong = plot_misclassified(test_ids, preds, targets, out / "misclassified.png")
 
     timing = {"device": str(device), "n_seeds": len(results),
               "mean_epoch_s": agg([r["mean_epoch_s"] for r in results]),
@@ -377,8 +396,8 @@ def main():
           f"{timing['total_s_per_seed']['mean']:.0f}s/seed, "
           f"{timing['wall_clock_all_seeds_s']:.0f}s total ({device})")
 
-    (OUTPUTS / "timing.json").write_text(json.dumps(timing, indent=2))
-    (OUTPUTS / "metrics.json").write_text(json.dumps({
+    (out / "timing.json").write_text(json.dumps(timing, indent=2))
+    (out / "metrics.json").write_text(json.dumps({
         "classes": list(CLASSES),
         "n_classes": len(CLASSES),
         "chance_balanced_accuracy": chance,
@@ -388,7 +407,8 @@ def main():
         "articulation_mode": manifest["articulation_mode"],
         "sample_rate": manifest.get("sample_rate"),
         "bitrate_kbps_by_class": manifest.get("bitrate_kbps_by_class"),
-        "n_params": int(sum(p.numel() for p in MediumCNN().parameters())),
+        "architecture": model_cls.__name__,
+        "n_params": int(sum(p.numel() for p in model_cls().parameters())),
         "learning_rate": LEARNING_RATE,
         # raw accuracy and F1 are deliberately not recorded: both pay a collapsed classifier
         # the class prior, and both have floors that drift with the split.
@@ -402,7 +422,7 @@ def main():
         "per_seed": results,
         "timing": timing,
     }, indent=2))
-    print(f"wrote {OUTPUTS / 'metrics.json'}, {OUTPUTS / 'timing.json'}, and plots")
+    print(f"wrote {out / 'metrics.json'}, {out / 'timing.json'}, and plots")
 
     if popup is not None:
         popup.update(total, "done")
