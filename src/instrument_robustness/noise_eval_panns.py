@@ -50,7 +50,20 @@ def build_model(dev):
             return self.head(self.backbone(x)["embedding"])
 
     m = PannsClassifier()
-    m.load_state_dict(torch.load(FEATURES / "panns" / "panns_finetune.pt", map_location="cpu"))
+    ckpt = torch.load(FEATURES / "panns" / "panns_finetune.pt", map_location="cpu")
+    # train_panns now saves {state_dict, label_order, config_fingerprint} instead of a bare
+    # state_dict. Accept both so this runs against checkpoints from either version.
+    state = ckpt["state_dict"] if isinstance(ckpt, dict) and "state_dict" in ckpt else ckpt
+    order = ckpt.get("label_order") if isinstance(ckpt, dict) else None
+    if order is not None and list(order) != list(TARGET_LABELS):
+        # Label index order defines what every prediction MEANS. A mismatch would silently
+        # relabel every output instead of failing, so refuse rather than guess.
+        raise SystemExit(
+            "checkpoint label order does not match TARGET_LABELS.\n"
+            f"  ckpt: {list(order)}\n  cfg : {list(TARGET_LABELS)}\n"
+            "Retrain, or align config.CANONICAL_LABELS."
+        )
+    m.load_state_dict(state)
     return m.eval().to(dev)
 
 
@@ -127,7 +140,7 @@ def main():
     s = pd.DataFrame(summary)
     s.to_csv(OUT / "noise_sweep_summary.csv", index=False)
     print("\n" + "=" * 58)
-    print("NOISE SWEEP — PANNs fine-tune (clean-trained), TinySOL test")
+    print(f"NOISE SWEEP — PANNs fine-tune (clean-trained), {ROOT.name} test")
     print("=" * 58)
     clean_f1 = s[s.condition == "clean"]["macro_f1"].iloc[0]
     print(f"{'condition':<14}{'accuracy':>10}{'macro-F1':>10}{'vs clean':>10}")

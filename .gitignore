@@ -255,6 +255,7 @@ all-samples/pipeline/*
 !all-samples/pipeline/splits.csv
 !all-samples/pipeline/windows.csv
 !all-samples/pipeline/norm_stats.json
+!all-samples/pipeline/noise_sweep_summary.csv
 !all-samples/pipeline/pipeline_report.txt
 
 # --- Re-include: extraction plan docs under all-samples/features/ (docs only, never arrays) ---

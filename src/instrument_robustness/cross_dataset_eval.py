@@ -49,7 +49,11 @@ def build_model(model_path, n_classes, dev):
             return self.head(self.backbone(x)["embedding"])
 
     m = PannsClassifier()
-    m.load_state_dict(torch.load(model_path, map_location="cpu"))
+    ckpt = torch.load(model_path, map_location="cpu")
+    # train_panns saves {state_dict, label_order, config_fingerprint}; older runs saved a bare
+    # state_dict. Accept both.
+    m.load_state_dict(ckpt["state_dict"]
+                      if isinstance(ckpt, dict) and "state_dict" in ckpt else ckpt)
     return m.eval().to(dev)
 
 
