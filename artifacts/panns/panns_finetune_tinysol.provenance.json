@@ -227,5 +227,9 @@
         ]
       }
     }
+  },
+  "release": {
+    "tag": "v1.0-panns-12class",
+    "download_url": "https://github.com/maxliu2k/rise/releases/download/v1.0-panns-12class/panns_finetune_tinysol.pt"
   }
 }
