@@ -45,6 +45,7 @@ from instrument_robustness.noise_sweep import (
     load_esc50_index,
     measured_snr,
     mix_at_snr,
+    noise_preprocessing_protocol,
     read_audio_window,
     sha256_file,
     validate_noise_manifest,
@@ -175,6 +176,7 @@ def write_completed_noise_sweep(root: Path, paths: dict[str, Path]) -> Path:
         },
         "seed_scheme": SEED_SCHEME,
         "one_realization_scaled_to_all_snrs": True,
+        "noise_preprocessing": noise_preprocessing_protocol(),
         "diagnostics": diagnostic_protocol(),
         "provenance_file": provenance.name,
         "provenance_sha256": sha256_file(provenance),
@@ -198,6 +200,7 @@ class Esc50ProvenanceTests(unittest.TestCase):
     def test_white_noise_carries_null_corpus_fields(self) -> None:
         noise, provenance = draw_noise("white", np.random.default_rng(0), {})
         self.assertEqual(noise.shape, (CLIP_LEN,))
+        self.assertAlmostEqual(float(np.mean(noise, dtype=np.float64)), 0.0, places=8)
         # Present-but-None rather than absent, so the provenance CSV has one schema across every
         # noise type instead of ragged columns.
         for field in ("noise_target", "noise_category", "noise_fold"):
@@ -249,6 +252,51 @@ class Esc50ProvenanceTests(unittest.TestCase):
         self.assertEqual(provenance["noise_category"], "pouring_water")
         self.assertEqual(provenance["noise_fold"], 4)
 
+    def test_esc50_crop_is_centered_before_its_power_is_checked(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir)
+            clip_path = root / "audio" / "offset.wav"
+            clip_path.parent.mkdir(parents=True)
+            time = np.arange(CLIP_LEN, dtype=np.float64) / SR
+            waveform = (0.25 + 0.01 * np.sin(2 * np.pi * 440 * time)).astype(
+                np.float32
+            )
+            sf.write(str(clip_path), waveform, SR, subtype="FLOAT")
+            clip = Esc50Clip(path=clip_path, target=17, category="thunderstorm", fold=2)
+            with unittest.mock.patch(
+                "instrument_robustness.noise_sweep.ESC50_ROOT", root
+            ):
+                noise, _ = draw_noise(
+                    "natural",
+                    np.random.default_rng(0),
+                    {"natural": [clip]},
+                )
+
+        self.assertAlmostEqual(float(np.mean(noise, dtype=np.float64)), 0.0, places=8)
+        self.assertGreater(float(np.sqrt(np.mean(noise.astype(np.float64) ** 2))), 1e-3)
+
+    def test_constant_esc50_crop_is_silent_after_centering(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir)
+            clip_path = root / "audio" / "constant.wav"
+            clip_path.parent.mkdir(parents=True)
+            sf.write(
+                str(clip_path),
+                np.full(CLIP_LEN, 0.25, dtype=np.float32),
+                SR,
+                subtype="FLOAT",
+            )
+            clip = Esc50Clip(path=clip_path, target=17, category="thunderstorm", fold=2)
+            with unittest.mock.patch(
+                "instrument_robustness.noise_sweep.ESC50_ROOT", root
+            ):
+                with self.assertRaisesRegex(ValueError, "non-silent centered"):
+                    draw_noise(
+                        "natural",
+                        np.random.default_rng(0),
+                        {"natural": [clip]},
+                    )
+
     def test_manifest_validation_rejects_provenance_without_the_new_columns(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
             root = Path(temporary_dir)
@@ -271,6 +319,31 @@ class Esc50ProvenanceTests(unittest.TestCase):
                     manifest_fingerprint=paths["manifest_fingerprint"],
                 )
         self.assertIn("missing columns", str(caught.exception))
+
+    def test_manifest_validation_rejects_excessive_residual_dc(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir)
+            paths = write_dataset_files(root, all_labels=True)
+            noisy_dir = write_completed_noise_sweep(root, paths)
+            provenance_path = noisy_dir / "noise_provenance.csv"
+            frame = pd.read_csv(provenance_path)
+            frame.loc[0, "noise_dc_power_share"] = 0.5
+            frame.to_csv(provenance_path, index=False)
+            manifest_path = noisy_dir / "noise_manifest.json"
+            manifest = json.loads(manifest_path.read_text())
+            manifest["provenance_sha256"] = sha256_file(provenance_path)
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaises(ValueError) as caught:
+                validate_noise_manifest(
+                    noisy_dir=noisy_dir,
+                    data_root=root,
+                    windows_csv=paths["windows_csv"],
+                    manifest_csv=paths["manifest_csv"],
+                    manifest_fingerprint=paths["manifest_fingerprint"],
+                )
+
+        self.assertIn("residual DC", str(caught.exception))
 
 
 class NoiseTests(unittest.TestCase):
