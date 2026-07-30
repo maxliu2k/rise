@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from instrument_robustness.config import NOISE_TYPES, SNRS
+from instrument_robustness.config import NOISE_TYPES
 from instrument_robustness.robustness_curve import (
     CurvePoint,
     benjamini_hochberg,
@@ -26,11 +26,12 @@ from instrument_robustness.robustness_curve import (
 
 # The measured SVM white-noise curve from snr_pilot, used as a realistic shape.
 SVM_WHITE = {60: 0.9515, 50: 0.8497, 40: 0.5376, 30: 0.2599, 20: 0.0931, 10: 0.0366, 0: 0.0132}
+SVM_SNRS = list(SVM_WHITE)
 SVM_CLEAN = 0.9650
 
 
 def svm_points(snrs=None) -> list[CurvePoint]:
-    snrs = SNRS if snrs is None else snrs
+    snrs = SVM_SNRS if snrs is None else snrs
     return [CurvePoint(float(s), SVM_WHITE[s]) for s in snrs]
 
 
@@ -53,7 +54,7 @@ class Item18SpacingTests(unittest.TestCase):
 
     def test_auc_of_a_flat_curve_equals_its_retention(self) -> None:
         for retention in (1.0, 0.5, 0.25):
-            points = [CurvePoint(float(s), SVM_CLEAN * retention) for s in SNRS]
+            points = [CurvePoint(float(s), SVM_CLEAN * retention) for s in SVM_SNRS]
             self.assertAlmostEqual(
                 robustness_auc(points, SVM_CLEAN)["auc"], retention, places=10
             )
@@ -95,9 +96,9 @@ class Item18SpacingTests(unittest.TestCase):
         self.assertLess(half, 40.0)
 
     def test_snr_at_retention_returns_none_when_never_crossed(self) -> None:
-        flat = [CurvePoint(float(s), SVM_CLEAN) for s in SNRS]
+        flat = [CurvePoint(float(s), SVM_CLEAN) for s in SVM_SNRS]
         self.assertIsNone(snr_at_retention(flat, SVM_CLEAN, target=0.5))
-        floored = [CurvePoint(float(s), 0.001) for s in SNRS]
+        floored = [CurvePoint(float(s), 0.001) for s in SVM_SNRS]
         self.assertIsNone(snr_at_retention(floored, SVM_CLEAN, target=0.5))
 
     def test_an_impossible_target_is_refused(self) -> None:
@@ -177,7 +178,7 @@ class SweepSummaryTests(unittest.TestCase):
             }
         ]
         for noise_type in NOISE_TYPES:
-            for snr in SNRS:
+            for snr in SVM_SNRS:
                 rows.append(
                     {
                         "noise_type": noise_type,
@@ -199,7 +200,7 @@ class SweepSummaryTests(unittest.TestCase):
         self.assertAlmostEqual(result["clean_macro_f1"], SVM_CLEAN)
         self.assertEqual(set(result["curves"]), set(NOISE_TYPES))
         for record in result["curves"].values():
-            self.assertEqual(record["n_points"], len(SNRS))
+            self.assertEqual(record["n_points"], len(SVM_SNRS))
             self.assertGreater(record["auc"], 0.0)
 
     def test_the_clean_row_is_required(self) -> None:

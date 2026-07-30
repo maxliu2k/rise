@@ -181,8 +181,9 @@ commercial use.
 The noise branch starts from the canonical Step-5 **test** windows; train and validation are never
 noised and no model is retrained. It creates one shared float32 noisy test set containing white,
 ESC-50 natural, and ESC-50 mechanical noise at every level in `config.SNRS` — currently
-60, 50, 40, 30, 20, 10, and 0 dB. One realization per window/noise type is scaled across the SNR
-curve so every model receives exactly the same paired inputs.
+60, 50, 40, 30, 20, 10, 0, and -10 dB. Two independent realizations are drawn per
+window/noise type; each realization is scaled across the SNR curve so every model receives exactly
+the same paired inputs.
 
 Pick the grid from evidence before generating anything. `snr_pilot` mixes validation windows on the
 fly, writes no audio, and reports where a model actually degrades:
@@ -191,8 +192,8 @@ fly, writes no audio, and reports where a model actually degrades:
 python -m instrument_robustness.snr_pilot --model svm --noise white
 ```
 
-The current grid came from that command; see `docs/NOISE_PLAN.md` §2 for the measured curve and why it
-spans 60 dB down to 0 dB rather than the narrower band the SVM alone would suggest.
+The frozen grid came from SVM/white and MERT/all-category validation pilots; see
+`docs/NOISE_PLAN.md` §2 for the measured curves and why it spans 60 dB down to -10 dB.
 
 Set `RISE_NOISE_ROOT` to an ESC-50 extraction containing both `audio/` and `meta/esc50.csv`, then
 validate, generate once, and verify the completed manifest:

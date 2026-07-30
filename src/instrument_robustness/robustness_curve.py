@@ -8,23 +8,21 @@ comparisons pair the same replicate number before taking a difference. Treating 
 unrelated curve point creates duplicate SNRs; comparing unmatched draws confounds model differences
 with noise-sampling luck.
 
-AUDIT ITEM 18 -- SPACING. `config.SNRS` is currently 60/50/40/30/20/10/0, which IS uniform at 10 dB,
-so for this exact grid an unweighted mean and a dB-weighted integral differ only by trapezoidal
-endpoint weighting (measured: 0.406 vs 0.390 on the SVM white-noise curve). The tooling is here
-because that property is fragile, not because the current grid violates it:
+AUDIT ITEM 18 -- SPACING. `config.SNRS` currently uses uniform 10 dB steps from 60 through -10.
+The dB-weighted integral is retained so robustness remains comparable when a selected subset,
+pilot grid, or future preregistered protocol is not uniformly spaced:
 
   * adding two levels where a model happens to do well moves the unweighted mean a lot and the
     weighted integral almost not at all. Measured, same SVM curve, adding 55 and 45 dB:
     mean 0.4059 -> 0.4986 (moves 0.093), AUC 0.3902 -> 0.3898 (moves 0.0004).
-  * `--snrs` and `snr_range` both produce non-uniform selections.
-  * any future grid retune -- and item 2 explicitly expects one once a pretrained model is piloted --
-    can break uniformity silently.
+  * `--snrs` and `snr_range` can produce other non-uniform selections.
+  * any future grid retune can change density again.
 
 So: report `robustness_auc`, which is invariant to how densely the curve was sampled.
 `mean_retention` is returned alongside it only so the two can be compared and the gap seen.
 
-AUDIT ITEM 19 -- MULTIPLICITY. A full sweep is 21 noisy conditions per model. Comparing several
-models, and optionally 12 instruments within each, produces hundreds of hypothesis tests.
+AUDIT ITEM 19 -- MULTIPLICITY. A full sweep is 48 noisy condition-replicates per model. Comparing
+several models, and optionally 12 instruments within each, produces hundreds of hypothesis tests.
 `noise_stats` returns a correct p-value for ONE comparison; nothing corrected across the family, so
 at alpha = 0.05 roughly one comparison in twenty looks significant by construction.
 `benjamini_hochberg` controls the expected proportion of false positives among the rejections, and

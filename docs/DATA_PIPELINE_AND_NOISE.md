@@ -218,7 +218,7 @@ three-second window:    [violin sound------][repeat][repeat part]
 | condition | One exact evaluation setting, such as `mechanical noise at 10 dB`. |
 | grid | The complete list of conditions tested, such as all noise types crossed with all SNR levels. |
 | full factorial design | Test every listed combination—for example, every noise type at every SNR—rather than testing only selected pairs. |
-| replicate / repeat | Another independently drawn noise realization under the same condition. The implementation supports this axis, but the current run configuration still requests one realization. |
+| replicate / repeat | Another independently drawn noise realization under the same condition. The frozen protocol uses three so noise-draw variability can be measured. |
 | paired examples | Comparisons that use the same underlying test window and noisy realization for every model or condition. |
 | augmentation | Altering training examples to teach a model about variation. The first robustness experiment does not train with noise. |
 | clean-parity gate | A safety check requiring a noise evaluator to reproduce the official clean result before it may score noisy data. |
@@ -317,12 +317,12 @@ The evidence labels used throughout are:
     resampling and pretrained processors.
 11. The implemented robustness experiment keeps models frozen and materializes paired noisy copies
     of only the held-out test windows.
-12. The current proposed grid is clean plus white, ESC-50 natural, and ESC-50 mechanical noise at
-    60, 50, 40, 30, 20, 10, and 0 dB; it must be frozen after the pretrained-model pilot.
+12. The frozen grid is clean plus white, ESC-50 natural, and ESC-50 mechanical noise at
+    60, 50, 40, 30, 20, 10, 0, and -10 dB.
 13. The mixer uses whole-window power and writes float32 WAV to avoid clipping. It also records
     frequency-, time-, instrument-activity-, and model-rate-specific SNR diagnostics.
 14. `N_REPLICATES` deterministic realizations per window and category are each rescaled across SNRs,
-    and every adapter reads the same materialized files. It is currently 1 and must be frozen.
+    and every adapter reads the same materialized files. The frozen value is 2.
 15. The central mixer and SVM, MERT, PANNs, CNN, CRNN, and AST noise adapters exist.
 
 ## 2. Research objective
@@ -2058,10 +2058,10 @@ identical window/source/pitch/truth columns. The primary exact test is a **clust
 McNemar. Ordinary exact window-level McNemar is available only as a correlation-ignoring sensitivity
 analysis ([`noise_stats.py` L134–212](../src/instrument_robustness/noise_stats.py#L134-L212)).
 
-> **Unresolved:** The implementation has a replicate axis, but the current run configuration still
-> requests one realization and there is no repeated model-training-seed field in the common output
-> contract. Cluster bootstrap quantifies sampling uncertainty across pitch groups, not
-> noise-realization or training-seed uncertainty.
+> **Scope:** Three noise replicates now measure noise-realization variability, and cluster bootstrap
+> quantifies sampling uncertainty across pitch groups. There is still no repeated
+> model-training-seed field in the common output contract, so neither measure quantifies
+> training-seed uncertainty.
 
 ## 28. Data leakage and validity checklist
 
@@ -2383,8 +2383,8 @@ as the mixing target, and do not describe external noise splits as implemented.
 - Log-mel inputs used 2,048-point FFTs, 512-sample hops, 128 mel bins, 130 frames, and 0–11,025 Hz.
 - AST, MERT, and PANNs began with the same Step-5 waveform and resampled to 16, 24, and 32 kHz,
   respectively.
-- The proposed noise grid is white/natural/mechanical at 60, 50, 40, 30, 20, 10, and 0 dB plus
-  clean; it remains subject to the pretrained-model pilot before generation.
+- The frozen noise grid is white/natural/mechanical at 60, 50, 40, 30, 20, 10, 0, -5, -10, and
+  -15 dB plus clean, with three independent noise realizations.
 - Only clean test windows were corrupted; clean train/validation data and fitted models remained
   unchanged.
 - Noise gain was calculated from mean power over the entire fixed window. Band, segmental,
