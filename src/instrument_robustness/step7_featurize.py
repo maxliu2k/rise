@@ -16,6 +16,7 @@ import warnings
 from concurrent.futures import ProcessPoolExecutor
 import numpy as np, pandas as pd
 from instrument_robustness.config import (
+    worker_count,
     FEATURES,
     N_FRAMES,
     N_MELS,
@@ -61,7 +62,7 @@ def main():
 
         Xsvm = np.empty((len(paths), len(SVM_FEATURE_NAMES)), np.float32)
         Xmel = np.empty((len(paths), N_MELS, N_FRAMES), np.float32)
-        with ProcessPoolExecutor() as ex:
+        with ProcessPoolExecutor(max_workers=worker_count()) as ex:
             for i, (vec, M) in enumerate(ex.map(_feats, paths, chunksize=32)):
                 Xsvm[i] = vec
                 Xmel[i] = M

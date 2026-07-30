@@ -28,6 +28,7 @@ from pathlib import Path
 import numpy as np, pandas as pd, librosa, soundfile as sf
 
 from instrument_robustness.config import (
+    worker_count,
     HOP_S,
     MAX_WINDOWS_PER_SOURCE,
     MIN_WINDOW_CONTENT_S,
@@ -96,7 +97,7 @@ def main():
     args = list(zip(sp["trimmed_path"], sp["label"], sp["note"], sp["split"], sp["source_path"]))
     print(f"windowing {len(args)} source files -> {WINDOW_S}s windows (no overlap) ...")
     rows, done = [], 0
-    with ProcessPoolExecutor() as ex:
+    with ProcessPoolExecutor(max_workers=worker_count()) as ex:
         futs = [ex.submit(window_one, a) for a in args]
         for f in as_completed(futs):
             rows.extend(f.result())
