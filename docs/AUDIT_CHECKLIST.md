@@ -91,9 +91,10 @@ either after `noise_sweep --generate` would invalidate the shared noisy corpus.
 - **Fixed — the provenance half.** `noise_provenance.csv` now carries `noise_target`,
   `noise_category`, `noise_fold` per mixture; `noise_manifest.json` records `target_ranges` and a
   full `category_composition` (which of the 20 classes, how many clips, per project category).
-  `NOISE_MANIFEST_VERSION` → 5 (bumped again for active-instrument diagnostics). `validate_noise_manifest` requires the new columns and checks they
+  `NOISE_MANIFEST_VERSION` was 5 for active-instrument diagnostics and is now 6 for recorded
+  noise-centering preprocessing. `validate_noise_manifest` requires the new columns and checks they
   stay constant across SNRs within one realization. White noise carries them as explicit `None`.
-  Tests: `Esc50ProvenanceTests` (4 tests).
+  Tests: `Esc50ProvenanceTests`.
 - **Why this was urgent:** unrecoverable later. Regenerating the sweep is the only way to add it
   after the fact.
 - **Still open:** the two project categories still each collapse 20 ESC-50 classes. Nothing enforces
@@ -238,22 +239,16 @@ Files from one instrument may share microphone, room, performer and session.
   `--verify` whenever provenance is in question (`--required` to make absence an error).
 
 ### ✅ 17. No DC-offset removal or audit
-- **Audited, and the answer is that no removal is warranted.** Measured on the current build:
-
-  ```text
-  clean windows (400 sampled):  worst DC power share 1.06e-04  ->  4.59e-04 dB SNR error
-  Gaussian draws (200):         worst DC power share 1.76e-04  ->  7.64e-04 dB SNR error
-  ```
-
-  The generator's tolerance is 0.1 dB, so DC contributes ~130x less than the tolerance. Subtracting
-  it would alter the corpus's actual content to correct an error far below what anything measures.
-- **Instrumented rather than assumed.** ESC-50 was **not** part of that audit — the corpus is absent
-  locally, and real recordings can carry a genuine offset from AC coupling. So `noise_dc_offset` and
-  `noise_dc_power_share` are now recorded per mixture, and `validate_noise_manifest` warns if any
-  mixture exceeds `MAX_DC_POWER_SHARE` (1%, ~50x the audited worst case). It warns rather than fails:
-  the effect would have to be ~1000x larger than measured to matter, and silently rejecting a corpus
-  clip is worse than reporting it.
-- **Net:** resolved by measurement plus a guard, not by a transformation.
+- **The first full ESC-50 generation disproved the initial Gaussian-only audit.** Of 7,530 unique
+  realizations, 87 exceeded 1% DC power, 27 exceeded 10%, and the maximum was 88.335%. The worst
+  crop's changing-noise power was therefore about 9.3 dB quieter than its nominal SNR implied.
+- **Fixed before model evaluation.** `draw_noise` subtracts each realization's segment mean before
+  measuring its power. ESC-50 non-silence is checked after centering, so a nearly constant crop is
+  redrawn rather than amplified. Gaussian noise is centered by the same rule.
+- **Fail closed.** Manifest version 6 records `remove_segment_mean` and
+  `minimum_centered_rms`. Generation and completed-manifest validation reject residual DC above
+  `MAX_DC_POWER_SHARE` (1%) instead of warning. Regression tests cover an offset ESC-50 crop,
+  centered Gaussian noise, recorded preprocessing, and rejection of excessive residual DC.
 
 ---
 

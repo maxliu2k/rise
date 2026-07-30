@@ -182,8 +182,8 @@ The noise branch starts from the canonical Step-5 **test** windows; train and va
 noised and no model is retrained. It creates one shared float32 noisy test set containing white,
 ESC-50 natural, and ESC-50 mechanical noise at every level in `config.SNRS` — currently
 60, 50, 40, 30, 20, 10, 0, and -10 dB. Two independent realizations are drawn per
-window/noise type; each realization is scaled across the SNR curve so every model receives exactly
-the same paired inputs.
+window/noise type. Every realization has its segment mean removed before power scaling, then is
+scaled across the SNR curve so every model receives exactly the same paired inputs.
 
 Pick the grid from evidence before generating anything. `snr_pilot` mixes validation windows on the
 fly, writes no audio, and reports where a model actually degrades:
