@@ -96,7 +96,11 @@ def load_test_frame(
     if manifest["path"].duplicated().any():
         raise ValueError(f"{manifest_labeled} contains duplicate source paths")
     notes = manifest[["path", "label", "note"]].rename(
-        columns={"path": "source_path", "label": "manifest_label"}
+        columns={
+            "path": "source_path",
+            "label": "manifest_label",
+            "note": "manifest_note",
+        }
     )
     frame = frame.merge(
         notes,
@@ -104,11 +108,18 @@ def load_test_frame(
         how="left",
         validate="many_to_one",
     )
-    if frame["note"].isna().any():
-        count = int(frame["note"].isna().sum())
+    if frame["manifest_note"].isna().any():
+        count = int(frame["manifest_note"].isna().sum())
         raise ValueError(f"{count} test windows have no pitch-group note")
     if not frame["label"].equals(frame["manifest_label"]):
         raise ValueError("windows.csv labels disagree with manifest_labeled.csv")
+    if "note" in frame:
+        if frame["note"].isna().any() or not frame["note"].astype(str).equals(
+            frame["manifest_note"].astype(str)
+        ):
+            raise ValueError("windows.csv notes disagree with manifest_labeled.csv")
+    else:
+        frame["note"] = frame["manifest_note"]
     unexpected = sorted(set(frame["label"]) - set(TARGET_LABELS))
     if unexpected:
         raise ValueError(f"Unexpected test labels: {unexpected}")
@@ -120,7 +131,7 @@ def load_test_frame(
     frame["pitch_group"] = (
         frame["label"].astype(str) + "_" + frame["note"].astype(str)
     )
-    return frame.drop(columns=["manifest_label"])
+    return frame.drop(columns=["manifest_label", "manifest_note"])
 
 
 def noise_source_lookup(
