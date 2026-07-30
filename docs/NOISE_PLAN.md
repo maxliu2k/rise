@@ -20,24 +20,24 @@ difference between two models is real.
 
 Run `noise_sweep.py --generate` once per dataset, then point every model at `work/windows_noisy/`.
 
-## 2. Conditions — 22 total
+## 2. Conditions — 91 total
 
 The grid lives in `config.SNRS` / `config.NOISE_TYPES`, not in `noise_sweep`.
 
-| | 60 dB | 50 dB | 40 dB | 30 dB | 20 dB | 10 dB | 0 dB |
-|---|---|---|---|---|---|---|---|
-| **white** (Gaussian) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **natural** (ESC-50) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **mechanical** (ESC-50) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Noise source | SNRs (dB) | Replicates | Noisy conditions |
+|---|---|---:|---:|
+| **white** (Gaussian) | 60, 50, 40, 30, 20, 10, 0, -5, -10, -15 | 3 | 30 |
+| **natural** (ESC-50) | 60, 50, 40, 30, 20, 10, 0, -5, -10, -15 | 3 | 30 |
+| **mechanical** (ESC-50) | 60, 50, 40, 30, 20, 10, 0, -5, -10, -15 | 3 | 30 |
 
-plus **clean**, shared rather than duplicated → 3 × 7 + 1 = **22**.
+plus **clean**, shared rather than duplicated → 3 × 10 × 3 + 1 = **91** scored conditions.
 
-For the current 1,255-window Philharmonia test split, the 21 float32 noisy conditions are 26,355
-files at roughly 6.5 GB before filesystem overhead. Keep them under the external data root, never
+For the current 1,255-window Philharmonia test split, the 90 float32 noisy conditions are 112,950
+files at roughly 27.8 GiB before filesystem overhead. Keep them under the external data root, never
 in Git.
 
 Lower SNR = more noise. 60 dB is a barely-there noise floor, 20 dB is mild, 0 dB is signal and noise
-at *equal power*.
+at *equal power*, and -15 dB means noise has about 31.6 times the signal power.
 
 ### Why the grid reaches so high
 
@@ -60,15 +60,24 @@ statistics averaged across the whole window and standardized on *clean* data, an
 windows are tiled from sub-second notes, so much of each window is quiet tail. A −60 dBFS noise
 floor rewrites those frames and drags the summary statistics with them.
 
-The grid therefore spans **both** regimes rather than the 55–30 dB band the SVM pilot recommended.
-60/50/40 resolves where handcrafted features fail; 20/10/0 retains the range where pretrained models
-are expected to; 30 sits on the SVM's knee. A grid tuned to the SVM alone would likely leave AST,
-MERT and PANNs at ceiling everywhere, which measures as little as an all-floor grid does.
+The MERT pilot then measured 240 balanced validation windows with all three noise types:
 
-> **Not yet verified:** no pretrained model has been piloted. Re-run
-> `python -m instrument_robustness.snr_pilot` once MERT or AST has a current clean result, and
-> expect to revisit the low end. Settle the grid before `--generate`: changing it invalidates a
-> completed sweep.
+| SNR | White retention | Natural retention | Mechanical retention |
+|---:|---:|---:|---:|
+| 60 | 0.981 | 0.995 | 0.995 |
+| 40 | 0.772 | 0.983 | 0.964 |
+| 20 | 0.411 | 0.808 | 0.775 |
+| 0 | 0.066 | 0.284 | 0.289 |
+| -5 | 0.047 | 0.167 | 0.220 |
+| -10 | already at floor; not re-piloted | 0.127 | 0.158 |
+| -15 | already at floor; not re-piloted | 0.124 | 0.157 |
+
+The grid therefore spans **both model regimes and all three noise characters**. 60/50/40 resolves
+the SVM decline and the pretrained upper shoulder; 30/20/10/0 resolves the useful middle of the
+MERT curves; -5/-10/-15 resolves the ESC-50 lower shoulder and plateau. 70 dB was excluded because
+MERT was indistinguishable from clean there. The same grid is used for every category so comparisons
+share x coordinates; band, octave, activity, and model-effective SNR diagnostics prevent nominal
+total-power SNR from being mistaken for equal spectral masking.
 
 - **white** — Gaussian, flat across all frequencies.
 - **natural** — ESC-50 targets 0–19 (animals; natural soundscapes and water).
@@ -115,13 +124,14 @@ drew an unlucky clip", so no claim of the form *model A is more robust than mode
 the spread across draws is unmeasurable. Replicate 1 is an independent draw of the same condition —
 a different ESC-50 clip and crop, or a different Gaussian sample.
 
-`config.N_REPLICATES` controls it, currently **1**. Cost is exactly linear in files, disk and
-evaluation time. **Raise it to 3 before making any comparative robustness claim.**
+`config.N_REPLICATES` controls it and is frozen at **3**. Three is the smallest count that provides
+a non-degenerate spread across noise draws while keeping the shared corpus tractable. Cost is
+exactly linear in files, disk and evaluation time.
 
 Replicates are separate *conditions*, not averaged at scoring time — averaging there would discard
 the very quantity they exist to provide. `noise_stats` aggregates; `noise_eval_common` does not.
 Output paths always carry the replicate directory (`white/snr20/r0/…`), even at
-`N_REPLICATES = 1`, because a layout that changes shape with a config value needs two code paths on
+`N_REPLICATES = 3`, because a layout that changes shape with a config value needs two code paths on
 every reader and the second one never gets tested.
 
 The `dataset_fingerprint` hashes the actual `manifest.csv` and Step-5 `windows.csv` identities in
