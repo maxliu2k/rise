@@ -155,23 +155,27 @@ TARGET_RMS = 0.1      # per-window RMS target; peak-guarded to avoid clipping
 # The mixer was verified before trusting this: measured_snr returns the requested value to 4 decimal
 # places at 40/20/0 dB, so the collapse is the model, not the mixing.
 #
-# WHY THE GRID SPANS BOTH REGIMES rather than the 55-30 dB band the pilot recommended. That pilot
-# measured the SVM only, and the SVM is the most noise-fragile representation here by construction:
+# WHY THE GRID SPANS BOTH REGIMES rather than the 55-30 dB band the SVM pilot recommended. The SVM
+# is the most noise-fragile representation here by construction:
 # its 88 features are frame statistics averaged over the whole window and standardized on CLEAN
 # data. Spectral rolloff, ZCR, centroid and bandwidth are near-degenerate in quiet frames, and with
 # ~91% of windows tiled from sub-second notes, much of each window is quiet tail -- a -60 dBFS noise
-# floor rewrites those frames and drags the mean/std summary with it. AST, MERT and PANNs consume
-# learned representations pretrained on large real-world audio and are expected to still be near
-# ceiling at 40 dB. Tuning the grid to the SVM would put every pretrained model at ceiling across
-# the whole range, which measures exactly as little as an all-floor grid does.
+# floor rewrites those frames and drags the mean/std summary with it.
 #
-# So: 60/50/40 resolves where handcrafted features fail, 20/10/0 retains the range where pretrained
-# models should, and 30 sits on the SVM's knee. Cost is 1,255 x 3 x 7 = 26,355 files (~7.3 GB).
+# MERT was then piloted on 240 balanced validation windows with all three noise types. White-noise
+# retention fell from 0.981 at 60 dB to 0.066 at 0 dB. ESC-50 was gentler at the same nominal power:
+# natural/mechanical retention was ~0.29 at 0 dB and did not plateau until -10/-15 dB. Therefore:
 #
-# STILL UNVERIFIED: no pretrained model has been piloted. Re-run snr_pilot once MERT or AST has a
-# current clean result, and expect to revisit the low end. Changing this list invalidates any
-# completed sweep, so settle it before running noise_sweep --generate.
-SNRS = [60, 50, 40, 30, 20, 10, 0]
+#   * 60/50/40 resolves the fragile SVM's decline and the pretrained models' upper shoulder;
+#   * 30/20/10/0 resolves the useful middle of every MERT curve;
+#   * -5/-10/-15 resolves the ESC-50 lower shoulder and measured plateau;
+#   * 70 is excluded because every MERT condition was indistinguishable from clean.
+#
+# This shared grid is intentionally full-factorial: every noise type uses the same nominal SNRs so
+# category/model comparisons have common x coordinates. Per-mixture band, octave, active-signal and
+# model-effective diagnostics must accompany those nominal values because equal total-power SNR
+# does not imply equal masking. Freeze this list after generation.
+SNRS = [60, 50, 40, 30, 20, 10, 0, -5, -10, -15]
 NOISE_TYPES = ["white", "natural", "mechanical"]
 
 # How many independent noise realizations per (window, noise type). Each replicate is a fresh draw
@@ -181,11 +185,12 @@ NOISE_TYPES = ["white", "natural", "mechanical"]
 # WHY THIS EXISTS. With one realization there is no way to separate "this model is fragile" from
 # "this window happened to draw an unlucky noise clip". Any claim of the form "model A is more
 # robust than model B" needs the spread across realizations to be smaller than the gap between the
-# models, and with N_REPLICATES = 1 that spread is unmeasurable.
+# models, and with one replicate that spread is unmeasurable.
 #
-# Cost is exactly linear: files, disk and evaluation time all multiply by this number. Left at 1 so
-# the default build stays ~6.5 GiB; raise it to 3 before making any comparative robustness claim.
-N_REPLICATES = 1
+# Three is the smallest practical choice that yields a non-degenerate spread without making the
+# shared corpus unmanageable. Final cost: 1,255 windows x 3 types x 10 SNRs x 3 replicates =
+# 112,950 float32 WAVs, about 27.8 GiB before filesystem overhead.
+N_REPLICATES = 3
 
 # --- Noise diagnostics (see noise_metrics.py) ---
 # The headline SNR is whole-window, whole-spectrum mean power. These settings drive the diagnostics

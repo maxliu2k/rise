@@ -53,6 +53,17 @@ def scaled_to_snr(clean: np.ndarray, noise: np.ndarray, snr_db: float) -> np.nda
     return noisy - clean
 
 
+class FrozenNoiseProtocolTests(unittest.TestCase):
+    def test_evidence_backed_grid_and_replicates_are_frozen(self) -> None:
+        """Changing either value after generation would invalidate the shared noisy corpus."""
+        self.assertEqual(SNRS, [60, 50, 40, 30, 20, 10, 0, -5, -10, -15])
+        self.assertEqual(N_REPLICATES, 3)
+        self.assertEqual(
+            1 + len(NOISE_TYPES) * len(SNRS) * N_REPLICATES,
+            91,
+        )
+
+
 class BandPowerTests(unittest.TestCase):
     def test_instrument_band_includes_the_lowest_dataset_fundamental(self) -> None:
         """MIDI 22 is about 29 Hz; a 50 Hz lower edge silently excluded the lowest tuba note."""

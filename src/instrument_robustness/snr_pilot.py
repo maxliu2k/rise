@@ -66,9 +66,9 @@ from instrument_robustness.config import (
     config_fingerprint,
 )
 
-# Cover the current proposed grid plus one level on either side. This must reach 60 dB because the
-# clean-trained SVM already degrades there, while the pretrained encoders may remain useful at 0 dB.
-CANDIDATE_SNRS = [70, 60, 50, 40, 30, 20, 10, 0, -5]
+# Cover the frozen grid plus 70 dB, the rejected upper candidate where MERT was indistinguishable
+# from clean. Keeping the measured extension makes future validation audits reproducible.
+CANDIDATE_SNRS = [70, 60, 50, 40, 30, 20, 10, 0, -5, -10, -15]
 
 # Retention = noisy macro-F1 / clean macro-F1. Outside this band a level carries little
 # information: above it the model is barely affected, below it the model has collapsed and

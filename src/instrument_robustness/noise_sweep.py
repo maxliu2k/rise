@@ -1,8 +1,8 @@
 """Generate the one shared noisy TEST set used by every model.
 
 The clean train/validation data and all fitted models remain untouched. One deterministic noise
-realization is drawn for each (dataset build, test window, noise type), then scaled to every SNR.
-The manifest is written last and is the completion marker consumed by model evaluators.
+realization is drawn for each (dataset build, test window, noise type, replicate), then scaled to
+every SNR. The manifest is written last and is the completion marker consumed by model evaluators.
 """
 from __future__ import annotations
 
