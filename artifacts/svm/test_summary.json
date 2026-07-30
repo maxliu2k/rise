@@ -1,5 +1,5 @@
 {
-  "created_at_utc": "2026-07-28T19:47:04.424978+00:00",
+  "created_at_utc": "2026-07-30T00:22:30.484897+00:00",
   "config_fingerprint": {
     "fingerprint_version": 2,
     "archive_base": "https://archive.org/download/philharmonicorchestrasamples",
@@ -22,6 +22,9 @@
     ],
     "split_seed": 0,
     "min_window_content_s": 0.5,
+    "max_windows_per_source": 1,
+    "stft_pad_mode": "reflect",
+    "logmel_top_db": null,
     "target_rms": 0.1,
     "articulations": {
       "bassoon": [
@@ -86,59 +89,31 @@
   "protocol": "hyperparameters selected on validation; final model fit on train+val; test evaluated once",
   "selected_config": {
     "kernel": "rbf",
-    "C": 100.0,
-    "gamma": 0.001
+    "C": 10.0,
+    "gamma": 0.003
   },
   "model_fit_splits": [
     "train",
     "val"
   ],
   "feature_preprocessing": "existing train-statistics-standardized features reused; no scaler refit",
-  "training_examples": 6487,
-  "validation_examples": 1319,
-  "final_fit_examples": 7806,
-  "test_examples": 1310,
-  "fit_seconds": 0.19056870799977332,
+  "training_examples": 5864,
+  "validation_examples": 1259,
+  "final_fit_examples": 7123,
+  "test_examples": 1255,
+  "fit_seconds": 0.1714649160276167,
   "test_metrics": {
-    "accuracy": 0.983969465648855,
-    "macro_f1": 0.9828687992775623,
-    "weighted_f1": 0.9839582272636211,
+    "accuracy": 0.9920318725099602,
+    "macro_f1": 0.9914459035333517,
+    "weighted_f1": 0.9920456629533088,
     "confusion_matrix": [
       [
-        97,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0
-      ],
-      [
-        0,
-        116,
-        0,
-        0,
+        95,
         0,
         0,
         0,
         0,
         1,
-        0,
-        0,
-        0
-      ],
-      [
-        0,
-        0,
-        110,
-        0,
-        0,
-        0,
         1,
         0,
         0,
@@ -148,9 +123,9 @@
       ],
       [
         0,
+        115,
         0,
         0,
-        116,
         0,
         0,
         0,
@@ -163,27 +138,55 @@
       [
         0,
         0,
+        111,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        115,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        117,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
         1,
         0,
-        126,
         0,
         0,
         0,
+        82,
         0,
         0,
         0,
-        0
-      ],
-      [
-        0,
-        0,
-        0,
-        0,
-        0,
-        84,
-        0,
-        2,
-        2,
         0,
         0,
         0
@@ -203,14 +206,14 @@
         0
       ],
       [
-        2,
         0,
         0,
         0,
         0,
-        1,
         0,
-        136,
+        0,
+        0,
+        114,
         0,
         0,
         0,
@@ -224,8 +227,8 @@
         0,
         0,
         1,
-        2,
-        71,
+        1,
+        63,
         0,
         0,
         0
@@ -246,69 +249,69 @@
       ],
       [
         0,
-        1,
-        1,
-        0,
-        0,
-        1,
+        2,
         0,
         0,
         0,
         0,
-        105,
+        0,
+        0,
+        0,
+        0,
+        104,
         0
       ],
       [
         0,
-        1,
-        2,
-        0,
-        0,
-        1,
+        3,
         0,
         0,
         0,
         0,
-        1,
-        125
+        0,
+        0,
+        0,
+        0,
+        0,
+        126
       ]
     ],
     "classification_report": {
       "bassoon": {
-        "precision": 0.9797979797979798,
-        "recall": 1.0,
-        "f1-score": 0.9897959183673469,
+        "precision": 0.9895833333333334,
+        "recall": 0.979381443298969,
+        "f1-score": 0.9844559585492227,
         "support": 97.0
       },
       "cello": {
-        "precision": 0.9830508474576272,
-        "recall": 0.9914529914529915,
-        "f1-score": 0.9872340425531915,
-        "support": 117.0
+        "precision": 0.9583333333333334,
+        "recall": 1.0,
+        "f1-score": 0.9787234042553191,
+        "support": 115.0
       },
       "clarinet": {
-        "precision": 0.9649122807017544,
-        "recall": 0.990990990990991,
-        "f1-score": 0.9777777777777777,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1-score": 1.0,
         "support": 111.0
       },
       "double-bass": {
         "precision": 1.0,
         "recall": 1.0,
         "f1-score": 1.0,
-        "support": 116.0
+        "support": 115.0
       },
       "flute": {
         "precision": 1.0,
-        "recall": 0.9921259842519685,
-        "f1-score": 0.9960474308300395,
-        "support": 127.0
+        "recall": 1.0,
+        "f1-score": 1.0,
+        "support": 117.0
       },
       "french-horn": {
-        "precision": 0.9655172413793104,
-        "recall": 0.9545454545454546,
-        "f1-score": 0.96,
-        "support": 88.0
+        "precision": 0.9879518072289156,
+        "recall": 0.9879518072289156,
+        "f1-score": 0.9879518072289156,
+        "support": 83.0
       },
       "oboe": {
         "precision": 0.9753086419753086,
@@ -317,16 +320,16 @@
         "support": 79.0
       },
       "trombone": {
-        "precision": 0.9714285714285714,
-        "recall": 0.9784172661870504,
-        "f1-score": 0.974910394265233,
-        "support": 139.0
+        "precision": 0.991304347826087,
+        "recall": 1.0,
+        "f1-score": 0.9956331877729258,
+        "support": 114.0
       },
       "trumpet": {
-        "precision": 0.9594594594594594,
-        "recall": 0.9594594594594594,
-        "f1-score": 0.9594594594594594,
-        "support": 74.0
+        "precision": 1.0,
+        "recall": 0.9692307692307692,
+        "f1-score": 0.984375,
+        "support": 65.0
       },
       "tuba": {
         "precision": 1.0,
@@ -335,29 +338,29 @@
         "support": 124.0
       },
       "viola": {
-        "precision": 0.9905660377358491,
-        "recall": 0.9722222222222222,
-        "f1-score": 0.9813084112149533,
-        "support": 108.0
+        "precision": 1.0,
+        "recall": 0.9811320754716981,
+        "f1-score": 0.9904761904761905,
+        "support": 106.0
       },
       "violin": {
         "precision": 1.0,
-        "recall": 0.9615384615384616,
-        "f1-score": 0.9803921568627451,
-        "support": 130.0
+        "recall": 0.9767441860465116,
+        "f1-score": 0.9882352941176471,
+        "support": 129.0
       },
-      "accuracy": 0.983969465648855,
+      "accuracy": 0.9920318725099602,
       "macro avg": {
-        "precision": 0.9825034216613218,
-        "recall": 0.9833960692207165,
-        "f1-score": 0.9828687992775623,
-        "support": 1310.0
+        "precision": 0.9918734553080815,
+        "recall": 0.991203356773072,
+        "f1-score": 0.9914459035333517,
+        "support": 1255.0
       },
       "weighted avg": {
-        "precision": 0.9841123815361167,
-        "recall": 0.983969465648855,
-        "f1-score": 0.9839582272636211,
-        "support": 1310.0
+        "precision": 0.9922358526174423,
+        "recall": 0.9920318725099602,
+        "f1-score": 0.9920456629533088,
+        "support": 1255.0
       }
     }
   },
@@ -486,28 +489,28 @@
   "input_files": {
     "train": {
       "path": "/Users/allanyu/RISE Projects/Music/all-samples/features/svm/train.npz",
-      "sha256": "2572c29ac7f02848f8e8c0ab1320433cc3fc562d054a0e33053886d18a397c9c"
+      "sha256": "f544a6dacc18b7a90e7fe2fdb1f0f1831a926ef657549ffceabbb7bbf9f0ad32"
     },
     "val": {
       "path": "/Users/allanyu/RISE Projects/Music/all-samples/features/svm/val.npz",
-      "sha256": "116d1575a0080b04f5e3322545c261c7166230c70e477860671dd8beeca98fc4"
+      "sha256": "91063ba509d0d1b57e90238cd8025f81baae68853b63b2d6cda5ba9c203a6aa7"
     },
     "test": {
       "path": "/Users/allanyu/RISE Projects/Music/all-samples/features/svm/test.npz",
-      "sha256": "558b3a696e85aa8c953f18cc127cd56b696212fad6381b90c95ec8f0f9630aac",
+      "sha256": "c3c8b3585e18a138e21ce5912664df1c13c2d8623d8ac5603d184895cc81985f",
       "X_shape": [
-        1310,
+        1255,
         88
       ],
       "X_dtype": "float32",
       "y_shape": [
-        1310
+        1255
       ],
       "y_dtype": "int64"
     },
     "validation_summary": {
       "path": "/Users/allanyu/RISE Projects/Music/artifacts/svm/validation_summary.json",
-      "sha256": "c3f9bb0a86469380af6c18df04935afd55b35cb6b76a651836f5f6a735b12bfc"
+      "sha256": "a4c048b08c0ba9e1fa8d14cbcef65c14cc848f528e78bade8b57a957e3d7953b"
     }
   },
   "software_versions": {
@@ -520,11 +523,11 @@
   "output_files": {
     "model": {
       "path": "/Users/allanyu/RISE Projects/Music/artifacts/svm/final_model.joblib",
-      "sha256": "12d53760e7c65acaa33eee6120e09eb4740d7277df406ae55004dbf73b6cba6f"
+      "sha256": "d149948c06e09d39f1765771b1050f2d289bb5e345b6006347f2c9414fe6fc9f"
     },
     "test_confusion_matrix": {
       "path": "/Users/allanyu/RISE Projects/Music/artifacts/svm/test_confusion_matrix.csv",
-      "sha256": "bfd69fa37ae9cf5b513f8be40ef6f263e2a37c21b44e8adda98f717029dc8980"
+      "sha256": "54288aae5ac6b641a0607381a9f896262b78b5e5f5b0703a8d6a43194119d94f"
     }
   },
   "test_evaluated": true,

@@ -1,7 +1,7 @@
 {
   "state": "complete",
-  "started_at_utc": "2026-07-28T19:47:04.266942+00:00",
-  "completed_at_utc": "2026-07-28T19:47:04.427506+00:00",
+  "started_at_utc": "2026-07-30T00:22:30.321602+00:00",
+  "completed_at_utc": "2026-07-30T00:22:30.487635+00:00",
   "test_evaluation_count": 1,
   "config_fingerprint": {
     "fingerprint_version": 2,
@@ -25,6 +25,9 @@
     ],
     "split_seed": 0,
     "min_window_content_s": 0.5,
+    "max_windows_per_source": 1,
+    "stft_pad_mode": "reflect",
+    "logmel_top_db": null,
     "target_rms": 0.1,
     "articulations": {
       "bassoon": [
@@ -88,6 +91,6 @@
   },
   "test_summary": {
     "path": "/Users/allanyu/RISE Projects/Music/artifacts/svm/test_summary.json",
-    "sha256": "5ef97e89f3b28e72d1966ea31cacaee8a001345a414e281089d2b0ca18c3d7b7"
+    "sha256": "b76a8fb6cf9f7c9a74e6f1a427c2fe154381b18c4372f2668f2947effcb1f630"
   }
 }

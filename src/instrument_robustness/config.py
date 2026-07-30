@@ -139,6 +139,93 @@ MAX_WINDOWS_PER_SOURCE = 1
 # --- Step 5: loudness normalize ---
 TARGET_RMS = 0.1      # per-window RMS target; peak-guarded to avoid clipping
 
+# --- Noise benchmark grid ---
+# The conditions the sweep materializes. Owned here so the grid is one edit rather than a constant
+# buried in noise_sweep, and so snr_pilot and noise_sweep cannot disagree about what the official
+# grid is.
+#
+# DELIBERATELY NOT IN config_fingerprint(). The fingerprint answers "what does this cached array,
+# manifest or checkpoint MEAN" -- and the SNR grid changes none of them. A clean feature array, a
+# trained SVM and a windows.csv are identical whether the sweep later runs at 20 dB or at 35 dB.
+# Adding the grid here would invalidate every clean artifact on every grid edit, forcing a full
+# rebuild to answer a question about noise. The grid's identity is enforced where it actually
+# matters: noise_manifest.json records `snrs` and `noise_types`, and validate_noise_manifest
+# refuses a completed sweep whose grid differs from the code -- so a stale noisy set still cannot
+# be silently reused.
+#
+# MEASURED, not inherited. The previous grid was [20, 10, 5, 0, -5]. snr_pilot on the validation
+# split (SVM, white noise, 240 windows spread across all 12 classes, train-only best_model) found
+# EVERY level of it at or below chance:
+#
+#     SNR   macro-F1   retention          SNR   macro-F1   retention
+#      70     0.9601       0.995           30     0.2599       0.269
+#      60     0.9515       0.986           25     0.1444       0.150
+#      55     0.9112       0.944           20     0.0931       0.096   <- old grid, floor
+#      50     0.8497       0.881           10     0.0366       0.038   <- old grid, floor
+#      45     0.6779       0.702            0     0.0132       0.014   <- old grid, floor
+#      40     0.5376       0.557
+#
+#   clean macro-F1 0.9650; chance accuracy 1/12 = 0.083.
+#
+# The mixer was verified before trusting this: measured_snr returns the requested value to 4 decimal
+# places at 40/20/0 dB, so the collapse is the model, not the mixing.
+#
+# WHY THE GRID SPANS BOTH REGIMES rather than the 55-30 dB band the pilot recommended. That pilot
+# measured the SVM only, and the SVM is the most noise-fragile representation here by construction:
+# its 88 features are frame statistics averaged over the whole window and standardized on CLEAN
+# data. Spectral rolloff, ZCR, centroid and bandwidth are near-degenerate in quiet frames, and with
+# ~91% of windows tiled from sub-second notes, much of each window is quiet tail -- a -60 dBFS noise
+# floor rewrites those frames and drags the mean/std summary with it. AST, MERT and PANNs consume
+# learned representations pretrained on large real-world audio and are expected to still be near
+# ceiling at 40 dB. Tuning the grid to the SVM would put every pretrained model at ceiling across
+# the whole range, which measures exactly as little as an all-floor grid does.
+#
+# So: 60/50/40 resolves where handcrafted features fail, 20/10/0 retains the range where pretrained
+# models should, and 30 sits on the SVM's knee. Cost is 1,255 x 3 x 7 = 26,355 files (~7.3 GB).
+#
+# STILL UNVERIFIED: no pretrained model has been piloted. Re-run snr_pilot once MERT or AST has a
+# current clean result, and expect to revisit the low end. Changing this list invalidates any
+# completed sweep, so settle it before running noise_sweep --generate.
+SNRS = [60, 50, 40, 30, 20, 10, 0]
+NOISE_TYPES = ["white", "natural", "mechanical"]
+
+# How many independent noise realizations per (window, noise type). Each replicate is a fresh draw
+# -- a different ESC-50 clip and crop, or a different Gaussian sample -- and is then scaled across
+# every SNR exactly as replicate 0 is.
+#
+# WHY THIS EXISTS. With one realization there is no way to separate "this model is fragile" from
+# "this window happened to draw an unlucky noise clip". Any claim of the form "model A is more
+# robust than model B" needs the spread across realizations to be smaller than the gap between the
+# models, and with N_REPLICATES = 1 that spread is unmeasurable.
+#
+# Cost is exactly linear: files, disk and evaluation time all multiply by this number. Left at 1 so
+# the default build stays ~6.5 GiB; raise it to 3 before making any comparative robustness claim.
+N_REPLICATES = 1
+
+# --- Noise diagnostics (see noise_metrics.py) ---
+# The headline SNR is whole-window, whole-spectrum mean power. These settings drive the diagnostics
+# recorded ALONGSIDE it, so a paper can say what a condition actually did rather than only what it
+# was set to. They are provenance, not protocol: changing them changes what is reported, never the
+# audio that gets generated.
+#
+# The band the instruments occupy. Lowest fundamental in this dataset is MIDI 22 (~29 Hz, tuba) and
+# the highest is MIDI 103 (~2489 Hz, violin); 25 Hz includes that lowest fundamental while excluding
+# DC/subsonic drift, and 8 kHz keeps the harmonics that carry timbre.
+INSTRUMENT_BAND_HZ = (25.0, 8000.0)
+
+# Frame/hop for the time-resolved diagnostics, matching the log-mel analysis so a segmental SNR
+# frame corresponds to a spectrogram frame.
+SEGMENTAL_FRAME = 2048
+SEGMENTAL_HOP = 512
+
+# A noise frame counts as active if it is within this many dB of that clip's own loudest frame.
+# Matches TRIM_TOP_DB so "active" means the same thing for instruments and for noise.
+NOISE_ACTIVE_TOP_DB = 30
+
+# The same threshold, applied independently to the clean instrument, defines the frames used for
+# active-instrument SNR. Kept as a separate setting so both decisions are explicit in provenance.
+SIGNAL_ACTIVE_TOP_DB = 30
+
 # --- Steps 6-7: featurization ---
 STATS_NPZ = PIPE / "norm_stats.npz"
 STATS_JSON = PIPE / "norm_stats.json"

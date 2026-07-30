@@ -33,6 +33,7 @@ from instrument_robustness.train_ast import (
     _balanced_accuracy,
     _balanced_class_weights,
     _matthews_correlation,
+    _prepare_output_dir,
     _write_test_reports,
 )
 
@@ -46,7 +47,13 @@ def write_manifest(path: Path, labels, counts=None) -> None:
     with path.open("w", newline="") as manifest:
         writer = csv.DictWriter(
             manifest,
-            fieldnames=["window_path", "label", "split"],
+            fieldnames=[
+                "window_path",
+                "source_path",
+                "start_time",
+                "label",
+                "split",
+            ],
         )
         writer.writeheader()
         for split in ("train", "val", "test"):
@@ -55,6 +62,8 @@ def write_manifest(path: Path, labels, counts=None) -> None:
                     writer.writerow(
                         {
                             "window_path": f"{split}/{label}/{index}.wav",
+                            "source_path": f"{split}/{label}/{index}.mp3",
+                            "start_time": 0.0,
                             "label": label,
                             "split": split,
                         }
@@ -147,6 +156,49 @@ class ASTLabelTests(unittest.TestCase):
                 validate_ast_window_files(manifest_path, root),
                 len(rows),
             )
+
+    def test_rejects_more_than_one_window_per_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir)
+            manifest_path = root / "windows.csv"
+            write_manifest(manifest_path, TWELVE_LABELS)
+            with manifest_path.open(newline="") as manifest:
+                rows = list(csv.DictReader(manifest))
+            rows[1]["source_path"] = rows[0]["source_path"]
+            with manifest_path.open("w", newline="") as manifest:
+                writer = csv.DictWriter(manifest, fieldnames=rows[0].keys())
+                writer.writeheader()
+                writer.writerows(rows)
+            write_artifact_fingerprint(manifest_path, "step5_normalize")
+
+            with self.assertRaisesRegex(ValueError, "MAX_WINDOWS_PER_SOURCE=1"):
+                validate_ast_window_files(manifest_path, root)
+
+    def test_rejects_nonzero_start_in_one_window_dataset(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir)
+            manifest_path = root / "windows.csv"
+            write_manifest(manifest_path, TWELVE_LABELS)
+            with manifest_path.open(newline="") as manifest:
+                rows = list(csv.DictReader(manifest))
+            rows[0]["start_time"] = 3.0
+            with manifest_path.open("w", newline="") as manifest:
+                writer = csv.DictWriter(manifest, fieldnames=rows[0].keys())
+                writer.writeheader()
+                writer.writerows(rows)
+            write_artifact_fingerprint(manifest_path, "step5_normalize")
+
+            with self.assertRaisesRegex(ValueError, "onset-aligned one-window dataset"):
+                validate_ast_window_files(manifest_path, root)
+
+    def test_requires_a_fresh_output_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            output_dir = Path(temporary_dir) / "ast-new-data"
+
+            self.assertEqual(_prepare_output_dir(output_dir), output_dir)
+            (output_dir / "metrics.json").touch()
+            with self.assertRaisesRegex(FileExistsError, "never overwritten"):
+                _prepare_output_dir(output_dir)
 
     def test_rejects_window_with_wrong_sample_count(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
