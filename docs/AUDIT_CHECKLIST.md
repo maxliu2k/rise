@@ -1,6 +1,6 @@
 # Audit checklist — 22 findings
 
-**Verified against:** the local tree based on `main` at `7b64888`, re-checked 2026-07-30.
+**Verified against:** local `main` through the frozen noise-protocol change, re-checked 2026-07-30.
 **How to read this:** every status below was re-derived from the current tree, not carried over from
 notes. Where an item is only partly done, the remaining work is stated explicitly.
 
@@ -11,15 +11,15 @@ notes. Where an item is only partly done, the remaining work is stated explicitl
 | ⬜ **OPEN** | Not started. |
 | 📝 **WONTFIX / WRITE-UP** | Cannot be fixed in code; must be disclosed in the paper. |
 
-**Score: 9 fully fixed · 9 partial · 2 open · 2 write-up-only.**
+**Score: 11 fully fixed · 7 partial · 2 open · 2 write-up-only.**
 
-Closed outright: **1, 5, 6, 8, 16, 17, 18, 19, 22**.
+Closed outright: **1, 2, 3, 5, 6, 8, 16, 17, 18, 19, 22**.
 
 Still fully open: **9** (AST/PANNs sealed test) and **15** (external evaluation). Both need
 something code alone cannot supply — a training run, or an external corpus.
 
-Do **not** run `noise_sweep --generate` yet. The MERT validation-only SNR pilot must run first and
-`N_REPLICATES` must be frozen; changing either choice after generation would invalidate the sweep.
+The MERT validation-only pilots are complete and the grid/replicate count are frozen. Changing
+either after `noise_sweep --generate` would invalidate the shared noisy corpus.
 
 ---
 
@@ -41,8 +41,8 @@ Do **not** run `noise_sweep --generate` yet. The MERT validation-only SNR pilot 
 - **Band powers are Parseval-exact**, so band SNRs are commensurable with the whole-signal number
   (tested to 10 decimal places).
 
-### 🟡 2. SNR grid probably too harsh
-- **Implemented, not yet frozen.** Grid moved to `config.SNRS` (owned there, imported by `noise_sweep`), and
+### ✅ 2. SNR grid probably too harsh
+- **Fixed and frozen.** Grid moved to `config.SNRS` (owned there, imported by `noise_sweep`), and
   `snr_pilot.py` added — validation-only, writes no audio, reuses the real `draw_noise`/`mix_at_snr`.
 - **Measured:** SVM/white, 240 validation windows, train-only checkpoint. Clean macro-F1 0.9650;
   chance 0.083. Every level of the old `[20, 10, 5, 0, -5]` was at or below chance:
@@ -55,14 +55,18 @@ Do **not** run `noise_sweep --generate` yet. The MERT validation-only SNR pilot 
      30     0.2599      0.269
   ```
 
-- **New grid:** `[60, 50, 40, 30, 20, 10, 0]` → 22 conditions, 26,355 files, ~6.5 GiB. Spans both
-  regimes deliberately rather than the SVM-optimal 55–30 band, so pretrained models are not all at
-  ceiling. Rationale recorded in `config.py` and `docs/NOISE_PLAN.md` §2.
-- **Still to do:** run the validation-only MERT pilot on SCC. The current MERT clean run is complete
-  and the pilot now accepts its hash-verified `best_probe.pt`; no retraining or test access is
-  needed. Expect to revisit the low end.
+- **MERT/all-category pilot completed:** 240 balanced validation windows, clean macro-F1 0.9032
+  (full validation 0.9038). White reached floor by 0 dB, while natural/mechanical required the
+  lower extension and plateaued by -10/-15 dB.
+- **Frozen grid:** `[60, 50, 40, 30, 20, 10, 0, -10]`. It includes the SVM decline, MERT's useful
+  middle under every category, and the ESC-50 floor at -10. The validation pilot also measured -5
+  and -15; they were omitted before test generation because -5 was intermediate and -15 added
+  little beyond the -10 plateau.
+- With two replicates this is 49 scored conditions, 60,240 files, about 14.8 GiB. This deadline-
+  bounded choice retains an independent sensitivity draw but limits variance estimation. Rationale
+  and measured curves are recorded in `config.py` and `docs/NOISE_PLAN.md` §2.
 
-### 🟡 3. One noise sample per clip
+### ✅ 3. One noise sample per clip
 - **The replicate axis is fixed in code.** The seed is now
   `sha256(dataset_fingerprint|window_id|noise_type|replicate)[:4]`, SNR still excluded. `config
   .N_REPLICATES` drives generation, output paths carry `r{k}` unconditionally, the manifest records
@@ -79,8 +83,9 @@ Do **not** run `noise_sweep --generate` yet. The MERT validation-only SNR pilot 
   `validate_noise_manifest(verify_audio_hashes=True)`, all 12 windows drew different clips per
   replicate, the realization stayed constant across SNRs within a replicate, and requested SNR was
   achieved to 6.7e-7 dB.
-- **Still set to 1.** Cost is exactly linear. Freeze the run decision—currently expected to be
-  3—before generation. Until then, this item is partial.
+- **Frozen at 2 before official test generation.** This retains an independent sensitivity draw,
+  but the paper must identify two replicates as a limitation. The exact grid/count/49-condition
+  contract is regression-tested.
 
 ### 🟡 4. Natural/mechanical categories too broad
 - **Fixed — the provenance half.** `noise_provenance.csv` now carries `noise_target`,
@@ -259,14 +264,12 @@ Files from one instrument may share microphone, room, performer and session.
   `snr_at_retention` (the SNR where a model keeps 50%/90% of clean macro-F1 — often the more legible
   headline), `mean_retention` for comparison only, and a CLI that summarises a completed
   `noise_sweep_summary.csv`.
-- **Correcting my own earlier claim:** I wrote that the new grid is "deliberately uneven". It is
-  **not** — `[60, 50, 40, 30, 20, 10, 0]` has uniform 10 dB gaps. For this exact grid the weighted
-  and unweighted summaries differ only by trapezoidal endpoint weighting (0.390 vs 0.406 on the SVM
-  white curve).
-- **The tooling still matters, because uniformity is fragile.** Adding two levels where the model
+- **The frozen grid is deliberately uneven:** 10 dB gaps from 60 through 0, then 5 dB gaps through
+  -15 to resolve the ESC-50 plateau. An unweighted mean would over-weight that denser lower tail;
+  the trapezoidal dB integral handles the actual spacing.
+- **The tooling also remains stable under future selections.** Adding two levels where the model
   happens to do well moves the unweighted mean by **+0.093** and the integral by **+0.0004** — same
-  model, more sampling. `--snrs` and `snr_range` both produce non-uniform selections, and item 2
-  explicitly expects a grid retune once a pretrained model is piloted.
+  model, more sampling. `--snrs` and `snr_range` can produce other non-uniform selections.
 
 ### ✅ 19. No multiple-comparison correction
 - **Fixed.** `robustness_curve.benjamini_hochberg` controls the false-discovery rate over a family of
@@ -309,8 +312,8 @@ claim.
 ### ✅ 22. README references a nonexistent `pipeline_report.txt`
 - **Fixed.** `all-samples/pipeline/pipeline_report.txt` is absent and no stage writes it; the README
   no longer presents it as an existing report.
-- **Fixed alongside the grid change:** the README's and `docs/NOISE_PLAN.md`'s stale grid text
-  (20/10/5/0/−5, "5.2 GB", "1,310 windows", "16 conditions") is now correct and cites `config.SNRS`.
+- **Fixed alongside the grid changes:** the README's and `docs/NOISE_PLAN.md`'s stale grid/count
+  text is now correct and cites `config.SNRS`.
 - **Fixed:** the README now points at what actually exists — per-stage console output, the
   fingerprint sidecars beside every manifest, and `_step4_report_block.txt` — and states explicitly
   that `pipeline_report.txt` was never written by any stage.
@@ -321,10 +324,8 @@ claim.
 
 ## Suggested order
 
-**Before `noise_sweep --generate`:** items 1, 3, 5 and 6 are **done**. What remains before
-generating is finishing **2** — pilot a pretrained model, since the grid's low end is currently a
-hedge — and deciding whether to raise `N_REPLICATES` above 1, because changing it later means
-regenerating.
+**Before `noise_sweep --generate`:** items 1, 2, 3, 5 and 6 are **done**. The protocol is frozen;
+run the read-only preflight, generate once, then validate the completed manifest.
 
 **Before any model-comparison claim:** **9** and **11** remain (8 and 19 are done).
 
