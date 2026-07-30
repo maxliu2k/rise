@@ -1,0 +1,66 @@
+#!/bin/bash -l
+
+#$ -P rise-grid
+#$ -N cnn_train
+#$ -j y
+#$ -pe omp 4
+#$ -l gpus=1
+#$ -l gpu_c=6.0
+#$ -l h_rt=6:00:00
+#$ -l mem_per_core=8G
+
+# Train the from-scratch CNN or CRNN seed ensemble. VALIDATION ONLY -- the test split is never
+# read here, and there is deliberately no finalize job: finalize_{cnn,crnn} spends the single
+# permitted test evaluation and must follow a human reading validation_summary.json.
+#
+#   qsub scc/cnn_train.qsub                                  # CNN  (default)
+#   qsub -N crnn_train -v RISE_ARCH=crnn scc/cnn_train.qsub  # CRNN
+#
+# One script rather than two near-identical ones, following panns_train.qsub's PANNS_MODE: the
+# architecture is the only difference, and a duplicated preflight block is a block that drifts.
+#
+# RESUMABLE. Each finished seed persists its checkpoint, validation probabilities and a
+# provenance record, so a job killed by the h_rt wall clock costs at most one partial seed --
+# resubmit the same command and it picks up where it stopped. That is why 6 hours is a safe
+# request rather than an optimistic one.
+
+set -euo pipefail
+
+cnn_repo="${RISE_REPO:-$SGE_O_WORKDIR}"
+cnn_venv="${RISE_VENV:-$cnn_repo/.venv}"
+cnn_data_root="${RISE_DATA_ROOT:-$cnn_repo/all-samples}"
+cnn_arch="${RISE_ARCH:-cnn}"
+
+case "$cnn_arch" in
+    cnn)  cnn_module="train_cnn" ;;
+    crnn) cnn_module="train_crnn" ;;
+    *)    echo "RISE_ARCH must be 'cnn' or 'crnn', got '$cnn_arch'" >&2; exit 1 ;;
+esac
+
+export RISE_DATA_ROOT="$cnn_data_root"
+export OMP_NUM_THREADS="${NSLOTS:-4}"
+export MKL_NUM_THREADS="${NSLOTS:-4}"
+export PYTHONUNBUFFERED=1
+
+source "$cnn_venv/bin/activate"
+cd "$cnn_repo"
+export PYTHONPATH="$cnn_repo/src${PYTHONPATH:+:$PYTHONPATH}"
+
+# Both architectures read the Step-7 CNN feature arrays -- NOT the raw windows that the AST and
+# MERT jobs use, so `run_pipeline --to step5_normalize` is not enough here. Check for the arrays
+# themselves rather than for windows.csv, which exists long before they do.
+for split in train val; do
+    test -f "$cnn_data_root/features/cnn/$split.npz" || {
+        echo "Missing $cnn_data_root/features/cnn/$split.npz" >&2
+        echo "Run the FULL preprocessing pipeline first (all nine stages, through step7):" >&2
+        echo "    python -m instrument_robustness.run_pipeline" >&2
+        exit 1
+    }
+done
+
+python -c "import torch; print('PyTorch:', torch.__version__); \
+print('CUDA:', torch.cuda.is_available()); \
+print('GPU:', torch.cuda.get_device_name() if torch.cuda.is_available() else 'CPU')"
+
+echo "architecture: $cnn_arch -> instrument_robustness.$cnn_module"
+python -m "instrument_robustness.$cnn_module"
