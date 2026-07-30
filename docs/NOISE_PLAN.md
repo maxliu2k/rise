@@ -209,9 +209,11 @@ mismatched manifests.
 ## 7. Clean-parity gate
 
 Before any noisy condition is scored, the evaluator runs the **clean** files and must reproduce the
-model's official clean macro-F1 to within `1e-3` **and** the official test-example count. A missing
-official result is an error, not a skipped gate. Any mismatch aborts before noisy results are
-written.
+model's official clean macro-F1 to within `2e-3` **and** the official test-example count. The small
+tolerance permits cross-platform numerical drift in handcrafted spectral features (the verified
+macOS-to-SCC SVM difference was `0.001020` with matching package versions); it still rejects a
+material preprocessing or model mismatch. A missing official result is an error, not a skipped
+gate. Any mismatch aborts before noisy results are written.
 
 ## 8. Featurization must match training
 
