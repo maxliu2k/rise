@@ -58,11 +58,13 @@ either after `noise_sweep --generate` would invalidate the shared noisy corpus.
 - **MERT/all-category pilot completed:** 240 balanced validation windows, clean macro-F1 0.9032
   (full validation 0.9038). White reached floor by 0 dB, while natural/mechanical required the
   lower extension and plateaued by -10/-15 dB.
-- **Frozen grid:** `[60, 50, 40, 30, 20, 10, 0, -5, -10, -15]`. It includes the SVM decline, MERT's
-  useful middle under every category, and both ESC-50 floor plateaus. 70 dB was excluded because
-  MERT was indistinguishable from clean.
-- With three replicates this is 91 scored conditions, 112,950 files, about 27.8 GiB. Rationale and
-  measured curves are recorded in `config.py` and `docs/NOISE_PLAN.md` §2.
+- **Frozen grid:** `[60, 50, 40, 30, 20, 10, 0, -10]`. It includes the SVM decline, MERT's useful
+  middle under every category, and the ESC-50 floor at -10. The validation pilot also measured -5
+  and -15; they were omitted before test generation because -5 was intermediate and -15 added
+  little beyond the -10 plateau.
+- With two replicates this is 49 scored conditions, 60,240 files, about 14.8 GiB. This deadline-
+  bounded choice retains an independent sensitivity draw but limits variance estimation. Rationale
+  and measured curves are recorded in `config.py` and `docs/NOISE_PLAN.md` §2.
 
 ### ✅ 3. One noise sample per clip
 - **The replicate axis is fixed in code.** The seed is now
@@ -81,8 +83,9 @@ either after `noise_sweep --generate` would invalidate the shared noisy corpus.
   `validate_noise_manifest(verify_audio_hashes=True)`, all 12 windows drew different clips per
   replicate, the realization stayed constant across SNRs within a replicate, and requested SNR was
   achieved to 6.7e-7 dB.
-- **Frozen at 3.** This is the smallest practical count that produces a non-degenerate
-  noise-realization spread. The exact grid/count/91-condition contract is regression-tested.
+- **Frozen at 2 before official test generation.** This retains an independent sensitivity draw,
+  but the paper must identify two replicates as a limitation. The exact grid/count/49-condition
+  contract is regression-tested.
 
 ### 🟡 4. Natural/mechanical categories too broad
 - **Fixed — the provenance half.** `noise_provenance.csv` now carries `noise_target`,

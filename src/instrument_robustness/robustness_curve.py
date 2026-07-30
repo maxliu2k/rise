@@ -8,9 +8,9 @@ comparisons pair the same replicate number before taking a difference. Treating 
 unrelated curve point creates duplicate SNRs; comparing unmatched draws confounds model differences
 with noise-sampling luck.
 
-AUDIT ITEM 18 -- SPACING. `config.SNRS` uses 10 dB steps from 60 through 0 and 5 dB steps from 0
-through -15. An unweighted mean would therefore give the densely sampled lower tail too much weight.
-The dB-weighted integral handles the actual spacing:
+AUDIT ITEM 18 -- SPACING. `config.SNRS` currently uses uniform 10 dB steps from 60 through -10.
+The dB-weighted integral is retained so robustness remains comparable when a selected subset,
+pilot grid, or future preregistered protocol is not uniformly spaced:
 
   * adding two levels where a model happens to do well moves the unweighted mean a lot and the
     weighted integral almost not at all. Measured, same SVM curve, adding 55 and 45 dB:
@@ -21,7 +21,7 @@ The dB-weighted integral handles the actual spacing:
 So: report `robustness_auc`, which is invariant to how densely the curve was sampled.
 `mean_retention` is returned alongside it only so the two can be compared and the gap seen.
 
-AUDIT ITEM 19 -- MULTIPLICITY. A full sweep is 90 noisy condition-replicates per model. Comparing
+AUDIT ITEM 19 -- MULTIPLICITY. A full sweep is 48 noisy condition-replicates per model. Comparing
 several models, and optionally 12 instruments within each, produces hundreds of hypothesis tests.
 `noise_stats` returns a correct p-value for ONE comparison; nothing corrected across the family, so
 at alpha = 0.05 roughly one comparison in twenty looks significant by construction.
