@@ -95,11 +95,17 @@ enough, and it avoids a ~6 GB dependency.
 ## 3. SNR is defined by power, not amplitude
 
 ```python
+noise   = noise - mean(noise)
 p_sig   = mean(clean ** 2)
 p_noise = mean(noise ** 2)
 alpha   = sqrt(p_sig / (p_noise * 10 ** (snr_db / 10)))
 noisy   = clean + alpha * noise
 ```
+
+Mean removal eliminates constant DC offset before it can count as noise power. For ESC-50, the
+non-silence check is applied to this centered crop; a nearly constant crop is redrawn instead of
+being amplified. The completed-manifest validator rejects residual DC above 1% of added-noise
+power.
 
 Getting this wrong (amplitude instead of power, or the wrong sign) produces files that *look*
 plausible but sit at the wrong SNR. See §6.

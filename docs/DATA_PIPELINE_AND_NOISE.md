@@ -1578,10 +1578,10 @@ A useful catalog would contain:
 ## 19. Gaussian white-noise generation
 
 **VERIFIED IMPLEMENTATION.** For window $i$ and the white-noise category, the deterministic random
-generator draws
+generator first draws
 
 $$
-n_i[t]\overset{\mathrm{iid}}{\sim}\mathcal N(0,1),
+u_i[t]\overset{\mathrm{iid}}{\sim}\mathcal N(0,1),
 \qquad
 t=0,\ldots,T-1,
 \qquad
@@ -1591,22 +1591,27 @@ $$
 Thus the population moments are
 
 $$
-\mathbb E[n_i[t]]=0,
+\mathbb E[u_i[t]]=0,
 \qquad
-\operatorname{Var}(n_i[t])=1,
+\operatorname{Var}(u_i[t])=1,
 \qquad
-\mathbb E[n_i[t]^2]=1.
+\mathbb E[u_i[t]^2]=1.
 $$
 
-The realized finite vector generally has
+The realized finite vector generally has $\bar u_i\ne0$, so the implementation centers it:
 
 $$
-\bar n_i=\frac1T\sum_t n_i[t]\ne0,
+\bar u_i=\frac1T\sum_t u_i[t],
+\qquad
+n_i[t]=u_i[t]-\bar u_i,
+\qquad
+\bar n_i\approx0,
 \qquad
 P_{n_i}=\frac1T\sum_t n_i[t]^2\ne1.
 $$
 
-The mixer therefore uses the measured $P_{n_i}$, not the theoretical value 1
+The approximation only reflects float32 rounding. The mixer uses the measured centered
+$P_{n_i}$, not the theoretical value 1
 ([`noise_sweep.py` L206–218](../src/instrument_robustness/noise_sweep.py#L206-L218)). Samples are
 cast to float32 before scaling.
 
@@ -1642,14 +1647,22 @@ $$
 o\sim\operatorname{Uniform}\{0,1,\ldots,L'-T\},
 $$
 
-and the unscaled noise realization is
+and the raw crop is
 
 $$
-n_i[t]=\widetilde r[o+t],
+u_i[t]=\widetilde r[o+t],
 \qquad t=0,\ldots,T-1.
 $$
 
-A candidate is accepted only if
+Its segment mean is removed before measuring noise power:
+
+$$
+\bar u_i=\frac1T\sum_t u_i[t],
+\qquad
+n_i[t]=u_i[t]-\bar u_i.
+$$
+
+A candidate is accepted only if the centered crop satisfies
 
 $$
 \operatorname{RMS}(n_i)
@@ -1662,9 +1675,8 @@ The implementation makes at most 20 attempts, then returns the selected source, 
 rate, and the crop start in **resampled** sample coordinates
 ([`noise_sweep.py` L189–241](../src/instrument_robustness/noise_sweep.py#L189-L241)).
 
-> **Verified implementation deviation from the proposed generic recipe:** No DC-offset removal is
-> performed. The stored crop offset is measured in the **resampled** 22.05 kHz waveform, not in the
-> original file's sample coordinates. Crop end is implicit as `start + 66150`, not stored.
+The stored crop offset is measured in the **resampled** 22.05 kHz waveform, not in the original
+file's sample coordinates. Crop end is implicit as `start + 66150`, not stored.
 
 The RNG seed determines both source-file selection and crop start. The same draw is reused across
 all SNR levels for that clean window and noise type.
@@ -2212,7 +2224,8 @@ tests/modules require optional PyTorch/AST dependencies.
 | Deterministic seeds | `test_seed_is_build_scoped_and_snr_independent` | same build/window/type stable; build changes seed; SNR omitted |
 | Clipping/headroom | `test_float_window_preserves_headroom...` | float WAV reader preserves values above 1 and rejects wrong length |
 | Noise manifest | `test_manifest_validation_is_fail_closed`; dataset hash test | stale dataset/protocol fails; actual windows hash affects identity |
-| Shared pairing/parity | runner, parity, pitch-group, pairing tests | all 16 conditions, official clean count/F1 gate, authoritative clusters |
+| Shared pairing/parity | runner, parity, pitch-group, pairing tests | full configured condition grid, official clean count/F1 gate, authoritative clusters |
+| Noise DC centering | centered white/ESC draws, manifest, residual-DC tests | mean removed before power scaling; excessive residual DC rejected |
 | Fixed-label statistics | macro-F1 and cluster-statistics tests | absent labels still count; bootstrap/sign output deterministic |
 | Noise split isolation | none | external noise splits do not exist |
 | Waveform regeneration | none | no byte-for-byte redraw/materialize regression |
@@ -2233,7 +2246,7 @@ Important missing tests:
 4. Numeric regression tests for the 88-feature order and `(128,130)` log-mel calculation.
 5. Verification that Step 6 reads no validation/test rows and that feature statistics match train.
 6. Deterministic ESC-50 file/crop selection and byte-identical regeneration.
-7. DC-offset behavior and empirical Gaussian mean/power tolerances.
+7. Full-corpus residual-DC distribution after centering on SCC.
 8. External-noise source split isolation and ESC-50 category/fold provenance.
 9. A generated-file test that hashes/reloads output and checks every provenance field.
 10. Broader real-data validation of the energy-derived active-instrument threshold.
@@ -2383,15 +2396,17 @@ as the mixing target, and do not describe external noise splits as implemented.
 - Log-mel inputs used 2,048-point FFTs, 512-sample hops, 128 mel bins, 130 frames, and 0–11,025 Hz.
 - AST, MERT, and PANNs began with the same Step-5 waveform and resampled to 16, 24, and 32 kHz,
   respectively.
-- The frozen noise grid is white/natural/mechanical at 60, 50, 40, 30, 20, 10, 0, -5, -10, and
-  -15 dB plus clean, with three independent noise realizations.
+- The frozen noise grid is white/natural/mechanical at 60, 50, 40, 30, 20, 10, 0, and -10 dB plus
+  clean, with two independent noise realizations.
 - Only clean test windows were corrupted; clean train/validation data and fitted models remained
   unchanged.
 - Noise gain was calculated from mean power over the entire fixed window. Band, segmental,
   active-instrument, and model-effective SNR were recorded alongside it.
 - Each configured noise replicate was deterministic per dataset build/window/category/replicate and
   was rescaled across SNRs.
-- No post-mix normalization or hard clipping was used; noisy audio was stored as float32 WAV.
+- Every noise crop had its segment mean removed before power scaling; excessive residual DC failed
+  validation. No post-mix normalization or hard clipping was used; noisy audio was stored as
+  float32 WAV.
 - The same materialized noisy WAV was intended for every model.
 - SVM, MERT, PANNs, AST, CNN, and CRNN noise adapters exist; real-checkpoint parity and sealed-test
   status still differ by model.
@@ -2422,11 +2437,7 @@ as the mixing target, and do not describe external noise splits as implemented.
 
 1. Active-region SNR is not implemented; decide whether whole-window SNR remains the final protocol.
 2. External noise train/validation/test splitting is absent.
-3. DC-offset removal is absent.
-4. There are no CNN, CRNN, or AST noise adapters.
-5. A replicate axis exists, but the configured count is still one and no across-realization
-   uncertainty analysis has been frozen.
-6. DEMAND, speech, music, reverberation, and competing-instrument conditions are not implemented.
+3. DEMAND, speech, music, reverberation, and competing-instrument conditions are not implemented.
 
 ### Teammate confirmation required
 
