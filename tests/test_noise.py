@@ -509,6 +509,35 @@ class NoiseTests(unittest.TestCase):
                 f"{TARGET_LABELS[0]}_A0",
             )
 
+    def test_test_frame_accepts_matching_note_already_in_windows_csv(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir)
+            paths = write_dataset_files(root, all_labels=True)
+            windows = pd.read_csv(paths["windows_csv"])
+            manifest = pd.read_csv(paths["manifest_labeled"]).rename(
+                columns={"path": "source_path"}
+            )
+            windows = windows.merge(
+                manifest[["source_path", "note"]],
+                on="source_path",
+                validate="one_to_one",
+            )
+            windows.to_csv(paths["windows_csv"], index=False)
+            write_artifact_fingerprint(paths["windows_csv"], "step5_normalize")
+
+            frame = load_test_frame(
+                windows_csv=paths["windows_csv"],
+                manifest_labeled=paths["manifest_labeled"],
+            )
+
+            self.assertIn("note", frame)
+            self.assertNotIn("manifest_note", frame)
+            self.assertTrue(
+                frame["pitch_group"].equals(
+                    frame["label"].astype(str) + "_" + frame["note"].astype(str)
+                )
+            )
+
     def test_clean_parity_requires_an_official_result_and_count(self) -> None:
         with self.assertRaisesRegex(ValueError, "Official clean macro-F1"):
             assert_clean_parity(
