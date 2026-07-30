@@ -18,9 +18,9 @@ conda activate spring-2026-pyt
 set -u
 
 export PYTHONPATH="$PWD/src${PYTHONPATH:+:$PYTHONPATH}"
-export HF_HOME="$PWD/.cache/huggingface"
-export RISE_DATA_ROOT="${RISE_DATA_ROOT:-$PWD/all-samples}"
-export AST_OUTPUT_DIR="${AST_OUTPUT_DIR:-$PWD/artifacts/ast}"
+export RISE_DATA_ROOT="${RISE_DATA_ROOT:?Submit with RISE_DATA_ROOT pointing at the completed run_pipeline data root}"
+export AST_OUTPUT_DIR="${AST_OUTPUT_DIR:?Submit with a fresh AST_OUTPUT_DIR outside the repository}"
+export HF_HOME="${HF_HOME:-$RISE_DATA_ROOT/.cache/huggingface}"
 export AST_EPOCHS="${AST_EPOCHS:-10}"
 export AST_BATCH_SIZE="${AST_BATCH_SIZE:-8}"
 export AST_LEARNING_RATE="${AST_LEARNING_RATE:-1e-5}"

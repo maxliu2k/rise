@@ -27,6 +27,22 @@ from instrument_robustness.config import (
 from instrument_robustness.pretrained_extractors import build_ast_extractor, build_ast_model
 
 
+def _prepare_output_dir(output_dir: Path) -> Path:
+    """Create a fresh run directory and refuse to mix results from another data contract."""
+    path = Path(output_dir)
+    if path.exists():
+        contents = sorted(entry.name for entry in path.iterdir())
+        if contents:
+            preview = ", ".join(contents[:10])
+            suffix = ", ..." if len(contents) > 10 else ""
+            raise FileExistsError(
+                f"AST output directory {path} is not empty ({preview}{suffix}). "
+                "Choose a new --output-dir so an earlier checkpoint is never overwritten."
+            )
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def _macro_f1(
     true_labels: np.ndarray,
     predicted_labels: np.ndarray,
@@ -275,6 +291,7 @@ def train(
     print(f"AST classes ({num_labels}): {', '.join(labels)}", flush=True)
     window_count = validate_ast_window_files(manifest_path)
     print(f"AST windows verified: {window_count}", flush=True)
+    output_dir = _prepare_output_dir(output_dir)
 
     extractor = build_ast_extractor()
     loader_args = {
@@ -290,8 +307,8 @@ def train(
 
     model = build_ast_model(labels).to(target_device)
     model.config.instrument_robustness_fingerprint = config_fingerprint()
+    model.config.instrument_robustness_windows_sha256 = _sha256(manifest_path)
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-    output_dir.mkdir(parents=True, exist_ok=True)
 
     class_weights = None
     if use_class_weights:
@@ -384,6 +401,11 @@ def train(
             "test": test_loader.dataset.class_counts,
         },
         "config_fingerprint": config_fingerprint(),
+        "windows_manifest": {
+            "path": str(manifest_path),
+            "sha256": _sha256(manifest_path),
+            "window_count": window_count,
+        },
         "history": history,
         "test": test_metrics,
         "per_instrument": reports["per_instrument"],

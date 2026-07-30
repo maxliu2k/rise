@@ -11,17 +11,20 @@ git pull --ff-only origin main
 export RISE_DATA_ROOT="/projectnb/rise-grid/$USER/rise-data/philharmonia"
 ```
 
-Submit the CPU preprocessing job first. It downloads the configured Philharmonia
-sources and rebuilds every fingerprinted stage for all 12 instruments:
+Submit the CPU preprocessing job first. It invokes the canonical `run_pipeline`
+entry point, downloads the configured Philharmonia sources, and rebuilds all nine
+fingerprinted stages for the onset-aligned, one-window-per-source dataset:
 
 ```bash
 prep_job=$(qsub -terse -v RISE_DATA_ROOT="$RISE_DATA_ROOT" scc/ast_prepare.qsub)
-qsub -hold_jid "$prep_job" -v RISE_DATA_ROOT="$RISE_DATA_ROOT" train_ast.qsub
+export AST_OUTPUT_DIR="$RISE_DATA_ROOT/models/ast-canonical-$(date +%Y%m%d)"
+qsub -hold_jid "$prep_job" -v RISE_DATA_ROOT="$RISE_DATA_ROOT",AST_OUTPUT_DIR="$AST_OUTPUT_DIR" train_ast.qsub
 qstat -u "$USER"
 ```
 
 The GPU job verifies all 12 labels, provenance, and every window file before it
-downloads AST or begins training.
+downloads AST or begins training. `AST_OUTPUT_DIR` is required and must be fresh,
+so the invalid pre-crop checkpoint cannot be silently reused or overwritten.
 
 ## MERT probe
 
