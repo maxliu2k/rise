@@ -94,12 +94,17 @@ def validation_windows(limit: int | None, seed: int) -> pd.DataFrame:
         raise ValueError(f"Validation split is missing labels: {missing}")
     if limit is not None and limit < len(frame):
         per_class = max(1, limit // len(TARGET_LABELS))
-        frame = (
-            frame.groupby("label", group_keys=False)
-            .apply(lambda g: g.sample(n=min(per_class, len(g)), random_state=seed))
-            .sort_index()
-            .reset_index(drop=True)
+        frame = pd.concat(
+            [
+                group.sample(
+                    n=min(per_class, len(group)),
+                    random_state=seed,
+                )
+                for _, group in frame.groupby("label", sort=False)
+            ],
+            ignore_index=False,
         )
+        frame = frame.sort_index().reset_index(drop=True)
     return frame
 
 

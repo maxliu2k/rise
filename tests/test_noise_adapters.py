@@ -15,6 +15,7 @@ import importlib.util
 import json
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 import numpy as np
@@ -275,6 +276,43 @@ class SnrPilotRecommendationTests(unittest.TestCase):
 
 
 class SnrPilotSplitTests(unittest.TestCase):
+    def test_subsampling_preserves_label_without_groupby_apply(self) -> None:
+        """Regression for pandas 3, where GroupBy.apply drops the grouping column by default."""
+        import pandas as pd
+
+        from instrument_robustness.snr_pilot import validation_windows
+
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            windows_csv = Path(temporary_dir) / "windows.csv"
+            pd.DataFrame(
+                [
+                    {
+                        "window_path": f"{label}_{index}.wav",
+                        "label": label,
+                        "split": "val",
+                    }
+                    for label in TARGET_LABELS
+                    for index in range(2)
+                ]
+            ).to_csv(windows_csv, index=False)
+            with (
+                mock.patch(
+                    "instrument_robustness.snr_pilot.WINDOWS_CSV",
+                    windows_csv,
+                ),
+                mock.patch(
+                    "instrument_robustness.snr_pilot.assert_artifact_fingerprint"
+                ),
+                mock.patch(
+                    "pandas.core.groupby.generic.DataFrameGroupBy.apply",
+                    side_effect=AssertionError("GroupBy.apply is pandas-version-sensitive"),
+                ),
+            ):
+                frame = validation_windows(limit=len(TARGET_LABELS), seed=0)
+
+        self.assertEqual(set(frame["label"]), set(TARGET_LABELS))
+        self.assertEqual(len(frame), len(TARGET_LABELS))
+
     @unittest.skipUnless(REAL_BUILD, "needs a generated build (windows.csv)")
     def test_pilot_reads_validation_only(self) -> None:
         """The pilot must never touch test: choosing a grid is a design decision, and making it
