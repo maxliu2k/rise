@@ -554,6 +554,21 @@ class NoiseTests(unittest.TestCase):
                 official_examples=11,
             )
 
+    def test_clean_parity_allows_only_small_cross_platform_drift(self) -> None:
+        assert_clean_parity(
+            0.9015,
+            official_macro_f1=0.9,
+            measured_examples=10,
+            official_examples=10,
+        )
+        with self.assertRaisesRegex(ValueError, "Clean parity failed"):
+            assert_clean_parity(
+                0.9025,
+                official_macro_f1=0.9,
+                measured_examples=10,
+                official_examples=10,
+            )
+
     def test_svm_noise_adapter_reuses_saved_train_statistics(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
             path = Path(temporary_dir) / "stats.npz"
