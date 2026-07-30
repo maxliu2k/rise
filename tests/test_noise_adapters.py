@@ -13,6 +13,8 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -327,6 +329,60 @@ class SnrPilotSplitTests(unittest.TestCase):
         everything = pd.read_csv(WINDOWS_CSV)
         test_paths = set(everything.loc[everything["split"] == "test", "window_path"])
         self.assertFalse(set(frame["window_path"]) & test_paths)
+
+
+class SnrPilotSccScriptTests(unittest.TestCase):
+    def test_custom_noise_types_and_snrs_are_forwarded(self) -> None:
+        repo = Path(__file__).resolve().parents[1]
+        script = repo / "scc" / "mert_snr_pilot.qsub"
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir)
+            output = root / "artifacts"
+            output.mkdir()
+            (output / "best_probe.pt").touch()
+            (output / "validation_summary.json").write_text("{}", encoding="utf-8")
+
+            venv_bin = root / "venv" / "bin"
+            venv_bin.mkdir(parents=True)
+            (venv_bin / "activate").write_text("", encoding="utf-8")
+            fake_bin = root / "fake-bin"
+            fake_bin.mkdir()
+            capture = root / "python-arguments.txt"
+            fake_python = fake_bin / "python"
+            fake_python.write_text(
+                '#!/bin/bash\nprintf "%s\\n" "$*" >> "$CAPTURE_LOG"\n',
+                encoding="utf-8",
+            )
+            fake_python.chmod(0o755)
+
+            environment = os.environ.copy()
+            environment.update(
+                {
+                    "PATH": f"{fake_bin}:{environment['PATH']}",
+                    "CAPTURE_LOG": str(capture),
+                    "MERT_REPO": str(repo),
+                    "MERT_VENV": str(root / "venv"),
+                    "MERT_OUTPUT_DIR": str(output),
+                    "MERT_PILOT_OUTPUT": str(root / "pilot.json"),
+                    "MERT_PILOT_NOISE": "natural:mechanical",
+                    "MERT_PILOT_SNRS": "20:10:0:-5:-10:-15",
+                    "RISE_DATA_ROOT": str(root / "data"),
+                    "SGE_O_WORKDIR": str(repo),
+                }
+            )
+            subprocess.run(
+                ["bash", str(script)],
+                check=True,
+                env=environment,
+                capture_output=True,
+                text=True,
+            )
+
+            invocation = capture.read_text(encoding="utf-8").splitlines()[-1]
+
+        self.assertIn("--noise natural mechanical", invocation)
+        self.assertIn("--snrs 20 10 0 -5 -10 -15", invocation)
+        self.assertIn("--limit 240", invocation)
 
 
 class MertPilotCheckpointTests(unittest.TestCase):
