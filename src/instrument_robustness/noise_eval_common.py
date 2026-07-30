@@ -20,6 +20,7 @@ from instrument_robustness.config import (
     MANIFEST_FINGERPRINT,
     MANIFEST_IN,
     MANIFEST_LABELED,
+    N_REPLICATES,
     ROOT,
     TARGET_LABELS,
     WINDOWS_CSV,
@@ -29,6 +30,7 @@ from instrument_robustness.config import (
 )
 from instrument_robustness.noise_sweep import (
     NOISE_MANIFEST_NAME,
+    NOISE_PROVENANCE_NAME,
     NOISE_TYPES,
     NOISY_DIR,
     SNRS,
@@ -48,14 +50,31 @@ class NoiseCondition:
     tag: str
     noise_type: str
     snr_db: int | None
+    replicate: int | None = None
 
 
 def noise_conditions() -> list[NoiseCondition]:
-    return [NoiseCondition("clean", "clean", None)] + [
-        NoiseCondition(f"{noise_type}_{snr}", noise_type, snr)
-        for noise_type in NOISE_TYPES
-        for snr in SNRS
-    ]
+    """Every condition a model is scored on: clean, plus each (noise type, SNR, replicate).
+
+    Replicates are SEPARATE conditions rather than being averaged here. Aggregating them at scoring
+    time would throw away exactly the quantity they exist to provide -- the spread of a model's score
+    across independent noise draws, which is what tells you whether a gap between two models is
+    larger than the noise in the measurement. `noise_stats` aggregates; this does not.
+
+    The `_r{k}` suffix appears only when N_REPLICATES > 1, so a single-replicate build keeps the
+    condition names that appear in figures and filenames short.
+    """
+    conditions = [NoiseCondition("clean", "clean", None, None)]
+    for noise_type in NOISE_TYPES:
+        for snr in SNRS:
+            for replicate in range(N_REPLICATES):
+                suffix = f"_r{replicate}" if N_REPLICATES > 1 else ""
+                conditions.append(
+                    NoiseCondition(
+                        f"{noise_type}_{snr}{suffix}", noise_type, snr, replicate
+                    )
+                )
+    return conditions
 
 
 def load_test_frame(
@@ -104,6 +123,41 @@ def load_test_frame(
     return frame.drop(columns=["manifest_label"])
 
 
+def noise_source_lookup(
+    condition: NoiseCondition,
+    *,
+    noisy_dir: str | Path = NOISY_DIR,
+) -> dict[str, str]:
+    """window_id -> the noise recording used, for one condition. Empty dict for clean.
+
+    WHY PREDICTIONS NEED THIS (audit item 8). Several clean test windows can be corrupted with crops
+    from the SAME ESC-50 recording, so their errors are not independent -- if that one recording
+    happens to be especially destructive, every window that drew it fails together. `noise_stats`
+    resamples clusters to handle exactly this kind of correlation, but it can only cluster on a
+    column that is present in the prediction CSV. Attaching it here is what makes
+    `--cluster noise_source` possible; recovering it afterwards would mean re-joining every
+    prediction file against provenance by hand.
+    """
+    if condition.noise_type == "clean":
+        return {}
+    provenance_path = Path(noisy_dir) / NOISE_PROVENANCE_NAME
+    if not provenance_path.is_file():
+        return {}
+    provenance = pd.read_csv(provenance_path)
+    required = {"window_id", "noise_type", "snr_db", "noise_source"}
+    if not required <= set(provenance.columns):
+        return {}
+    selected = provenance[
+        (provenance["noise_type"] == condition.noise_type)
+        & (provenance["snr_db"].astype(float) == float(condition.snr_db))
+    ]
+    if "replicate" in provenance.columns and condition.replicate is not None:
+        selected = selected[
+            selected["replicate"].astype(int) == int(condition.replicate)
+        ]
+    return dict(zip(selected["window_id"].astype(str), selected["noise_source"].astype(str)))
+
+
 def condition_paths(
     frame: pd.DataFrame,
     condition: NoiseCondition,
@@ -118,6 +172,7 @@ def condition_paths(
             condition.noise_type,
             int(condition.snr_db),
             window_id,
+            replicate=int(condition.replicate or 0),
             noisy_dir=noisy_dir,
         )
         for window_id in frame["window_id"]
@@ -279,11 +334,22 @@ def run_noise_evaluation(
             )
             clean_macro_f1 = macro_f1
 
+        # Which noise recording each window drew, so noise_stats can cluster on it (item 8).
+        # "clean" for the clean condition, and "unknown" only if provenance is unreadable -- both
+        # are single-valued, so clustering on them degrades to the ungrouped case rather than
+        # silently splitting windows into meaningless groups.
+        sources = noise_source_lookup(condition, noisy_dir=noisy_dir)
         predictions_frame = pd.DataFrame(
             {
                 "window_id": frame["window_id"],
                 "source_path": frame["source_path"],
                 "pitch_group": frame["pitch_group"],
+                "noise_source": [
+                    "clean"
+                    if condition.noise_type == "clean"
+                    else sources.get(str(window_id), "unknown")
+                    for window_id in frame["window_id"]
+                ],
                 "true_label": frame["label"],
                 "predicted_label": [
                     TARGET_LABELS[index] for index in predictions
@@ -311,6 +377,7 @@ def run_noise_evaluation(
             "condition": condition.tag,
             "noise_type": condition.noise_type,
             "snr_db": condition.snr_db,
+            "replicate": condition.replicate,
             "n": int(len(frame)),
             "accuracy": accuracy,
             "macro_f1": macro_f1,
@@ -322,6 +389,16 @@ def run_noise_evaluation(
             },
             "model_sha256": model_sha256,
             "score_type": score_type,
+            # How concentrated the noise draw was: 1.0 means every window drew a distinct
+            # recording, 0.1 means ten windows shared each one. Low values mean window-level
+            # errors are correlated through the noise, not only through the instrument.
+            "noise_source_distinct_fraction": (
+                None
+                if condition.noise_type == "clean"
+                else round(
+                    predictions_frame["noise_source"].nunique() / max(len(frame), 1), 6
+                )
+            ),
             "classification_report": report,
             "confusion_matrix": confusion_matrix(
                 y_true,
@@ -337,6 +414,7 @@ def run_noise_evaluation(
             {
                 "noise_type": condition.noise_type,
                 "snr_db": condition.snr_db,
+                "replicate": condition.replicate,
                 "condition": condition.tag,
                 "accuracy": accuracy,
                 "macro_f1": macro_f1,

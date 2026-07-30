@@ -29,12 +29,23 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
-from sklearn.metrics import balanced_accuracy_score, classification_report, matthews_corrcoef
+from sklearn.metrics import (
+    accuracy_score,
+    balanced_accuracy_score,
+    classification_report,
+    f1_score,
+    matthews_corrcoef,
+)
 
 from instrument_robustness.cnn_data import CNN as CNN_FEATURE_DIR
 from instrument_robustness.cnn_data import load_cnn
 from instrument_robustness.cnn_model import MediumCNN, hard_vote, predict_probs, soft_vote
-from instrument_robustness.config import ARTIFACTS, TARGET_LABELS, assert_fingerprint
+from instrument_robustness.config import (
+    ARTIFACTS,
+    TARGET_LABELS,
+    assert_fingerprint,
+    config_fingerprint,
+)
 from instrument_robustness.train_cnn import sha256
 
 COMBINERS = {"soft_vote": soft_vote, "hard_vote": hard_vote}
@@ -113,18 +124,35 @@ def run_finalize(model_cls, output_dir: Path, device: str) -> dict:
 
     singles = [float(balanced_accuracy_score(yte, p.argmax(axis=1))) for p in probs]
     preds = COMBINERS[combiner_name](probs)
+    labels = list(range(len(TARGET_LABELS)))
+
+    # macro-F1 is recorded even though the combiner was selected on balanced accuracy. It is the
+    # project's primary cross-model metric and the quantity noise_eval_common's clean-parity gate
+    # compares against, so a summary without it cannot enter the noise sweep at all. Keeping
+    # balanced accuracy and MCC alongside it costs nothing and preserves what selection used.
+    macro_f1 = float(f1_score(yte, preds, labels=labels, average="macro", zero_division=0))
     summary = {
         "architecture": model_cls.__name__,
         "seeds": seeds,
         "combiner": combiner_name,
+        "label_order": list(TARGET_LABELS),
+        "config_fingerprint": config_fingerprint(),
+        "selection_metric": "validation_balanced_accuracy",
         "n_test": int(len(yte)),
+        "test_examples": int(len(yte)),
         "test_inputs": {"path": str(CNN_FEATURE_DIR / "test.npz"),
                         "sha256": sha256(CNN_FEATURE_DIR / "test.npz")},
         "single_seed": {"per_seed": singles, "mean": float(np.mean(singles)),
                         "std": float(np.std(singles, ddof=1)) if len(singles) > 1 else 0.0},
+        "test_metrics": {
+            "accuracy": float(accuracy_score(yte, preds)),
+            "balanced_accuracy": float(balanced_accuracy_score(yte, preds)),
+            "macro_f1": macro_f1,
+            "mcc": float(matthews_corrcoef(yte, preds)),
+        },
         "ensemble_balanced_accuracy": float(balanced_accuracy_score(yte, preds)),
         "ensemble_mcc": float(matthews_corrcoef(yte, preds)),
-        "per_class": classification_report(yte, preds, labels=list(range(len(TARGET_LABELS))),
+        "per_class": classification_report(yte, preds, labels=labels,
                                            target_names=list(TARGET_LABELS), output_dict=True,
                                            zero_division=0),
     }
@@ -142,7 +170,8 @@ def run_finalize(model_cls, output_dir: Path, device: str) -> dict:
     print(f"\nsingle seed  {summary['single_seed']['mean']:.4f} "
           f"+/- {summary['single_seed']['std']:.4f}")
     print(f"ensemble     {summary['ensemble_balanced_accuracy']:.4f} "
-          f"| MCC {summary['ensemble_mcc']:.4f}")
+          f"| MCC {summary['ensemble_mcc']:.4f} "
+          f"| macro-F1 {summary['test_metrics']['macro_f1']:.4f}")
     print(f"\nwrote {summary_path}, {confusion_path}, {status_path}")
     return summary
 

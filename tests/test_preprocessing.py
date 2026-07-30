@@ -73,7 +73,8 @@ class WindowRegressionTests(unittest.TestCase):
     def test_window_writer_tiles_short_source(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
             root = Path(temporary_dir)
-            trimmed = root / "work" / "trimmed" / "violin" / "A4.wav"
+            trimmed_root = root / "work" / "trimmed"
+            trimmed = trimmed_root / "violin" / "A4.wav"
             windows = root / "work" / "windows"
             trimmed.parent.mkdir(parents=True)
             waveform = np.full(MIN_CONTENT + 10, 0.25, dtype=np.float32)
@@ -81,12 +82,14 @@ class WindowRegressionTests(unittest.TestCase):
 
             with (
                 patch("instrument_robustness.step4_window.ROOT", root),
+                patch("instrument_robustness.step4_window.TRIMMED", trimmed_root),
                 patch("instrument_robustness.step4_window.WINDOWS", windows),
             ):
                 rows = window_one(
                     (
                         "work/trimmed/violin/A4.wav",
                         "violin",
+                        "A4",
                         "train",
                         "violin/A4/source.mp3",
                     )
@@ -101,7 +104,8 @@ class WindowRegressionTests(unittest.TestCase):
     def test_window_writer_drops_tiny_trailing_remainder(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
             root = Path(temporary_dir)
-            trimmed = root / "work" / "trimmed" / "violin" / "A4.wav"
+            trimmed_root = root / "work" / "trimmed"
+            trimmed = trimmed_root / "violin" / "A4.wav"
             windows = root / "work" / "windows"
             trimmed.parent.mkdir(parents=True)
             waveform = np.full(WIN + MIN_CONTENT - 1, 0.25, dtype=np.float32)
@@ -109,12 +113,14 @@ class WindowRegressionTests(unittest.TestCase):
 
             with (
                 patch("instrument_robustness.step4_window.ROOT", root),
+                patch("instrument_robustness.step4_window.TRIMMED", trimmed_root),
                 patch("instrument_robustness.step4_window.WINDOWS", windows),
             ):
                 rows = window_one(
                     (
                         "work/trimmed/violin/A4.wav",
                         "violin",
+                        "A4",
                         "train",
                         "violin/A4/source.mp3",
                     )

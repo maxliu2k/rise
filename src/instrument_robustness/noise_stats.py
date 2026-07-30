@@ -26,6 +26,14 @@ PAIR_COLUMNS = (
     "true_label",
 )
 
+# Clustering units, in increasing looseness. `pitch_group` remains the default and the conservative
+# choice for comparing two CONDITIONS of one model. `noise_source` is the right unit when the
+# correlation of concern runs through the NOISE rather than the instrument: several windows can be
+# corrupted by crops of the same ESC-50 recording, so if that recording is unusually destructive they
+# fail together. It is only available when the prediction CSV carries the column, which
+# noise_eval_common attaches at scoring time.
+CLUSTER_COLUMNS = ("pitch_group", "source_path", "noise_source")
+
 
 def load_condition(
     condition: str,
@@ -224,7 +232,12 @@ def main() -> None:
     parser.add_argument(
         "--cluster",
         default="pitch_group",
-        choices=("pitch_group", "source_path"),
+        choices=CLUSTER_COLUMNS,
+        help=(
+            "resampling unit. pitch_group (default) is conservative for instrument correlation; "
+            "noise_source clusters by the ESC-50 recording drawn, for correlation running through "
+            "the noise instead (audit item 8)"
+        ),
     )
     parser.add_argument("--n-boot", type=int, default=2000)
     parser.add_argument("--seed", type=int, default=0)

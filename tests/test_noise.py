@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 import numpy as np
@@ -28,12 +29,19 @@ from instrument_robustness.noise_stats import (
     paired_frames,
 )
 from instrument_robustness.noise_eval_svm import load_training_statistics
+from instrument_robustness.config import N_REPLICATES
+from instrument_robustness.noise_metrics import DIAGNOSTIC_COLUMNS
 from instrument_robustness.noise_sweep import (
     CLIP_LEN,
+    SEED_SCHEME,
+    out_path,
     NOISE_MANIFEST_VERSION,
     NOISE_TYPES,
     SNRS,
+    Esc50Clip,
     dataset_build_identity,
+    draw_noise,
+    load_esc50_index,
     measured_snr,
     mix_at_snr,
     read_audio_window,
@@ -120,8 +128,9 @@ def write_completed_noise_sweep(root: Path, paths: dict[str, Path]) -> Path:
         window_id = Path(window.window_path).stem
         for noise_type in NOISE_TYPES:
             for snr in SNRS:
-                output = (
-                    noisy_dir / noise_type / f"snr{snr}" / f"{window_id}.wav"
+              for replicate in range(N_REPLICATES):
+                output = out_path(
+                    noise_type, snr, window_id, replicate=replicate, noisy_dir=noisy_dir
                 )
                 output.parent.mkdir(parents=True, exist_ok=True)
                 output.touch()
@@ -130,12 +139,17 @@ def write_completed_noise_sweep(root: Path, paths: dict[str, Path]) -> Path:
                         "window_id": window_id,
                         "noise_type": noise_type,
                         "snr_db": snr,
+                        "replicate": replicate,
                         "seed": 1,
                         "noise_source": noise_type,
                         "noise_source_sha256": "source-hash",
                         "crop_start_resampled_sample": 0,
+                        "noise_target": None if noise_type == "white" else 3,
+                        "noise_category": None if noise_type == "white" else "dog",
+                        "noise_fold": None if noise_type == "white" else 1,
                         "unscaled_noise_power": 1.0,
                         "realized_snr_db": snr,
+                        **{column: 0.0 for column in DIAGNOSTIC_COLUMNS},
                         "output_path": str(output.relative_to(root)),
                         "output_sha256": sha256_file(output),
                     }
@@ -148,6 +162,7 @@ def write_completed_noise_sweep(root: Path, paths: dict[str, Path]) -> Path:
         "dataset": identity,
         "snrs": SNRS,
         "noise_types": NOISE_TYPES,
+        "n_replicates": N_REPLICATES,
         "n_test_windows": len(windows),
         "n_files": len(rows),
         "waveform_format": {
@@ -157,9 +172,7 @@ def write_completed_noise_sweep(root: Path, paths: dict[str, Path]) -> Path:
             "subtype": "FLOAT",
             "post_mix_normalization": False,
         },
-        "seed_scheme": (
-            "sha256(dataset_fingerprint|window_id|noise_type)[:4]; SNR excluded"
-        ),
+        "seed_scheme": SEED_SCHEME,
         "one_realization_scaled_to_all_snrs": True,
         "provenance_file": provenance.name,
         "provenance_sha256": sha256_file(provenance),
@@ -170,6 +183,92 @@ def write_completed_noise_sweep(root: Path, paths: dict[str, Path]) -> Path:
         encoding="utf-8",
     )
     return noisy_dir
+
+
+class Esc50ProvenanceTests(unittest.TestCase):
+    """The ESC-50 category and fold must reach per-mixture provenance.
+
+    Collapsing 20 ESC-50 classes into "natural" is a defensible grouping, but only if the original
+    label survives into the output -- it cannot be recovered afterwards without regenerating the
+    whole sweep, so a missing column here is an unrecoverable loss rather than an inconvenience.
+    """
+
+    def test_white_noise_carries_null_corpus_fields(self) -> None:
+        noise, provenance = draw_noise("white", np.random.default_rng(0), {})
+        self.assertEqual(noise.shape, (CLIP_LEN,))
+        # Present-but-None rather than absent, so the provenance CSV has one schema across every
+        # noise type instead of ragged columns.
+        for field in ("noise_target", "noise_category", "noise_fold"):
+            self.assertIn(field, provenance)
+            self.assertIsNone(provenance[field])
+
+    def test_esc50_index_requires_category_and_fold(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir)
+            audio, meta = root / "audio", root / "meta"
+            audio.mkdir()
+            meta.mkdir()
+            (audio / "1-137-A-32.wav").touch()
+            pd.DataFrame([{"filename": "1-137-A-32.wav", "target": 32}]).to_csv(
+                meta / "esc50.csv", index=False
+            )
+            with unittest.mock.patch.multiple(
+                "instrument_robustness.noise_sweep",
+                ESC50_ROOT=root,
+                ESC50_DIR=audio,
+                ESC50_META=meta / "esc50.csv",
+            ):
+                with self.assertRaises(ValueError) as caught:
+                    load_esc50_index()
+        message = str(caught.exception)
+        self.assertIn("category", message)
+        self.assertIn("fold", message)
+
+    def test_drawn_segment_reports_its_original_class(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir)
+            clip_path = root / "audio" / "1-137-A-32.wav"
+            clip_path.parent.mkdir(parents=True)
+            sf.write(
+                str(clip_path),
+                np.random.default_rng(1).standard_normal(CLIP_LEN * 2).astype("float32"),
+                SR,
+            )
+            clip = Esc50Clip(path=clip_path, target=32, category="pouring_water", fold=4)
+            with unittest.mock.patch(
+                "instrument_robustness.noise_sweep.ESC50_ROOT", root
+            ):
+                _, provenance = draw_noise(
+                    "natural",
+                    np.random.default_rng(0),
+                    {"natural": [clip]},
+                )
+        self.assertEqual(provenance["noise_target"], 32)
+        self.assertEqual(provenance["noise_category"], "pouring_water")
+        self.assertEqual(provenance["noise_fold"], 4)
+
+    def test_manifest_validation_rejects_provenance_without_the_new_columns(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir)
+            paths = write_dataset_files(root, all_labels=True)
+            noisy_dir = write_completed_noise_sweep(root, paths)
+            provenance_path = noisy_dir / "noise_provenance.csv"
+            frame = pd.read_csv(provenance_path)
+            frame = frame.drop(columns=["noise_category", "noise_fold"])
+            frame.to_csv(provenance_path, index=False)
+            manifest_path = noisy_dir / "noise_manifest.json"
+            manifest = json.loads(manifest_path.read_text())
+            manifest["provenance_sha256"] = sha256_file(provenance_path)
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            with self.assertRaises(ValueError) as caught:
+                validate_noise_manifest(
+                    noisy_dir=noisy_dir,
+                    data_root=root,
+                    windows_csv=paths["windows_csv"],
+                    manifest_csv=paths["manifest_csv"],
+                    manifest_fingerprint=paths["manifest_fingerprint"],
+                )
+        self.assertIn("missing columns", str(caught.exception))
 
 
 class NoiseTests(unittest.TestCase):
@@ -280,11 +379,16 @@ class NoiseTests(unittest.TestCase):
                 manifest_fingerprint=paths["manifest_fingerprint"],
             )
 
-            self.assertEqual(len(summary), 16)
+            # Derived from the configured grid, not a literal: this test is about the runner
+            # covering EVERY condition, so it must not break when the grid is retuned.
+            self.assertEqual(len(summary), 1 + len(NOISE_TYPES) * len(SNRS))
             self.assertTrue((output_dir / "metrics_clean.json").is_file())
-            self.assertTrue(
-                (output_dir / "model_test_mechanical_-5.csv").is_file()
-            )
+            for noise_type in NOISE_TYPES:
+                for snr in SNRS:
+                    self.assertTrue(
+                        (output_dir / f"model_test_{noise_type}_{snr}.csv").is_file(),
+                        f"missing predictions for {noise_type} at {snr} dB",
+                    )
 
     def test_pitch_groups_come_from_authoritative_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
