@@ -425,6 +425,10 @@ class GenerateEndToEndTests(unittest.TestCase):
             self.assertEqual(manifest["n_files"], expected)
             self.assertEqual(manifest["n_replicates"], 2)
             self.assertEqual(manifest["seed_scheme"], ns.SEED_SCHEME)
+            self.assertEqual(
+                manifest["noise_preprocessing"],
+                ns.noise_preprocessing_protocol(),
+            )
 
             provenance = pd.read_csv(noisy_dir / "noise_provenance.csv")
             self.assertEqual(len(provenance), expected)
@@ -435,6 +439,10 @@ class GenerateEndToEndTests(unittest.TestCase):
             self.assertLess(
                 (provenance["realized_snr_db"] - provenance["snr_db"]).abs().max(),
                 ns.MAX_SNR_ERROR_DB,
+            )
+            self.assertLessEqual(
+                provenance["noise_dc_power_share"].max(),
+                ns.MAX_DC_POWER_SHARE,
             )
             # The point of a replicate: same condition, genuinely different draw.
             at_zero = provenance[provenance["snr_db"] == 0]

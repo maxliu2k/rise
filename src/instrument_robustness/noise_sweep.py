@@ -61,7 +61,7 @@ warnings.filterwarnings("ignore")
 NOISY_DIR = WORK / "windows_noisy"
 NOISE_MANIFEST_NAME = "noise_manifest.json"
 NOISE_PROVENANCE_NAME = "noise_provenance.csv"
-NOISE_MANIFEST_VERSION = 5
+NOISE_MANIFEST_VERSION = 6
 NOISE_ROOT = Path(
     os.environ.get("RISE_NOISE_ROOT", Path.home() / "Downloads/noise_sources")
 )
@@ -70,9 +70,11 @@ ESC50_DIR = ESC50_ROOT / "audio"
 ESC50_META = ESC50_ROOT / "meta" / "esc50.csv"
 CLIP_LEN = int(round(3.0 * SR))
 MAX_SNR_ERROR_DB = 0.1
+MIN_CENTERED_NOISE_RMS = 1e-6
 
-# Warn if more than this share of a mixture's noise power is DC. Audited worst case on clean windows
-# and Gaussian draws is 1.8e-4; 1e-2 is ~50x that, so tripping it means a genuinely offset clip.
+# Reject a completed corpus if more than this share of a mixture's noise power is residual DC.
+# Every realization is explicitly centered before scaling, so crossing 1% indicates that the
+# generated files no longer implement the recorded protocol.
 MAX_DC_POWER_SHARE = 0.01
 
 # ESC-50 target blocks: 0-19 animals/natural, 20-29 human non-speech (excluded),
@@ -91,6 +93,31 @@ def diagnostic_protocol() -> dict[str, object]:
         "signal_active_top_db": SIGNAL_ACTIVE_TOP_DB,
         "effective_snr_rates_hz": {"ast": 16000, "mert": 24000, "panns": 32000},
     }
+
+
+def noise_preprocessing_protocol() -> dict[str, object]:
+    """Transformations applied to every noise realization before SNR scaling."""
+    return {
+        "remove_segment_mean": True,
+        "minimum_centered_rms": MIN_CENTERED_NOISE_RMS,
+    }
+
+
+def _assert_residual_dc_is_bounded(
+    provenance: pd.DataFrame,
+    *,
+    provenance_name: str,
+) -> None:
+    """Reject noise whose residual DC violates the centered-noise protocol."""
+    if "noise_dc_power_share" not in provenance.columns:
+        return
+    worst_dc = float(provenance["noise_dc_power_share"].astype(float).max())
+    if worst_dc > MAX_DC_POWER_SHARE:
+        raise ValueError(
+            f"A mixture's noise is {100 * worst_dc:.3f}% residual DC; "
+            f"maximum allowed is {100 * MAX_DC_POWER_SHARE:.3f}%. "
+            f"Inspect noise_dc_offset in {provenance_name}."
+        )
 
 
 def sha256_file(path: str | Path) -> str:
@@ -316,7 +343,7 @@ def draw_noise(
     rng: np.random.Generator,
     esc_index: dict[str, list[Esc50Clip]],
 ) -> tuple[np.ndarray, dict[str, object]]:
-    """Draw one non-silent realization and return its complete source provenance.
+    """Draw one centered, non-silent realization and return its source provenance.
 
     Postcondition: the returned provenance dict always carries `noise_target`, `noise_category`
     and `noise_fold`. For generated white noise all three are None -- there is no corpus clip
@@ -324,6 +351,9 @@ def draw_noise(
     """
     if noise_type == "white":
         noise = rng.standard_normal(CLIP_LEN).astype(np.float32)
+        noise = (noise.astype(np.float64) - np.mean(noise, dtype=np.float64)).astype(
+            np.float32
+        )
         return noise, {
             "noise_source": "generated_gaussian",
             "noise_source_sr": SR,
@@ -345,7 +375,13 @@ def draw_noise(
             noise = np.tile(noise, int(np.ceil(CLIP_LEN / noise.size)))
         start = int(rng.integers(0, max(noise.size - CLIP_LEN, 0) + 1))
         segment = np.asarray(noise[start : start + CLIP_LEN], dtype=np.float32)
-        if float(np.sqrt(np.mean(segment.astype(np.float64) ** 2))) >= 1e-6:
+        segment = (
+            segment.astype(np.float64) - np.mean(segment, dtype=np.float64)
+        ).astype(np.float32)
+        if (
+            float(np.sqrt(np.mean(segment.astype(np.float64) ** 2)))
+            >= MIN_CENTERED_NOISE_RMS
+        ):
             return segment, {
                 "noise_source": clip.path.relative_to(ESC50_ROOT).as_posix(),
                 "noise_source_path": str(clip.path.resolve()),
@@ -356,7 +392,8 @@ def draw_noise(
                 "noise_fold": clip.fold,
             }
     raise ValueError(
-        f"Unable to draw a non-silent {noise_type} ESC-50 segment after 20 attempts"
+        f"Unable to draw a non-silent centered {noise_type} ESC-50 segment "
+        "after 20 attempts"
     )
 
 
@@ -749,6 +786,10 @@ def generate(
         temporary_provenance.replace(provenance_path)
     finally:
         temporary_provenance.unlink(missing_ok=True)
+    _assert_residual_dc_is_bounded(
+        provenance,
+        provenance_name=NOISE_PROVENANCE_NAME,
+    )
 
     manifest = {
         "manifest_version": NOISE_MANIFEST_VERSION,
@@ -768,6 +809,7 @@ def generate(
         },
         "seed_scheme": SEED_SCHEME,
         "one_realization_scaled_to_all_snrs": True,
+        "noise_preprocessing": noise_preprocessing_protocol(),
         "diagnostics": {
             **diagnostic_protocol(),
             "note": (
@@ -824,6 +866,7 @@ def validate_noise_manifest(
         "n_replicates": N_REPLICATES,
         "dataset": expected_identity,
         "one_realization_scaled_to_all_snrs": True,
+        "noise_preprocessing": noise_preprocessing_protocol(),
         "waveform_format": {
             "sample_rate": SR,
             "samples": CLIP_LEN,
@@ -937,21 +980,13 @@ def validate_noise_manifest(
                 f"Noise realization provenance changes across SNR in column {column}"
             )
 
-    # DC offset inflates measured power, and measured power is what sets every SNR's gain -- so a
-    # DC-heavy noise clip ends up quieter than its label claims. Audited as negligible for clean
-    # windows and Gaussian draws (worst 1.8e-4 power share, ~7.6e-4 dB), but ESC-50 was not part of
-    # that audit and real recordings can carry a genuine offset. Warn rather than fail: the effect
-    # would have to be ~1000x larger than measured to matter against the 0.1 dB tolerance, and
-    # silently rejecting a corpus clip is worse than reporting it.
-    if "noise_dc_power_share" in provenance.columns:
-        worst_dc = float(provenance["noise_dc_power_share"].astype(float).max())
-        if worst_dc > MAX_DC_POWER_SHARE:
-            print(
-                f"! warning: a mixture's noise is {100 * worst_dc:.3f}% DC "
-                f"(threshold {100 * MAX_DC_POWER_SHARE:.3f}%). That inflates its measured power, so "
-                f"the audible noise is quieter than its SNR label. Inspect noise_dc_offset in "
-                f"{provenance_path.name}."
-            )
+    # DC offset inflates measured power, so a DC-heavy noise clip is quieter than its SNR label
+    # claims. Version 6 centers every realization before scaling; residual DC above this threshold
+    # therefore means the materialized corpus violates its recorded preprocessing protocol.
+    _assert_residual_dc_is_bounded(
+        provenance,
+        provenance_name=provenance_path.name,
+    )
 
     for row in provenance.itertuples(index=False):
         path = Path(data_root) / str(row.output_path)
