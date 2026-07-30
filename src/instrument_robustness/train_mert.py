@@ -382,6 +382,7 @@ def main() -> None:
             "class_weights": (
                 None if class_weights is None else class_weights.tolist()
             ),
+            "embedding_schema": train_metadata,
             "config_fingerprint": config_fingerprint(),
         },
         model_path,

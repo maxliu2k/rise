@@ -1,7 +1,7 @@
 {
   "state": "complete",
-  "started_at_utc": "2026-07-28T23:56:42.032468+00:00",
-  "completed_at_utc": "2026-07-28T23:57:36.050752+00:00",
+  "started_at_utc": "2026-07-30T03:39:09.992835+00:00",
+  "completed_at_utc": "2026-07-30T03:40:04.394485+00:00",
   "test_access_count": 1,
   "test_evaluation_count": 1,
   "config_fingerprint": {
@@ -26,6 +26,9 @@
     ],
     "split_seed": 0,
     "min_window_content_s": 0.5,
+    "max_windows_per_source": 1,
+    "stft_pad_mode": "reflect",
+    "logmel_top_db": null,
     "target_rms": 0.1,
     "articulations": {
       "bassoon": [
@@ -88,7 +91,7 @@
     ]
   },
   "test_summary": {
-    "path": "/project/rise-grid/Tariq/instrument-robustness/artifacts/mert/test_summary.json",
-    "sha256": "387845d6f42376df0789bbb4592cb1821042c6387839cdb6fe6a505f90c8d174"
+    "path": "/project/rise-grid/Tariq/instrument-robustness/artifacts/mert_8378/test_summary.json",
+    "sha256": "6527bc68d9df56983cdedb2253e153b1e16732181f3c8a16ed24eb74480fd634"
   }
 }

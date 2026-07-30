@@ -11,17 +11,20 @@ git pull --ff-only origin main
 export RISE_DATA_ROOT="/projectnb/rise-grid/$USER/rise-data/philharmonia"
 ```
 
-Submit the CPU preprocessing job first. It downloads the configured Philharmonia
-sources and rebuilds every fingerprinted stage for all 12 instruments:
+Submit the CPU preprocessing job first. It invokes the canonical `run_pipeline`
+entry point, downloads the configured Philharmonia sources, and rebuilds all nine
+fingerprinted stages for the onset-aligned, one-window-per-source dataset:
 
 ```bash
 prep_job=$(qsub -terse -v RISE_DATA_ROOT="$RISE_DATA_ROOT" scc/ast_prepare.qsub)
-qsub -hold_jid "$prep_job" -v RISE_DATA_ROOT="$RISE_DATA_ROOT" train_ast.qsub
+export AST_OUTPUT_DIR="$RISE_DATA_ROOT/models/ast-canonical-$(date +%Y%m%d)"
+qsub -hold_jid "$prep_job" -v RISE_DATA_ROOT="$RISE_DATA_ROOT",AST_OUTPUT_DIR="$AST_OUTPUT_DIR" train_ast.qsub
 qstat -u "$USER"
 ```
 
 The GPU job verifies all 12 labels, provenance, and every window file before it
-downloads AST or begins training.
+downloads AST or begins training. `AST_OUTPUT_DIR` is required and must be fresh,
+so the invalid pre-crop checkpoint cannot be silently reused or overwritten.
 
 ## MERT probe
 
@@ -80,6 +83,30 @@ qsub -v RISE_DATA_ROOT="$RISE_DATA_ROOT" scc/mert_finalize.qsub
 
 The final job refits on train+validation, extracts test with the exact saved MERT revision, evaluates
 test once, and writes a guard record that prevents a second test access.
+
+Before freezing the shared noise grid, run the validation-only MERT SNR pilot with `best_probe.pt`
+(not the train+validation `final_probe.pt`):
+
+```bash
+qsub -v RISE_DATA_ROOT="$RISE_DATA_ROOT",MERT_OUTPUT_DIR="$PWD/artifacts/mert" \
+  scc/mert_snr_pilot.qsub
+```
+
+The job writes `snr_pilot.json` beside the MERT validation artifacts and never reads test audio.
+It pilots white noise by default. With ESC-50 available, pass
+`MERT_PILOT_NOISE=white:natural:mechanical` and `RISE_NOISE_ROOT` to check all three categories
+before freezing the grid.
+
+To extend only the lower end after the initial pilot, pass colon-separated noise types and SNRs.
+For example, the canonical 8,378-source build needs this final natural/mechanical check:
+
+```bash
+qsub \
+  -v RISE_DATA_ROOT="$RISE_DATA_ROOT",RISE_NOISE_ROOT="$RISE_NOISE_ROOT",MERT_OUTPUT_DIR="$PWD/artifacts/mert_8378",MERT_PILOT_NOISE=natural:mechanical,MERT_PILOT_SNRS=20:10:0:-5:-10:-15 \
+  scc/mert_snr_pilot.qsub
+```
+
+Without `MERT_PILOT_SNRS`, the Python pilot's full default candidate grid is used.
 
 ## Shared noise sweep, SVM, and MERT
 

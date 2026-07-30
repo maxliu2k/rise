@@ -95,8 +95,14 @@ python -m instrument_robustness.step7_featurize   # SVM / CNN / CRNN features
 The order is enforced, not merely documented: every stage asserts its predecessor's fingerprint
 sidecar, so running them out of order fails loudly instead of producing a plausible wrong answer.
 
-See `all-samples/pipeline/pipeline_report.txt` for the full run report (shapes, per-class per-split
-counts, confound checks, invariants).
+Each stage prints its own shapes, per-class per-split counts, confound checks and invariants as it
+runs, and `run_pipeline` collects the per-stage timings. The durable record is the fingerprint
+sidecar beside every manifest (`all-samples/pipeline/*.fingerprint.json`), which carries the config
+that produced it and the SHA-256 of the artifact itself. `all-samples/pipeline/_step4_report_block.txt`
+holds Step 4's window counts.
+
+> There is no `pipeline_report.txt`. It was referenced here for a while and never written by any
+> stage; `config.REPORT` still names it and has no readers. Do not cite it.
 
 ## Fine-tune AST
 
@@ -174,9 +180,19 @@ commercial use.
 
 The noise branch starts from the canonical Step-5 **test** windows; train and validation are never
 noised and no model is retrained. It creates one shared float32 noisy test set containing white,
-ESC-50 natural, and ESC-50 mechanical noise at 20, 10, 5, 0, and -5 dB. One realization per
-window/noise type is scaled across the SNR curve so every model receives exactly the same paired
-inputs.
+ESC-50 natural, and ESC-50 mechanical noise at every level in `config.SNRS` — currently
+60, 50, 40, 30, 20, 10, and 0 dB. One realization per window/noise type is scaled across the SNR
+curve so every model receives exactly the same paired inputs.
+
+Pick the grid from evidence before generating anything. `snr_pilot` mixes validation windows on the
+fly, writes no audio, and reports where a model actually degrades:
+
+```bash
+python -m instrument_robustness.snr_pilot --model svm --noise white
+```
+
+The current grid came from that command; see `docs/NOISE_PLAN.md` §2 for the measured curve and why it
+spans 60 dB down to 0 dB rather than the narrower band the SVM alone would suggest.
 
 Set `RISE_NOISE_ROOT` to an ESC-50 extraction containing both `audio/` and `meta/esc50.csv`, then
 validate, generate once, and verify the completed manifest:
@@ -197,5 +213,5 @@ python -m instrument_robustness.noise_eval_panns
 
 Each adapter must reproduce its official clean macro-F1 and test count before noisy inference is
 allowed. Results go to `artifacts/<model>/noise/`; generated audio and its per-file provenance
-remain under `$RISE_DATA_ROOT/work/windows_noisy/`. See `NOISE_PLAN.md` for the fixed protocol and
+remain under `$RISE_DATA_ROOT/work/windows_noisy/`. See `docs/NOISE_PLAN.md` for the fixed protocol and
 cluster-aware statistical analysis.

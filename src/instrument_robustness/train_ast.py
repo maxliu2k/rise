@@ -1,5 +1,6 @@
 """Fine-tune pretrained AST on the Step-5 normalized window splits."""
 import argparse
+import hashlib
 import json
 from collections.abc import Sequence
 from pathlib import Path
@@ -16,6 +17,7 @@ from instrument_robustness.ast_data import (
     validate_ast_window_files,
 )
 from instrument_robustness.config import (
+    AST_MODEL,
     DATA_ROOT,
     INSTRUMENT_FAMILY,
     WINDOWS_CSV,
@@ -23,6 +25,22 @@ from instrument_robustness.config import (
     config_fingerprint,
 )
 from instrument_robustness.pretrained_extractors import build_ast_extractor, build_ast_model
+
+
+def _prepare_output_dir(output_dir: Path) -> Path:
+    """Create a fresh run directory and refuse to mix results from another data contract."""
+    path = Path(output_dir)
+    if path.exists():
+        contents = sorted(entry.name for entry in path.iterdir())
+        if contents:
+            preview = ", ".join(contents[:10])
+            suffix = ", ..." if len(contents) > 10 else ""
+            raise FileExistsError(
+                f"AST output directory {path} is not empty ({preview}{suffix}). "
+                "Choose a new --output-dir so an earlier checkpoint is never overwritten."
+            )
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def _macro_f1(
@@ -273,6 +291,7 @@ def train(
     print(f"AST classes ({num_labels}): {', '.join(labels)}", flush=True)
     window_count = validate_ast_window_files(manifest_path)
     print(f"AST windows verified: {window_count}", flush=True)
+    output_dir = _prepare_output_dir(output_dir)
 
     extractor = build_ast_extractor()
     loader_args = {
@@ -288,8 +307,8 @@ def train(
 
     model = build_ast_model(labels).to(target_device)
     model.config.instrument_robustness_fingerprint = config_fingerprint()
+    model.config.instrument_robustness_windows_sha256 = _sha256(manifest_path)
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-    output_dir.mkdir(parents=True, exist_ok=True)
 
     class_weights = None
     if use_class_weights:
@@ -382,12 +401,24 @@ def train(
             "test": test_loader.dataset.class_counts,
         },
         "config_fingerprint": config_fingerprint(),
+        "windows_manifest": {
+            "path": str(manifest_path),
+            "sha256": _sha256(manifest_path),
+            "window_count": window_count,
+        },
         "history": history,
         "test": test_metrics,
         "per_instrument": reports["per_instrument"],
         "per_family": reports["per_family"],
     }
     (output_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
+    _write_clean_test_summary(
+        output_dir,
+        labels=labels,
+        test_metrics=test_metrics,
+        test_examples=len(test_loader.dataset),
+        best_epoch=best_epoch,
+    )
     print(
         f"test loss {test_metrics['loss']:.4f} | acc {test_metrics['accuracy']:.3f} "
         f"| balanced-acc {test_metrics['balanced_accuracy']:.3f} "
@@ -395,6 +426,67 @@ def train(
     )
     print(f"wrote test reports to {output_dir}")
     return metrics
+
+
+def _write_clean_test_summary(
+    output_dir,
+    *,
+    labels,
+    test_metrics,
+    test_examples,
+    best_epoch,
+):
+    """Write test_summary.json in the shared clean-result contract.
+
+    metrics.json is AST's own rich record and keeps its shape. This is the separate, minimal file
+    that noise_eval_common.load_official_summary can read: it requires `label_order` to equal
+    TARGET_LABELS and a verifiable `config_fingerprint`, and run_noise_evaluation needs
+    `test_examples` and `test_metrics.macro_f1` for the clean-parity gate. Without this file the
+    AST branch cannot enter the noise sweep at all.
+
+    `output_files.model` points at the saved weights when present so the gate can confirm the
+    checkpoint being evaluated is the one this score came from.
+    """
+    weights = output_dir / "model.safetensors"
+    if not weights.exists():
+        weights = output_dir / "pytorch_model.bin"
+    summary = {
+        "protocol": (
+            "hyperparameters and epoch selected on validation balanced accuracy; "
+            "test evaluated once at the end of training"
+        ),
+        "model": "AST fine-tuned from " + AST_MODEL,
+        "selection_metric": "validation_balanced_accuracy",
+        "best_epoch": best_epoch,
+        "label_order": list(labels),
+        "config_fingerprint": config_fingerprint(),
+        "test_examples": int(test_examples),
+        "test_metrics": {
+            "accuracy": test_metrics["accuracy"],
+            "balanced_accuracy": test_metrics["balanced_accuracy"],
+            "macro_f1": test_metrics["macro_f1"],
+            "mcc": test_metrics["mcc"],
+            "loss": test_metrics["loss"],
+        },
+        "output_files": {
+            "model": (
+                {"path": str(weights), "sha256": _sha256(weights)}
+                if weights.exists()
+                else None
+            )
+        },
+    }
+    (output_dir / "test_summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+    print(f"wrote {output_dir / 'test_summary.json'} (shared clean-result contract)")
+    return summary
+
+
+def _sha256(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def parse_args():
