@@ -10,6 +10,7 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 
 from instrument_robustness.config import (
+    MAX_WINDOWS_PER_SOURCE,
     ROOT,
     SR,
     TARGET_LABELS,
@@ -60,7 +61,7 @@ def resolve_ast_labels(
         raise ValueError(
             f"AST labels in {path} do not match the configured 12-class dataset; "
             f"unexpected={sorted(unexpected)}, missing={sorted(missing)}. "
-            "Rebuild the pipeline from python -m instrument_robustness.prep_data."
+            "Rebuild it with python -m instrument_robustness.run_pipeline."
         )
 
     if len(label_names) < 2:
@@ -78,10 +79,46 @@ def validate_ast_window_files(
     manifest_path: Optional[Path] = None,
     root: Optional[Path] = None,
 ) -> int:
-    """Fail before model download if a manifest references unavailable window audio."""
+    """Validate the canonical AST manifest and every referenced window before model download."""
     path = Path(manifest_path or WINDOWS_CSV)
     data_root = Path(root or ROOT)
-    rows = pd.read_csv(path, usecols=["window_path"])
+    assert_artifact_fingerprint(path, "step5_normalize")
+    required = ["window_path", "source_path", "start_time"]
+    try:
+        rows = pd.read_csv(path, usecols=required)
+    except ValueError as error:
+        raise ValueError(
+            f"{path} is not a canonical window manifest; expected columns {required}. "
+            "Rebuild it with python -m instrument_robustness.run_pipeline."
+        ) from error
+    if rows.empty:
+        raise ValueError(f"No AST windows found in {path}")
+    if rows[required].isna().any().any():
+        raise ValueError(f"Missing canonical AST window metadata in {path}")
+    if rows["window_path"].duplicated().any():
+        raise ValueError(f"Duplicate AST window paths found in {path}")
+
+    source_counts = rows["source_path"].value_counts()
+    excessive = source_counts[source_counts > MAX_WINDOWS_PER_SOURCE]
+    if not excessive.empty:
+        preview = ", ".join(
+            f"{source}={count}" for source, count in excessive.head(10).items()
+        )
+        raise ValueError(
+            f"{path} has sources exceeding MAX_WINDOWS_PER_SOURCE="
+            f"{MAX_WINDOWS_PER_SOURCE}: {preview}. "
+            "Rebuild it with python -m instrument_robustness.run_pipeline."
+        )
+
+    start_times = pd.to_numeric(rows["start_time"], errors="coerce")
+    if start_times.isna().any():
+        raise ValueError(f"Invalid AST start_time values found in {path}")
+    if MAX_WINDOWS_PER_SOURCE == 1 and not np.allclose(start_times.to_numpy(), 0.0):
+        raise ValueError(
+            f"{path} is not the onset-aligned one-window dataset: nonzero start_time found. "
+            "Rebuild it with python -m instrument_robustness.run_pipeline."
+        )
+
     missing = [
         data_root / window_path
         for window_path in rows["window_path"]
@@ -110,7 +147,7 @@ def _load_window(path) -> np.ndarray:
     if waveform.size != target_samples:
         raise ValueError(
             f"Expected exactly {target_samples} samples at {path}, got {waveform.size}. "
-            "Rebuild Step 4 so short windows are tiled rather than padded."
+            "Rebuild with python -m instrument_robustness.run_pipeline --from step4_window."
         )
     return waveform
 
