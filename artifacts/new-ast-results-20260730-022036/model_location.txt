@@ -1,0 +1,2 @@
+SCC_MODEL_PATH=/projectnb/rise-grid/tariqhsn/rise-runs/ast-canonical-20260730-022036-train-024326/model.safetensors
+25789685e1cb0a4df0d64e5c84df84f49eff72c2831cc8e89fb02bd7676763e7  /projectnb/rise-grid/tariqhsn/rise-runs/ast-canonical-20260730-022036-train-024326/model.safetensors
