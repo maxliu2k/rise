@@ -194,9 +194,9 @@ N_REPLICATES = 1
 # audio that gets generated.
 #
 # The band the instruments occupy. Lowest fundamental in this dataset is MIDI 22 (~29 Hz, tuba) and
-# the highest is MIDI 103 (~2489 Hz, violin); 8 kHz keeps the harmonics that carry timbre while
-# excluding the top octave, where these MP3 sources have little content anyway.
-INSTRUMENT_BAND_HZ = (50.0, 8000.0)
+# the highest is MIDI 103 (~2489 Hz, violin); 25 Hz includes that lowest fundamental while excluding
+# DC/subsonic drift, and 8 kHz keeps the harmonics that carry timbre.
+INSTRUMENT_BAND_HZ = (25.0, 8000.0)
 
 # Frame/hop for the time-resolved diagnostics, matching the log-mel analysis so a segmental SNR
 # frame corresponds to a spectrogram frame.
@@ -206,6 +206,10 @@ SEGMENTAL_HOP = 512
 # A noise frame counts as active if it is within this many dB of that clip's own loudest frame.
 # Matches TRIM_TOP_DB so "active" means the same thing for instruments and for noise.
 NOISE_ACTIVE_TOP_DB = 30
+
+# The same threshold, applied independently to the clean instrument, defines the frames used for
+# active-instrument SNR. Kept as a separate setting so both decisions are explicit in provenance.
+SIGNAL_ACTIVE_TOP_DB = 30
 
 # --- Steps 6-7: featurization ---
 STATS_NPZ = PIPE / "norm_stats.npz"

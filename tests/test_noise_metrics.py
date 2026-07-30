@@ -26,6 +26,7 @@ from instrument_robustness.config import (
 from instrument_robustness.noise_metrics import (
     DIAGNOSTIC_COLUMNS,
     MIN_CLEAN_SHARE,
+    active_signal_snr_db,
     active_fraction,
     band_power,
     band_snr_db,
@@ -53,6 +54,11 @@ def scaled_to_snr(clean: np.ndarray, noise: np.ndarray, snr_db: float) -> np.nda
 
 
 class BandPowerTests(unittest.TestCase):
+    def test_instrument_band_includes_the_lowest_dataset_fundamental(self) -> None:
+        """MIDI 22 is about 29 Hz; a 50 Hz lower edge silently excluded the lowest tuba note."""
+        self.assertLessEqual(INSTRUMENT_BAND_HZ[0], 29.0)
+        self.assertGreaterEqual(INSTRUMENT_BAND_HZ[1], 2489.0)
+
     def test_parseval_bands_sum_to_total_power(self) -> None:
         """Band powers must be commensurable with the headline SNR's whole-signal power."""
         signal = np.random.default_rng(0).standard_normal(CLIP)
@@ -224,6 +230,34 @@ class DiagnosticContractTests(unittest.TestCase):
     def test_mismatched_lengths_are_refused(self) -> None:
         with self.assertRaises(ValueError):
             mixture_diagnostics(tone(440.0), np.zeros(100))
+
+
+class Item5ActiveInstrumentTests(unittest.TestCase):
+    """Whole-window SNR can hide how masked a short instrument event is."""
+
+    def test_active_instrument_snr_excludes_surrounding_silence(self) -> None:
+        clean = np.zeros(CLIP, dtype=np.float32)
+        start, stop = 25000, 35000
+        clean[start:stop] = tone(440.0, length=stop - start)
+        noise = np.random.default_rng(40).standard_normal(CLIP)
+        added = scaled_to_snr(clean, noise, 0.0)
+
+        result = active_signal_snr_db(clean, added)
+
+        self.assertLess(result["active_fraction"], 0.25)
+        self.assertGreater(result["n_active_frames"], 0)
+        # The whole-window condition is 0 dB, but the note concentrates its energy into a small
+        # part of the clip, so its active frames are substantially cleaner.
+        self.assertGreater(result["snr_db"], 5.0)
+
+    def test_stationary_note_uses_almost_every_frame(self) -> None:
+        clean = tone(440.0)
+        added = scaled_to_snr(
+            clean, np.random.default_rng(41).standard_normal(CLIP), 7.0
+        )
+        result = active_signal_snr_db(clean, added)
+        self.assertGreater(result["active_fraction"], 0.99)
+        self.assertAlmostEqual(result["snr_db"], 7.0, delta=0.25)
 
 
 class Item3ReplicateTests(unittest.TestCase):

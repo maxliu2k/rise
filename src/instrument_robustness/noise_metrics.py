@@ -8,7 +8,9 @@ misread, in three specific ways this module measures:
      band the instrument occupies. Two conditions labelled "0 dB" can mask the signal completely
      differently. -> `band_snr_db`, `octave_snr_db`
   2. WHEN IN TIME. A door slam is silent for most of the window, so satisfying an average-power
-     target amplifies the transient enormously. -> `active_fraction`, `segmental_snr_db`
+     target amplifies the transient enormously; silence around a short note can also make its
+     whole-window SNR misleading. -> `active_fraction`, `active_signal_snr_db`,
+     `segmental_snr_db`
   3. WHAT THE MODEL RECEIVES. AST resamples to 16 kHz and discards everything above 8 kHz. For
      broadband noise a large share of the noise power never reaches the model, so the SNR the
      model sees is higher than the one on the label. -> `effective_snr_db`
@@ -29,6 +31,7 @@ from instrument_robustness.config import (
     NOISE_ACTIVE_TOP_DB,
     SEGMENTAL_FRAME,
     SEGMENTAL_HOP,
+    SIGNAL_ACTIVE_TOP_DB,
     SR,
 )
 
@@ -187,9 +190,9 @@ def active_fraction(
     Postcondition: a float in [0, 1]; 0.0 for an all-zero signal.
 
     This is what separates continuous ambience from a transient event. Stationary noise sits near
-    1.0; a single door slam in a 3-second window sits near 0.05. Read it as "how much of this noise
-    clip is actually making sound", NOT as an active fraction of the instrument -- the pipeline
-    stores no activity mask for the instrument (see the audit checklist, item 5).
+    1.0; a single door slam in a 3-second window sits near 0.05. The same operation may be applied
+    independently to the clean instrument; it is an energy-derived activity estimate, not a human
+    annotation.
     """
     framed = _frames(signal, frame, hop)
     if framed.size == 0:
@@ -200,6 +203,53 @@ def active_fraction(
         return 0.0
     threshold = peak * (10.0 ** (-abs(top_db) / 20.0))
     return float(np.mean(rms >= threshold))
+
+
+def active_signal_snr_db(
+    clean: np.ndarray,
+    added: np.ndarray,
+    *,
+    frame: int = SEGMENTAL_FRAME,
+    hop: int = SEGMENTAL_HOP,
+    top_db: float = SIGNAL_ACTIVE_TOP_DB,
+) -> dict[str, float]:
+    """SNR over frames where the clean instrument is active.
+
+    A clean frame is active when its RMS is within `top_db` of the clean clip's loudest frame.
+    This is deliberately independent of noise activity: it answers "how masked is the note while
+    the note is sounding?" and complements `segmental_snr_db`, which selects noise-active frames.
+
+    Postcondition: `{"snr_db", "active_fraction", "n_frames", "n_active_frames"}`. An all-zero or
+    shorter-than-one-frame clean signal returns finite zeros because provenance must remain
+    serialisable; normal pipeline windows are neither case.
+    """
+    clean_frames = _frames(clean, frame, hop)
+    added_frames = _frames(added, frame, hop)
+    empty = {
+        "snr_db": 0.0,
+        "active_fraction": 0.0,
+        "n_frames": 0,
+        "n_active_frames": 0,
+    }
+    if clean_frames.size == 0 or added_frames.size == 0:
+        return empty
+    count = min(len(clean_frames), len(added_frames))
+    signal_power = np.mean(clean_frames[:count] ** 2, axis=1)
+    noise_power = np.mean(added_frames[:count] ** 2, axis=1)
+    signal_rms = np.sqrt(signal_power)
+    peak = signal_rms.max()
+    if peak <= 0:
+        return {**empty, "n_frames": int(count)}
+    active = signal_rms >= peak * (10.0 ** (-abs(top_db) / 20.0))
+    return {
+        "snr_db": _power_ratio_db(
+            float(np.mean(signal_power[active])),
+            float(np.mean(noise_power[active])),
+        ),
+        "active_fraction": float(np.mean(active)),
+        "n_frames": int(count),
+        "n_active_frames": int(active.sum()),
+    }
 
 
 def segmental_snr_db(
@@ -350,6 +400,7 @@ def mixture_diagnostics(
 
     profile = octave_snr_db(clean, added, sample_rate=sample_rate)
     worst = worst_octave(profile)
+    active_signal = active_signal_snr_db(clean, added)
     segmental = segmental_snr_db(clean, added)
     noise_dc = dc_offset(added)
     diagnostics: dict[str, object] = {
@@ -360,6 +411,9 @@ def mixture_diagnostics(
         "snr_worst_octave_center_hz": worst["center_hz"],
         "snr_octave_db": [round(record["snr_db"], 4) for record in profile],
         "noise_active_fraction": active_fraction(added),
+        "signal_active_fraction": active_signal["active_fraction"],
+        "snr_signal_active_db": active_signal["snr_db"],
+        "snr_signal_active_frames": active_signal["n_active_frames"],
         "noise_dc_offset": noise_dc["offset"],
         "noise_dc_power_share": noise_dc["power_share"],
         "snr_segmental_min_db": segmental["min"],
@@ -385,6 +439,9 @@ DIAGNOSTIC_COLUMNS = (
     "snr_worst_octave_center_hz",
     "snr_octave_db",
     "noise_active_fraction",
+    "signal_active_fraction",
+    "snr_signal_active_db",
+    "snr_signal_active_frames",
     "noise_dc_offset",
     "noise_dc_power_share",
     "snr_segmental_min_db",

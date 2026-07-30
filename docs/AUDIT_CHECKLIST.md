@@ -1,6 +1,6 @@
 # Audit checklist — 22 findings
 
-**Verified against:** the local tree based on `main` at `4501cad`, re-checked 2026-07-29.
+**Verified against:** the local tree based on `main` at `7b64888`, re-checked 2026-07-30.
 **How to read this:** every status below was re-derived from the current tree, not carried over from
 notes. Where an item is only partly done, the remaining work is stated explicitly.
 
@@ -11,9 +11,9 @@ notes. Where an item is only partly done, the remaining work is stated explicitl
 | ⬜ **OPEN** | Not started. |
 | 📝 **WONTFIX / WRITE-UP** | Cannot be fixed in code; must be disclosed in the paper. |
 
-**Score: 8 fully fixed · 10 partial · 2 open · 2 write-up-only.**
+**Score: 9 fully fixed · 9 partial · 2 open · 2 write-up-only.**
 
-Closed outright: **1, 6, 8, 16, 17, 18, 19, 22**.
+Closed outright: **1, 5, 6, 8, 16, 17, 18, 19, 22**.
 
 Still fully open: **9** (AST/PANNs sealed test) and **15** (external evaluation). Both need
 something code alone cannot supply — a training run, or an external corpus.
@@ -26,13 +26,15 @@ Do **not** run `noise_sweep --generate` yet. The MERT validation-only SNR pilot 
 ## Must resolve before the official noise experiment
 
 ### ✅ 1. SNR measured across all frequencies
-- **Fixed.** `noise_metrics.py` adds `band_snr_db` over `config.INSTRUMENT_BAND_HZ` (50–8000 Hz),
+- **Fixed.** `noise_metrics.py` adds `band_snr_db` over `config.INSTRUMENT_BAND_HZ` (25–8000 Hz),
   a full per-octave profile, and a worst-occupied-octave summary. Recorded per mixture as
   `snr_band_db`, `snr_worst_octave_db`, `snr_worst_octave_center_hz`, `snr_octave_db`.
+- **The lower edge now includes every dataset fundamental.** The previous 50 Hz edge excluded the
+  lowest tuba note (MIDI 22, about 29 Hz); 25 Hz includes it while still excluding DC.
 - **The headline SNR is unchanged** — this is reported *alongside* it, not instead of it.
-- **Demonstrated:** at the same nominal 0 dB against a real bassoon window, the instrument band sits
-  at +1.4 dB for white noise but **+31.6 dB for low rumble** and +22.9 dB for HF-only noise. Exactly
-  the misreading this item was raised about, now quantified.
+- **Regression-demonstrated:** at the same nominal 0 dB, low rumble and HF-only noise both produce
+  band SNR at least 15 dB cleaner than white noise. This is exactly the misreading this item was
+  raised about, now detected automatically.
 - **One subtlety, handled:** the worst-octave summary filters to bands holding ≥1% of the clean
   signal's power (`MIN_CLEAN_SHARE`). Without it, it reported ~−150 dB from a band the instrument
   does not occupy — true, meaningless, and identical for every noise type. Regression-tested.
@@ -69,9 +71,10 @@ Do **not** run `noise_sweep --generate` yet. The MERT validation-only SNR pilot 
 - **The two seed decisions are deliberate opposites:** SNR excluded so one realization is merely
   rescaled along the curve; replicate included because that is the axis where a *different* draw is
   wanted.
-- **Replicates are separate conditions at scoring time.** `noise_eval_common` preserves that axis,
-  but `noise_stats` still compares one named condition at a time; an across-replicate summary must
-  be defined before comparative claims.
+- **Across-replicate reporting is now defined.** `summarise_sweep` averages macro-F1 across
+  replicates at each SNR and records mean/std/min/max. `paired_replicate_differences` compares two
+  models only after matching `(noise_type, snr_db, replicate)` and refuses incomplete or unmatched
+  grids. `noise_stats` remains the within-condition, window-clustered inference tool.
 - **Verified end to end** with `N_REPLICATES = 2`: real `generate()` → real
   `validate_noise_manifest(verify_audio_hashes=True)`, all 12 windows drew different clips per
   replicate, the realization stayed constant across SNRs within a replicate, and requested SNR was
@@ -83,7 +86,7 @@ Do **not** run `noise_sweep --generate` yet. The MERT validation-only SNR pilot 
 - **Fixed — the provenance half.** `noise_provenance.csv` now carries `noise_target`,
   `noise_category`, `noise_fold` per mixture; `noise_manifest.json` records `target_ranges` and a
   full `category_composition` (which of the 20 classes, how many clips, per project category).
-  `NOISE_MANIFEST_VERSION` → 4 (bumped again for the replicate axis and diagnostics). `validate_noise_manifest` requires the new columns and checks they
+  `NOISE_MANIFEST_VERSION` → 5 (bumped again for active-instrument diagnostics). `validate_noise_manifest` requires the new columns and checks they
   stay constant across SNRs within one realization. White noise carries them as explicit `None`.
   Tests: `Esc50ProvenanceTests` (4 tests).
 - **Why this was urgent:** unrecoverable later. Regenerating the sweep is the only way to add it
@@ -93,8 +96,9 @@ Do **not** run `noise_sweep --generate` yet. The MERT validation-only SNR pilot 
   instrument (targets 0–19 include tonal bird/insect sounds). Post-hoc analysis is now *possible*
   because the label is recorded; it has not been *done*.
 
-### 🟡 5. No short-time or active-audio SNR check
-- **The short-time/noise-activity half is fixed.** Per mixture: `noise_active_fraction`, `snr_segmental_min_db`,
+### ✅ 5. No short-time or active-audio SNR check
+- **Fixed.** The short-time/noise-activity measurements are recorded per mixture:
+  `noise_active_fraction`, `snr_segmental_min_db`,
   `snr_segmental_{p05,p50,p95}_db`, `snr_segmental_std_db`, `snr_segmental_active_frames`.
 - **Demonstrated:** a synthetic 30 ms slam mixed to nominal 0 dB reports active fraction **0.04**
   (vs 1.00 for ambience), 5 active frames of 126, and a worst frame at **−33.6 dB**. That is the
@@ -103,9 +107,13 @@ Do **not** run `noise_sweep --generate` yet. The MERT validation-only SNR pilot 
   the percentiles were describing the 99% of frames containing no noise. Percentiles are now taken
   over active-noise frames, with `min` kept over all frames as the unconditional worst case.
   Regression-tested.
-- **Scope, stated precisely:** `noise_active_fraction` describes the **noise**. The pipeline still
-  stores no activity mask for the *instrument*, so the headline SNR remains whole-window and an
-  active-region SNR is still not available. That part of the original concern is unchanged.
+- **The instrument-active half is now fixed too.** `active_signal_snr_db` derives an activity mask
+  from clean-frame RMS using the declared 30 dB threshold and records
+  `signal_active_fraction`, `snr_signal_active_db`, and `snr_signal_active_frames`. It answers
+  “how masked is the note while the note is sounding?” independently of noise activity.
+- **Scope, stated precisely:** this is an energy-derived frame mask, not a human annotation, and it
+  does not change mixing. The condition label remains whole-window SNR; active-instrument SNR is an
+  additional diagnostic.
 
 ### ✅ 6. No model-effective SNR diagnostic
 - **Fixed.** `effective_snr_db` resamples clean and added components to each model's input rate and

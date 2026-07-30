@@ -1,6 +1,12 @@
 """Summarise a degradation curve, and control the false-discovery rate across many comparisons.
 
-Two reporting hazards that only appear once a sweep has actually been run.
+Three reporting hazards that only appear once a sweep has actually been run.
+
+AUDIT ITEM 3 -- REPLICATES. Multiple draws are useful only if the reporting keeps their identity.
+Curves therefore average macro-F1 at each SNR across replicates, report the spread, and model
+comparisons pair the same replicate number before taking a difference. Treating every draw as an
+unrelated curve point creates duplicate SNRs; comparing unmatched draws confounds model differences
+with noise-sampling luck.
 
 AUDIT ITEM 18 -- SPACING. `config.SNRS` is currently 60/50/40/30/20/10/0, which IS uniform at 10 dB,
 so for this exact grid an unweighted mean and a dB-weighted integral differ only by trapezoidal
@@ -221,11 +227,152 @@ def benjamini_hochberg(
     }
 
 
+def _replicate_number(row: dict[str, object]) -> int:
+    """Return a non-negative integer replicate, treating an absent legacy value as replicate 0."""
+    value = row.get("replicate", 0)
+    if value is None or (isinstance(value, float) and np.isnan(value)):
+        return 0
+    try:
+        replicate = int(value)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"invalid replicate value: {value!r}") from error
+    if replicate < 0 or float(value) != replicate:
+        raise ValueError(f"invalid replicate value: {value!r}")
+    return replicate
+
+
+def _noisy_metric_map(
+    rows: list[dict[str, object]],
+    *,
+    metric: str,
+) -> dict[tuple[str, float, int], float]:
+    """Index noisy rows by (noise type, SNR, replicate), refusing duplicate conditions."""
+    indexed: dict[tuple[str, float, int], float] = {}
+    for row in rows:
+        noise_type = str(row.get("noise_type", ""))
+        snr = row.get("snr_db")
+        if noise_type == "clean" or snr is None or (
+            isinstance(snr, float) and np.isnan(snr)
+        ):
+            continue
+        if metric not in row:
+            raise ValueError(f"summary row is missing metric {metric!r}")
+        key = (noise_type, float(snr), _replicate_number(row))
+        if key in indexed:
+            raise ValueError(
+                "duplicate summary condition "
+                f"noise_type={key[0]!r}, snr_db={key[1]}, replicate={key[2]}"
+            )
+        indexed[key] = float(row[metric])
+    if not indexed:
+        raise ValueError("summary contains no noisy conditions")
+    return indexed
+
+
+def replicate_spread(
+    rows: list[dict[str, object]],
+    *,
+    metric: str = "macro_f1",
+) -> list[dict[str, object]]:
+    """Summarise one metric across noise draws at each (noise type, SNR).
+
+    Every SNR for a noise type must contain the same replicate numbers. This makes an interrupted
+    or partially evaluated sweep fail rather than silently averaging unequal numbers of draws.
+    Standard deviation is the population spread across the enumerated draws and is 0 for one draw.
+    """
+    indexed = _noisy_metric_map(rows, metric=metric)
+    replicate_sets: dict[tuple[str, float], set[int]] = {}
+    for noise_type, snr, replicate in indexed:
+        replicate_sets.setdefault((noise_type, snr), set()).add(replicate)
+    for noise_type in {key[0] for key in replicate_sets}:
+        sets = {
+            tuple(sorted(replicates))
+            for (kind, _), replicates in replicate_sets.items()
+            if kind == noise_type
+        }
+        if len(sets) != 1:
+            raise ValueError(
+                f"inconsistent replicate sets across SNRs for {noise_type!r}: "
+                f"{sorted(sets)}"
+            )
+
+    records: list[dict[str, object]] = []
+    for (noise_type, snr), replicates in sorted(replicate_sets.items()):
+        ordered = sorted(replicates)
+        values = np.asarray(
+            [indexed[(noise_type, snr, replicate)] for replicate in ordered],
+            dtype=np.float64,
+        )
+        records.append(
+            {
+                "noise_type": noise_type,
+                "snr_db": snr,
+                "metric": metric,
+                "n_replicates": len(ordered),
+                "replicates": ordered,
+                "mean": float(values.mean()),
+                "std": float(values.std()),
+                "min": float(values.min()),
+                "max": float(values.max()),
+            }
+        )
+    return records
+
+
+def paired_replicate_differences(
+    reference_rows: list[dict[str, object]],
+    candidate_rows: list[dict[str, object]],
+    *,
+    metric: str = "macro_f1",
+) -> list[dict[str, object]]:
+    """Summarise candidate-minus-reference differences after pairing identical noise draws.
+
+    The two summaries must have exactly the same (noise type, SNR, replicate) keys. A positive mean
+    therefore means the candidate scored higher on the same generated audio, not merely on a
+    different random draw.
+    """
+    reference = _noisy_metric_map(reference_rows, metric=metric)
+    candidate = _noisy_metric_map(candidate_rows, metric=metric)
+    if reference.keys() != candidate.keys():
+        missing_candidate = sorted(reference.keys() - candidate.keys())
+        missing_reference = sorted(candidate.keys() - reference.keys())
+        raise ValueError(
+            "model summaries do not contain the same replicate conditions: "
+            f"missing from candidate={missing_candidate[:5]}, "
+            f"missing from reference={missing_reference[:5]}"
+        )
+
+    grouped: dict[tuple[str, float], list[tuple[int, float]]] = {}
+    for (noise_type, snr, replicate), reference_value in reference.items():
+        difference = candidate[(noise_type, snr, replicate)] - reference_value
+        grouped.setdefault((noise_type, snr), []).append((replicate, difference))
+
+    records: list[dict[str, object]] = []
+    for (noise_type, snr), pairs in sorted(grouped.items()):
+        pairs.sort()
+        values = np.asarray([difference for _, difference in pairs], dtype=np.float64)
+        records.append(
+            {
+                "noise_type": noise_type,
+                "snr_db": snr,
+                "metric": metric,
+                "direction": "candidate_minus_reference",
+                "n_replicates": len(pairs),
+                "replicates": [replicate for replicate, _ in pairs],
+                "mean": float(values.mean()),
+                "std": float(values.std()),
+                "min": float(values.min()),
+                "max": float(values.max()),
+            }
+        )
+    return records
+
+
 def summarise_sweep(summary_csv, *, alpha: float = 0.05) -> dict[str, object]:
     """Summarise one model's `noise_sweep_summary.csv`: a curve per noise type, plus the clean score.
 
     Postcondition: `{"clean_macro_f1", "curves": {noise_type: {...auc fields..., "snr_at_50pct",
-    "snr_at_90pct"}}}`.
+    "snr_at_90pct"}}, "replicate_spread": [...]}`. Curves use the replicate mean at each SNR.
     Raises: ValueError if the clean row is missing -- retention is meaningless without it.
     """
     import pandas as pd
@@ -243,7 +390,12 @@ def summarise_sweep(summary_csv, *, alpha: float = 0.05) -> dict[str, object]:
         record["snr_at_50pct"] = snr_at_retention(points, clean, target=0.5)
         record["snr_at_90pct"] = snr_at_retention(points, clean, target=0.9)
         curves[noise_type] = record
-    return {"clean_macro_f1": clean, "alpha": alpha, "curves": curves}
+    return {
+        "clean_macro_f1": clean,
+        "alpha": alpha,
+        "curves": curves,
+        "replicate_spread": replicate_spread(rows),
+    }
 
 
 def main() -> None:
@@ -296,19 +448,24 @@ def curve_from_summary(
 
     Preconditions: each row has `noise_type`, `snr_db` and `macro_f1`; the clean row (snr_db null) is
     ignored, since the clean score is the normaliser rather than a point on the curve.
-    Postcondition: points sorted ascending by SNR.
+    Postcondition: points sorted ascending by SNR. With `replicate=None`, rows at the same SNR are
+    averaged across replicates; otherwise only the requested replicate is used.
     Raises: ValueError if the selection yields fewer than two points.
     """
-    points = []
+    selected: dict[float, list[float]] = {}
     for row in rows:
         if row.get("noise_type") != noise_type:
             continue
         snr = row.get("snr_db")
         if snr is None or (isinstance(snr, float) and np.isnan(snr)):
             continue
-        if replicate is not None and row.get("replicate") != replicate:
+        if replicate is not None and _replicate_number(row) != replicate:
             continue
-        points.append(CurvePoint(float(snr), float(row["macro_f1"])))
+        selected.setdefault(float(snr), []).append(float(row["macro_f1"]))
+    points = [
+        CurvePoint(snr, float(np.mean(scores)))
+        for snr, scores in selected.items()
+    ]
     if len(points) < 2:
         raise ValueError(
             f"fewer than two points for noise_type={noise_type!r}"

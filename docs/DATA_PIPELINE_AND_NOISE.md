@@ -55,7 +55,7 @@ three-second window:    [violin sound------][repeat][repeat part]
 | silence threshold | The rule deciding whether an audio frame is quiet enough to trim. Here it is relative to each recording's loudest frame. |
 | padding | Add made-up values, often zeros, to reach a required length. The current window pipeline does **not** zero-pad short notes. |
 | tiling | Repeat real recorded audio until it reaches the required length. This is how the project fills a short three-second window. |
-| active region | The part of a waveform that actually contains the target instrument sound. The current pipeline does not store an active-region mask. |
+| active region | The part of a waveform that contains the target instrument sound. Noise diagnostics estimate it from clean-frame RMS within 30 dB of the loudest frame; the source pipeline does not store a human-annotated mask. |
 | mask | A list of yes/no values marking which samples belong to a region of interest, such as active instrument audio. |
 | resampling | Convert audio from one sample rate to another. The common pipeline converts 44.1 kHz audio to 22.05 kHz. |
 | normalization | Rescale values to a chosen reference. Step 5 adjusts each window toward the same RMS loudness. |
@@ -204,7 +204,7 @@ three-second window:    [violin sound------][repeat][repeat part]
 | 0 dB SNR | Instrument and added noise have equal measured power. |
 | negative SNR | Added noise has more measured power than the instrument. At -5 dB, noise power is about 3.16 times signal power. |
 | whole-window SNR | Compute power across all three seconds, including quieter parts. This is what the current implementation uses. |
-| active-region SNR | Compute power only where the instrument is considered active. It is discussed but not implemented. |
+| active-region SNR | Compute power only where the instrument is considered active. The condition is still mixed using whole-window SNR, but `snr_signal_active_db` reports this diagnostic using an energy-derived frame mask. |
 | in-band SNR | Compute SNR only within a chosen frequency range. It can reveal that low-frequency-heavy noise barely overlaps the useful instrument frequencies. |
 | frequency band | A chosen range of frequencies, such as 200 Hz to 8 kHz. |
 | band-limited measurement | A measurement that ignores frequencies outside a declared band. |
@@ -317,13 +317,13 @@ The evidence labels used throughout are:
     resampling and pretrained processors.
 11. The implemented robustness experiment keeps models frozen and materializes paired noisy copies
     of only the held-out test windows.
-12. The current grid is clean plus white, ESC-50 natural, and ESC-50 mechanical noise at
-    20, 10, 5, 0, and -5 dB.
-13. The mixer uses whole-window power—not an active-region mask—and writes float32 WAV to avoid
-    clipping.
-14. One deterministic noise realization per window and category is merely rescaled across SNRs, and
-    every implemented adapter reads the same materialized files.
-15. The central mixer and SVM/MERT/PANNs adapters exist; CNN, CRNN, and AST noise adapters do not.
+12. The current proposed grid is clean plus white, ESC-50 natural, and ESC-50 mechanical noise at
+    60, 50, 40, 30, 20, 10, and 0 dB; it must be frozen after the pretrained-model pilot.
+13. The mixer uses whole-window power and writes float32 WAV to avoid clipping. It also records
+    frequency-, time-, instrument-activity-, and model-rate-specific SNR diagnostics.
+14. `N_REPLICATES` deterministic realizations per window and category are each rescaled across SNRs,
+    and every adapter reads the same materialized files. It is currently 1 and must be frozen.
+15. The central mixer and SVM, MERT, PANNs, CNN, CRNN, and AST noise adapters exist.
 
 ## 2. Research objective
 
@@ -760,9 +760,11 @@ records `trim_flag="kept_untrimmed"` ([`config.py` L80–82](../src/instrument_r
 - Mean removed edge duration is 0.0864 s; maximum is 1.9070 s.
 - No rejection statistic for “silent recording” exists.
 
-> **Verified implementation limitation:** There is no stored frame activity mask, active interval,
-> active sample count, active fraction, or per-window activity statistic. Empty decoded files are
-> rejected in Step 1, but an effectively silent nonempty recording is not explicitly rejected.
+> **Verified implementation limitation:** The clean preprocessing metadata stores no human-derived
+> frame activity mask or active interval. At noise-generation time, `active_signal_snr_db` derives
+> clean activity from frame RMS and records the active fraction, active-frame count, and SNR in
+> provenance. Empty decoded files are rejected in Step 1, but an effectively silent nonempty
+> recording is not explicitly rejected.
 > With the installed librosa 0.11 peak-relative default, an all-zero array is returned untrimmed
 > because every zero-RMS frame equals the zero-valued reference after numerical flooring. Step 5
 > would then leave it unchanged. No current generated window is that quiet (minimum recorded
@@ -1667,7 +1669,7 @@ rate, and the crop start in **resampled** sample coordinates
 The RNG seed determines both source-file selection and crop start. The same draw is reused across
 all SNR levels for that clean window and noise type.
 
-## 21. SNR calculation: active-region alternative versus actual whole-window method
+## 21. SNR calculation: whole-window mixing plus active-instrument reporting
 
 ### General active-region definition
 
@@ -1678,7 +1680,7 @@ $$
 A=\{t:\text{sample }t\text{ belongs to active instrument audio}\}.
 $$
 
-An active-region definition would be:
+An active-region definition is:
 
 $$
 P_x^{(A)}=\frac{1}{|A|}\sum_{t\in A}x_t^2,\qquad
@@ -1701,7 +1703,8 @@ $\alpha$ is noise gain, and $y$ is the mixture.
 
 ### What this repository actually does
 
-> **Verified implementation: whole-window SNR, not active-region SNR.**
+> **Verified implementation:** whole-window SNR sets the noise gain; active-instrument SNR is
+> measured and stored as an additional diagnostic.
 
 `mix_at_snr` uses every one of the $T=66{,}150$ samples:
 
@@ -1787,12 +1790,20 @@ If a typical normalized clean window has $P_x=0.01$, the target powers are:
 | 0 dB | $1$ | $0.010000$ | $0.100000$ |
 | -5 dB | $0.316$ | $0.031623$ | $0.177828$ |
 
-At 20 dB, signal power is 100 times noise power. At 0 dB they are equal. At -5 dB, noise power is
-$3.162$ times signal power.
+At 20 dB, signal power is 100 times noise power. At 0 dB they are equal.
 
-> **Unresolved:** No active mask exists from which the requested alternative could be implemented
-> or audited. A paper must describe the current benchmark as **whole-window power SNR**. Calling it
-> active-region SNR would be incorrect.
+For reporting, the clean and added waveforms are split into 2,048-sample frames with a 512-sample
+hop. If $r_k$ is the clean RMS in frame $k$, active frames are
+
+$$
+\mathcal{K}_{\mathrm{active}}
+=\left\{k:r_k\geq \max_j(r_j)\,10^{-30/20}\right\}.
+$$
+
+The code averages clean and added-noise frame power over this set and records
+`snr_signal_active_db`, plus `signal_active_fraction` and `snr_signal_active_frames`. Thus a paper
+must call the requested condition **whole-window power SNR**, while it may separately report the
+**energy-derived active-instrument SNR**. This mask is algorithmic, not manually annotated.
 
 ## 22. Clipping prevention
 
@@ -2067,7 +2078,7 @@ analysis ([`noise_stats.py` L134–212](../src/instrument_robustness/noise_stats
 | Pitch imbalance | **DOES NOT YET ADDRESS IT** | pitch groups are isolated, not balanced; instrument ranges differ |
 | Articulation imbalance | **UNCLEAR** | one articulation/class mitigates technique count; normal vs arco-normal still family-linked |
 | Dynamic imbalance | **DOES NOT YET ADDRESS IT** | retained and grouped with pitch, not stratified/balanced |
-| Silence/content-fraction imbalance | **DOES NOT YET ADDRESS IT** | tiling removes zero padding; content duration still differs by class; no activity mask |
+| Silence/content-fraction imbalance | **MEASURES, DOES NOT BALANCE** | tiling removes zero padding; active-instrument fraction/SNR are recorded, but content duration is not balanced by class |
 | Stale features generated from old windows | **PREVENTS IT** | config fingerprints and CSV/NPZ checks; model summaries hash inputs |
 | Old label mappings | **PREVENTS IT** | label order embedded and checked; old artifacts moved to legacy |
 | Duplicate windows | **TESTS FOR IT** | noise builder rejects duplicate stems; current metadata audit found no duplicate paths |
@@ -2168,9 +2179,10 @@ nominal-length counts are `025: 2,117`, `05: 2,141`, `1: 2,073`, `15: 1,656`, `l
 | viola | 719 | 1.019 | 706 | 98.19 |
 | violin | 864 | 0.863 | 851 | 98.50 |
 
-> **Unresolved active-audio statistics:** No active mask or active duration is generated. The trim
-> and `content_s` values above are the closest available proxies and must not be relabeled as active
-> audio.
+> **Scope of the table:** preprocessing still stores no human-annotated active duration. The trim
+> and `content_s` values above must not be relabeled as active audio. Noise generation separately
+> derives frame activity and records it per mixture; those diagnostics will exist only after the
+> official noise sweep is generated.
 
 ### Array shapes
 
@@ -2224,8 +2236,8 @@ Important missing tests:
 7. DC-offset behavior and empirical Gaussian mean/power tolerances.
 8. External-noise source split isolation and ESC-50 category/fold provenance.
 9. A generated-file test that hashes/reloads output and checks every provenance field.
-10. No-active-region test exists because no active-region algorithm exists.
-11. No CNN, CRNN, or AST noise-adapter parity test exists because those adapters are absent.
+10. Broader real-data validation of the energy-derived active-instrument threshold.
+11. End-to-end clean-parity tests for each neural noise adapter with its real checkpoint.
 
 ## 31. Worked example
 
@@ -2346,8 +2358,8 @@ $$
 | I. Reproducibility and Leakage Controls | Sections 12, 23, 28, and 30: fingerprints, hashes, tests, gaps |
 
 When converting this audit into prose, retain the distinction between source recordings and derived
-windows, and between “code exists” and “experiment was run.” Do not describe active-region SNR,
-external noise splits, or missing model adapters in past tense.
+windows, and between “code exists” and “experiment was run.” Do not describe active-instrument SNR
+as the mixing target, and do not describe external noise splits as implemented.
 
 ## 33. Methods-ready factual summary
 
@@ -2371,15 +2383,18 @@ external noise splits, or missing model adapters in past tense.
 - Log-mel inputs used 2,048-point FFTs, 512-sample hops, 128 mel bins, 130 frames, and 0–11,025 Hz.
 - AST, MERT, and PANNs began with the same Step-5 waveform and resampled to 16, 24, and 32 kHz,
   respectively.
-- The implemented noise grid was white/natural/mechanical at 20, 10, 5, 0, and -5 dB plus clean.
+- The proposed noise grid is white/natural/mechanical at 60, 50, 40, 30, 20, 10, and 0 dB plus
+  clean; it remains subject to the pretrained-model pilot before generation.
 - Only clean test windows were corrupted; clean train/validation data and fitted models remained
   unchanged.
-- SNR was calculated from mean power over the entire fixed window.
-- A noise realization was deterministic per dataset build/window/category and was rescaled across
-  SNRs.
+- Noise gain was calculated from mean power over the entire fixed window. Band, segmental,
+  active-instrument, and model-effective SNR were recorded alongside it.
+- Each configured noise replicate was deterministic per dataset build/window/category/replicate and
+  was rescaled across SNRs.
 - No post-mix normalization or hard clipping was used; noisy audio was stored as float32 WAV.
 - The same materialized noisy WAV was intended for every model.
-- SVM, MERT, and PANNs noise adapters existed; AST, CNN, and CRNN adapters did not.
+- SVM, MERT, PANNs, AST, CNN, and CRNN noise adapters exist; real-checkpoint parity and sealed-test
+  status still differ by model.
 
 ## 34. Unresolved questions before paper writing
 
