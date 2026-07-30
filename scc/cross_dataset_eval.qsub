@@ -1,0 +1,58 @@
+#!/bin/bash -l
+
+#$ -P rise-grid
+#$ -N cross_dataset_eval
+#$ -j y
+#$ -pe omp 4
+#$ -l gpus=1
+#$ -l gpu_c=7.0
+#$ -l gpu_memory=16G
+#$ -l h_rt=4:00:00
+#$ -l mem_per_core=8G
+
+set -euo pipefail
+
+xd_repo="${RISE_REPO:-$SGE_O_WORKDIR}"
+xd_venv="${PANNS_VENV:-$xd_repo/.venv}"
+xd_data_base="${RISE_DATA_BASE:-/projectnb/rise-grid/$USER/rise-data}"
+xd_phil_root="${RISE_PHIL_ROOT:-$xd_data_base/philharmonia}"
+xd_tiny_root="${RISE_TINYSOL_ROOT:-$xd_data_base/tinysol}"
+xd_phil_model="${PHIL_MODEL:-$xd_phil_root/features/panns/panns_finetune.pt}"
+xd_tiny_model="${TINY_MODEL:-$xd_tiny_root/features/panns/panns_finetune.pt}"
+
+export RISE_PHIL_ROOT="$xd_phil_root"
+export RISE_TINYSOL_ROOT="$xd_tiny_root"
+export OMP_NUM_THREADS="${NSLOTS:-4}"
+export MKL_NUM_THREADS="${NSLOTS:-4}"
+export PYTHONUNBUFFERED=1
+
+source "$xd_venv/bin/activate"
+cd "$xd_repo"
+export PYTHONPATH="$xd_repo/src${PYTHONPATH:+:$PYTHONPATH}"
+
+# Both datasets must be built, because each model is scored on the OTHER dataset's window audio.
+# A missing foreign dataset is the failure this guards: without it the cross-dataset number -- the
+# entire point of the run -- silently becomes a within-dataset number.
+for pair in "philharmonia:$xd_phil_root" "tinysol:$xd_tiny_root"; do
+    name="${pair%%:*}"
+    root="${pair#*:}"
+    test -f "$root/pipeline/windows.csv" || {
+        echo "Missing $name windows.csv under $root -- run its preprocessing first." >&2
+        exit 1
+    }
+    test -d "$root/work/windows" || {
+        echo "Missing $name work/windows/ under $root -- run its preprocessing first." >&2
+        exit 1
+    }
+done
+
+test -f "$xd_phil_model" || { echo "Missing Philharmonia checkpoint: $xd_phil_model" >&2; exit 1; }
+test -f "$xd_tiny_model" || { echo "Missing TinySOL checkpoint: $xd_tiny_model" >&2; exit 1; }
+
+# Cnn14 is random-initialised here and then fully overwritten by the finetune state_dict, so this
+# job needs no pretrained AudioSet checkpoint -- unlike train_panns.
+python -c "import torch; print('PyTorch:', torch.__version__); print('GPU:', torch.cuda.get_device_name()); assert torch.cuda.is_available()"
+
+python -m instrument_robustness.cross_dataset_eval \
+    --phil-model "$xd_phil_model" \
+    --tiny-model "$xd_tiny_model"
