@@ -42,6 +42,17 @@ export OMP_NUM_THREADS="${NSLOTS:-4}"
 export MKL_NUM_THREADS="${NSLOTS:-4}"
 export PYTHONUNBUFFERED=1
 
+# A venv built on top of an SCC `module load python3/...` is NOT self-contained: its interpreter
+# links against that module's libpython, which only exists on $LD_LIBRARY_PATH while the module is
+# loaded. Login node has it, compute node does not, so the job dies before running a line of
+# Python with:
+#     error while loading shared libraries: libpython3.9.so.1.0: cannot open shared object file
+# Load the same module the venv was built from. Override with RISE_MODULES, or set it empty if
+# your venv came from a self-contained interpreter that needs no module.
+if [ -n "${RISE_MODULES-python3/3.9.9}" ]; then
+    module load ${RISE_MODULES:-python3/3.9.9}
+fi
+
 source "$cnn_venv/bin/activate"
 cd "$cnn_repo"
 export PYTHONPATH="$cnn_repo/src${PYTHONPATH:+:$PYTHONPATH}"
