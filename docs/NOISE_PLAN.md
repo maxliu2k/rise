@@ -137,33 +137,27 @@ after the audio is written.
 
 | Concern | Columns | What it catches |
 |---|---|---|
-| **Where in frequency** | `snr_band_db` (50–8000 Hz), `snr_worst_octave_db`, `snr_worst_octave_center_hz`, `snr_octave_db` | Low-frequency rumble dominating total power while barely touching the instrument's band |
+| **Where in frequency** | `snr_band_db` (25–8000 Hz), `snr_worst_octave_db`, `snr_worst_octave_center_hz`, `snr_octave_db` | Low-frequency rumble dominating total power while barely touching the instrument's band |
 | **When in time** | `noise_active_fraction`, `snr_segmental_min_db`, `snr_segmental_{p05,p50,p95}_db`, `snr_segmental_std_db`, `snr_segmental_active_frames` | A brief loud transient satisfying an average-power target |
+| **While the note sounds** | `signal_active_fraction`, `snr_signal_active_db`, `snr_signal_active_frames` | Silence or decay around a short note making whole-window SNR differ from the note's experienced SNR |
 | **What the model gets** | `snr_effective_ast_16k_db`, `snr_effective_mert_24k_db`, `snr_effective_panns_32k_db` | Resampling discarding noise the model never sees |
 
-Measured on a real bassoon window, all four noise types at **the same nominal 0 dB**:
-
-```text
-noise        band   worstOct   active   segMin   eff16k   eff32k
-white        1.43     -2.68     1.00    -18.6     1.59     0.18
-rumble      31.59     25.54     1.00    -21.2     0.01     0.01
-HF-only     22.85     59.27     1.00    -19.0    23.13     1.00
-slam         1.46     -3.66     0.04    -33.6     1.60     0.18
-```
-
-Read that table before quoting a single SNR number. "0 dB rumble" leaves the instrument band at
-**+31.6 dB** — essentially unmasked. "0 dB HF-only" arrives at AST as **+23.1 dB**, because
-everything above 8 kHz is gone by the time it reaches the model. And the slam reaches 0 dB *on
-average* while being silent in 96% of frames and −33.6 dB in its worst one.
+Regression tests exercise the failure modes directly. At the same nominal 0 dB, synthetic rumble
+and high-frequency noise both produce instrument-band SNR at least 15 dB cleaner than white noise.
+A 30 ms transient occupies only a small fraction of frames and is far harsher in its worst frame
+than the whole-window label suggests. A short note surrounded by silence likewise produces an
+active-instrument SNR more than 5 dB above its nominal whole-window SNR. These are detection
+examples, not benchmark results.
 
 Two cautions on reading these columns:
 
 - `snr_worst_octave_db` considers only octaves holding at least 1% of the clean signal's power.
   Without that filter it reports whichever band the instrument does not occupy — a true,
   meaningless, and noise-type-independent large negative number.
-- `noise_active_fraction` describes the **noise**, not the instrument. The pipeline stores no
-  activity mask for the instrument (audit checklist item 5), so there is still no active-region SNR
-  and the headline number remains whole-window.
+- `noise_active_fraction` describes the **noise**. `signal_active_fraction` describes frames selected
+  from the clean instrument by a 30 dB relative-RMS threshold. It is an energy-derived estimate,
+  not a manually annotated interval. The headline condition remains whole-window SNR; the
+  active-instrument value is reported alongside it.
 
 ## 5. Two invariants that are easy to break
 

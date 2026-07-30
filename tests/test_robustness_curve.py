@@ -17,6 +17,8 @@ from instrument_robustness.robustness_curve import (
     benjamini_hochberg,
     curve_from_summary,
     mean_retention,
+    paired_replicate_differences,
+    replicate_spread,
     robustness_auc,
     snr_at_retention,
     summarise_sweep,
@@ -235,6 +237,65 @@ class SweepSummaryTests(unittest.TestCase):
         second = curve_from_summary(rows, noise_type="white", replicate=1)
         self.assertEqual([p.macro_f1 for p in first], [0.1, 0.5])
         self.assertEqual([p.macro_f1 for p in second], [0.2, 0.6])
+
+    def test_default_curve_averages_replicates_at_each_snr(self) -> None:
+        rows = [
+            {"noise_type": "white", "snr_db": 20, "replicate": 0, "macro_f1": 0.4},
+            {"noise_type": "white", "snr_db": 0, "replicate": 0, "macro_f1": 0.1},
+            {"noise_type": "white", "snr_db": 20, "replicate": 1, "macro_f1": 0.8},
+            {"noise_type": "white", "snr_db": 0, "replicate": 1, "macro_f1": 0.3},
+        ]
+        points = curve_from_summary(rows, noise_type="white")
+        self.assertEqual([point.snr_db for point in points], [0.0, 20.0])
+        self.assertAlmostEqual(points[0].macro_f1, 0.2)
+        self.assertAlmostEqual(points[1].macro_f1, 0.6)
+
+    def test_replicate_spread_is_reported_per_condition(self) -> None:
+        rows = [
+            {"noise_type": "white", "snr_db": 20, "replicate": 0, "macro_f1": 0.4},
+            {"noise_type": "white", "snr_db": 20, "replicate": 1, "macro_f1": 0.8},
+            {"noise_type": "white", "snr_db": 0, "replicate": 0, "macro_f1": 0.1},
+            {"noise_type": "white", "snr_db": 0, "replicate": 1, "macro_f1": 0.3},
+        ]
+        records = replicate_spread(rows)
+        at_twenty = next(record for record in records if record["snr_db"] == 20)
+        self.assertEqual(at_twenty["n_replicates"], 2)
+        self.assertEqual(at_twenty["replicates"], [0, 1])
+        self.assertAlmostEqual(at_twenty["mean"], 0.6)
+        self.assertAlmostEqual(at_twenty["std"], 0.2)
+
+    def test_incomplete_replicate_grid_is_refused(self) -> None:
+        rows = [
+            {"noise_type": "white", "snr_db": 20, "replicate": 0, "macro_f1": 0.4},
+            {"noise_type": "white", "snr_db": 20, "replicate": 1, "macro_f1": 0.8},
+            {"noise_type": "white", "snr_db": 0, "replicate": 0, "macro_f1": 0.1},
+        ]
+        with self.assertRaisesRegex(ValueError, "inconsistent replicate sets"):
+            replicate_spread(rows)
+
+    def test_model_differences_pair_the_same_replicate(self) -> None:
+        reference = [
+            {"noise_type": "white", "snr_db": 20, "replicate": 0, "macro_f1": 0.4},
+            {"noise_type": "white", "snr_db": 20, "replicate": 1, "macro_f1": 0.7},
+        ]
+        candidate = [
+            {"noise_type": "white", "snr_db": 20, "replicate": 0, "macro_f1": 0.5},
+            {"noise_type": "white", "snr_db": 20, "replicate": 1, "macro_f1": 0.9},
+        ]
+        record = paired_replicate_differences(reference, candidate)[0]
+        self.assertEqual(record["direction"], "candidate_minus_reference")
+        self.assertAlmostEqual(record["mean"], 0.15)
+        self.assertAlmostEqual(record["std"], 0.05)
+
+    def test_unmatched_model_replicates_are_refused(self) -> None:
+        reference = [
+            {"noise_type": "white", "snr_db": 20, "replicate": 0, "macro_f1": 0.4}
+        ]
+        candidate = [
+            {"noise_type": "white", "snr_db": 20, "replicate": 1, "macro_f1": 0.5}
+        ]
+        with self.assertRaisesRegex(ValueError, "same replicate conditions"):
+            paired_replicate_differences(reference, candidate)
 
 
 class NoiseSourceClusterTests(unittest.TestCase):

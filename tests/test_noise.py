@@ -40,6 +40,7 @@ from instrument_robustness.noise_sweep import (
     SNRS,
     Esc50Clip,
     dataset_build_identity,
+    diagnostic_protocol,
     draw_noise,
     load_esc50_index,
     measured_snr,
@@ -174,6 +175,7 @@ def write_completed_noise_sweep(root: Path, paths: dict[str, Path]) -> Path:
         },
         "seed_scheme": SEED_SCHEME,
         "one_realization_scaled_to_all_snrs": True,
+        "diagnostics": diagnostic_protocol(),
         "provenance_file": provenance.name,
         "provenance_sha256": sha256_file(provenance),
         "provenance_rows": len(rows),
@@ -347,6 +349,25 @@ class NoiseTests(unittest.TestCase):
                     manifest_fingerprint=paths["manifest_fingerprint"],
                 )
 
+    def test_manifest_rejects_stale_diagnostic_settings(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir)
+            paths = write_dataset_files(root)
+            noisy_dir = write_completed_noise_sweep(root, paths)
+            manifest_path = noisy_dir / "noise_manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["diagnostics"]["instrument_band_hz"] = [50.0, 8000.0]
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "diagnostics"):
+                validate_noise_manifest(
+                    noisy_dir=noisy_dir,
+                    data_root=root,
+                    windows_csv=paths["windows_csv"],
+                    manifest_csv=paths["manifest_csv"],
+                    manifest_fingerprint=paths["manifest_fingerprint"],
+                )
+
     def test_shared_runner_writes_all_conditions_after_clean_parity(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
             root = Path(temporary_dir)
@@ -381,14 +402,25 @@ class NoiseTests(unittest.TestCase):
 
             # Derived from the configured grid, not a literal: this test is about the runner
             # covering EVERY condition, so it must not break when the grid is retuned.
-            self.assertEqual(len(summary), 1 + len(NOISE_TYPES) * len(SNRS))
+            self.assertEqual(
+                len(summary),
+                1 + len(NOISE_TYPES) * len(SNRS) * N_REPLICATES,
+            )
             self.assertTrue((output_dir / "metrics_clean.json").is_file())
             for noise_type in NOISE_TYPES:
                 for snr in SNRS:
-                    self.assertTrue(
-                        (output_dir / f"model_test_{noise_type}_{snr}.csv").is_file(),
-                        f"missing predictions for {noise_type} at {snr} dB",
-                    )
+                    for replicate in range(N_REPLICATES):
+                        suffix = (
+                            f"_r{replicate}" if N_REPLICATES > 1 else ""
+                        )
+                        self.assertTrue(
+                            (
+                                output_dir
+                                / f"model_test_{noise_type}_{snr}{suffix}.csv"
+                            ).is_file(),
+                            f"missing predictions for {noise_type} at {snr} dB, "
+                            f"replicate {replicate}",
+                        )
 
     def test_pitch_groups_come_from_authoritative_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:

@@ -40,6 +40,7 @@ from instrument_robustness.config import (
     ROOT,
     SEGMENTAL_FRAME,
     SEGMENTAL_HOP,
+    SIGNAL_ACTIVE_TOP_DB,
     SNRS,
     SR,
     TARGET_RMS,
@@ -60,7 +61,7 @@ warnings.filterwarnings("ignore")
 NOISY_DIR = WORK / "windows_noisy"
 NOISE_MANIFEST_NAME = "noise_manifest.json"
 NOISE_PROVENANCE_NAME = "noise_provenance.csv"
-NOISE_MANIFEST_VERSION = 4
+NOISE_MANIFEST_VERSION = 5
 NOISE_ROOT = Path(
     os.environ.get("RISE_NOISE_ROOT", Path.home() / "Downloads/noise_sources")
 )
@@ -77,6 +78,19 @@ MAX_DC_POWER_SHARE = 0.01
 # ESC-50 target blocks: 0-19 animals/natural, 20-29 human non-speech (excluded),
 # 30-49 domestic/urban.
 ESC50_TARGETS = {"natural": range(0, 20), "mechanical": range(30, 50)}
+
+
+def diagnostic_protocol() -> dict[str, object]:
+    """Settings that define the SNR diagnostics stored with every mixture."""
+    return {
+        "instrument_band_hz": list(INSTRUMENT_BAND_HZ),
+        "octave_centers_hz": list(OCTAVE_CENTERS_HZ),
+        "segmental_frame": SEGMENTAL_FRAME,
+        "segmental_hop": SEGMENTAL_HOP,
+        "noise_active_top_db": NOISE_ACTIVE_TOP_DB,
+        "signal_active_top_db": SIGNAL_ACTIVE_TOP_DB,
+        "effective_snr_rates_hz": {"ast": 16000, "mert": 24000, "panns": 32000},
+    }
 
 
 def sha256_file(path: str | Path) -> str:
@@ -755,12 +769,7 @@ def generate(
         "seed_scheme": SEED_SCHEME,
         "one_realization_scaled_to_all_snrs": True,
         "diagnostics": {
-            "instrument_band_hz": list(INSTRUMENT_BAND_HZ),
-            "octave_centers_hz": list(OCTAVE_CENTERS_HZ),
-            "segmental_frame": SEGMENTAL_FRAME,
-            "segmental_hop": SEGMENTAL_HOP,
-            "noise_active_top_db": NOISE_ACTIVE_TOP_DB,
-            "effective_snr_rates_hz": {"ast": 16000, "mert": 24000, "panns": 32000},
+            **diagnostic_protocol(),
             "note": (
                 "snr_db is the requested whole-window whole-spectrum SNR; these columns record "
                 "where in frequency, when in time, and at which model rate that SNR actually lands"
@@ -827,6 +836,12 @@ def validate_noise_manifest(
     mismatches = [
         key for key, expected in checks.items() if manifest.get(key) != expected
     ]
+    diagnostics = manifest.get("diagnostics")
+    if not isinstance(diagnostics, dict) or any(
+        diagnostics.get(key) != expected
+        for key, expected in diagnostic_protocol().items()
+    ):
+        mismatches.append("diagnostics")
     if mismatches:
         raise ValueError(
             f"{manifest_path} does not match the current protocol/build: {mismatches}"
@@ -914,6 +929,8 @@ def validate_noise_manifest(
         "noise_fold",
         "unscaled_noise_power",
         "noise_active_fraction",
+        "signal_active_fraction",
+        "snr_signal_active_frames",
     ):
         if grouped[column].nunique(dropna=False).max() != 1:
             raise ValueError(
