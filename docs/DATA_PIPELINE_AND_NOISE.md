@@ -318,11 +318,11 @@ The evidence labels used throughout are:
 11. The implemented robustness experiment keeps models frozen and materializes paired noisy copies
     of only the held-out test windows.
 12. The frozen grid is clean plus white, ESC-50 natural, and ESC-50 mechanical noise at
-    60, 50, 40, 30, 20, 10, 0, -5, -10, and -15 dB.
+    60, 50, 40, 30, 20, 10, 0, and -10 dB.
 13. The mixer uses whole-window power and writes float32 WAV to avoid clipping. It also records
     frequency-, time-, instrument-activity-, and model-rate-specific SNR diagnostics.
 14. `N_REPLICATES` deterministic realizations per window and category are each rescaled across SNRs,
-    and every adapter reads the same materialized files. The frozen value is 3.
+    and every adapter reads the same materialized files. The frozen value is 2.
 15. The central mixer and SVM, MERT, PANNs, CNN, CRNN, and AST noise adapters exist.
 
 ## 2. Research objective

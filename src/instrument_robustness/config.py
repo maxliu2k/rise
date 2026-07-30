@@ -168,14 +168,16 @@ TARGET_RMS = 0.1      # per-window RMS target; peak-guarded to avoid clipping
 #
 #   * 60/50/40 resolves the fragile SVM's decline and the pretrained models' upper shoulder;
 #   * 30/20/10/0 resolves the useful middle of every MERT curve;
-#   * -5/-10/-15 resolves the ESC-50 lower shoulder and measured plateau;
+#   * -10 records the ESC-50 lower plateau without retaining both nearby -5 and -15 points;
 #   * 70 is excluded because every MERT condition was indistinguishable from clean.
 #
 # This shared grid is intentionally full-factorial: every noise type uses the same nominal SNRs so
 # category/model comparisons have common x coordinates. Per-mixture band, octave, active-signal and
 # model-effective diagnostics must accompany those nominal values because equal total-power SNR
-# does not imply equal masking. Freeze this list after generation.
-SNRS = [60, 50, 40, 30, 20, 10, 0, -5, -10, -15]
+# does not imply equal masking. The validation pilot measured -5 and -15 too; they were omitted from
+# the final grid because -5 lies between 0 and the measured floor, while -15 added no meaningful
+# change beyond -10. Freeze this list after generation.
+SNRS = [60, 50, 40, 30, 20, 10, 0, -10]
 NOISE_TYPES = ["white", "natural", "mechanical"]
 
 # How many independent noise realizations per (window, noise type). Each replicate is a fresh draw
@@ -187,10 +189,11 @@ NOISE_TYPES = ["white", "natural", "mechanical"]
 # robust than model B" needs the spread across realizations to be smaller than the gap between the
 # models, and with one replicate that spread is unmeasurable.
 #
-# Three is the smallest practical choice that yields a non-degenerate spread without making the
-# shared corpus unmanageable. Final cost: 1,255 windows x 3 types x 10 SNRs x 3 replicates =
-# 112,950 float32 WAVs, about 27.8 GiB before filesystem overhead.
-N_REPLICATES = 3
+# Two is the deadline-bounded compromise chosen before test evaluation. It provides an independent
+# second draw for paired sensitivity checks, but not a precise estimate of realization variance;
+# that limitation must be reported. Final cost: 1,255 windows x 3 types x 8 SNRs x 2 replicates =
+# 60,240 float32 WAVs, about 14.8 GiB before filesystem overhead.
+N_REPLICATES = 2
 
 # --- Noise diagnostics (see noise_metrics.py) ---
 # The headline SNR is whole-window, whole-spectrum mean power. These settings drive the diagnostics

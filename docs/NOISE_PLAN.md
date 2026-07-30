@@ -20,24 +20,24 @@ difference between two models is real.
 
 Run `noise_sweep.py --generate` once per dataset, then point every model at `work/windows_noisy/`.
 
-## 2. Conditions — 91 total
+## 2. Conditions — 49 total
 
 The grid lives in `config.SNRS` / `config.NOISE_TYPES`, not in `noise_sweep`.
 
 | Noise source | SNRs (dB) | Replicates | Noisy conditions |
 |---|---|---:|---:|
-| **white** (Gaussian) | 60, 50, 40, 30, 20, 10, 0, -5, -10, -15 | 3 | 30 |
-| **natural** (ESC-50) | 60, 50, 40, 30, 20, 10, 0, -5, -10, -15 | 3 | 30 |
-| **mechanical** (ESC-50) | 60, 50, 40, 30, 20, 10, 0, -5, -10, -15 | 3 | 30 |
+| **white** (Gaussian) | 60, 50, 40, 30, 20, 10, 0, -10 | 2 | 16 |
+| **natural** (ESC-50) | 60, 50, 40, 30, 20, 10, 0, -10 | 2 | 16 |
+| **mechanical** (ESC-50) | 60, 50, 40, 30, 20, 10, 0, -10 | 2 | 16 |
 
-plus **clean**, shared rather than duplicated → 3 × 10 × 3 + 1 = **91** scored conditions.
+plus **clean**, shared rather than duplicated → 3 × 8 × 2 + 1 = **49** scored conditions.
 
-For the current 1,255-window Philharmonia test split, the 90 float32 noisy conditions are 112,950
-files at roughly 27.8 GiB before filesystem overhead. Keep them under the external data root, never
+For the current 1,255-window Philharmonia test split, the 48 float32 noisy conditions are 60,240
+files at roughly 14.8 GiB before filesystem overhead. Keep them under the external data root, never
 in Git.
 
 Lower SNR = more noise. 60 dB is a barely-there noise floor, 20 dB is mild, 0 dB is signal and noise
-at *equal power*, and -15 dB means noise has about 31.6 times the signal power.
+at *equal power*, and -10 dB means noise has 10 times the signal power.
 
 ### Why the grid reaches so high
 
@@ -74,10 +74,12 @@ The MERT pilot then measured 240 balanced validation windows with all three nois
 
 The grid therefore spans **both model regimes and all three noise characters**. 60/50/40 resolves
 the SVM decline and the pretrained upper shoulder; 30/20/10/0 resolves the useful middle of the
-MERT curves; -5/-10/-15 resolves the ESC-50 lower shoulder and plateau. 70 dB was excluded because
-MERT was indistinguishable from clean there. The same grid is used for every category so comparisons
-share x coordinates; band, octave, activity, and model-effective SNR diagnostics prevent nominal
-total-power SNR from being mistaken for equal spectral masking.
+MERT curves; -10 records the ESC-50 lower plateau. The validation pilot measured -5 and -15 too,
+but -5 is an intermediate point and -15 did not meaningfully change the plateau beyond -10. Those
+two levels were omitted before official test generation to keep the four-day experiment tractable.
+70 dB was excluded because MERT was indistinguishable from clean there. The same grid is used for
+every category so comparisons share x coordinates; band, octave, activity, and model-effective SNR
+diagnostics prevent nominal total-power SNR from being mistaken for equal spectral masking.
 
 - **white** — Gaussian, flat across all frequencies.
 - **natural** — ESC-50 targets 0–19 (animals; natural soundscapes and water).
@@ -124,14 +126,15 @@ drew an unlucky clip", so no claim of the form *model A is more robust than mode
 the spread across draws is unmeasurable. Replicate 1 is an independent draw of the same condition —
 a different ESC-50 clip and crop, or a different Gaussian sample.
 
-`config.N_REPLICATES` controls it and is frozen at **3**. Three is the smallest count that provides
-a non-degenerate spread across noise draws while keeping the shared corpus tractable. Cost is
-exactly linear in files, disk and evaluation time.
+`config.N_REPLICATES` controls it and is frozen at **2**. The second draw permits paired sensitivity
+checks that one draw cannot provide, but two draws do not estimate realization variance precisely.
+That deadline-driven limitation must be reported. Cost is exactly linear in files, disk and
+evaluation time.
 
 Replicates are separate *conditions*, not averaged at scoring time — averaging there would discard
 the very quantity they exist to provide. `noise_stats` aggregates; `noise_eval_common` does not.
 Output paths always carry the replicate directory (`white/snr20/r0/…`), even at
-`N_REPLICATES = 3`, because a layout that changes shape with a config value needs two code paths on
+`N_REPLICATES = 2`, because a layout that changes shape with a config value needs two code paths on
 every reader and the second one never gets tested.
 
 The `dataset_fingerprint` hashes the actual `manifest.csv` and Step-5 `windows.csv` identities in
@@ -177,17 +180,18 @@ The real reason is that Step 5 normalized every clean window to `TARGET_RMS`, an
 trained at that reference gain; rescaling the mixture would present an amplitude distribution the
 model never saw in training.
 
-**Files are float32 WAV, not 16-bit PCM.** At −5 dB the mixture peaks well above ±1.0 (measured up
-to 6.0). Clipping *is* nonlinear and genuinely corrupts the SNR, unlike a linear rescale. float32
-has the headroom. **Verify your loader does not silently clamp values outside [−1, 1].**
+**Files are float32 WAV, not 16-bit PCM.** The validation pilot's −5 dB mixtures peaked well above
+±1.0 (measured up to 6.0), and the final grid extends to −10 dB. Clipping *is* nonlinear and
+genuinely corrupts the SNR, unlike a linear rescale. float32 has the headroom. **Verify your loader
+does not silently clamp values outside [−1, 1].**
 
 ## 6. Validation before generating anything
 
 `noise_sweep.py --validate` samples a few windows, mixes at every SNR, then **measures the SNR back
-out of the mixture** and compares to target. Current result: **0.000000 dB error** across all 15
-noisy conditions. It also confirms the single-realization property (§4) and writes listenable 0 dB
-samples to `work/windows_noisy/_validation_samples/` — a 0 dB clip should sound like an instrument
-buried in noise, not silence or garbage.
+out of the mixture** and compares to target. It checks all 24 noise-type/SNR combinations against
+the configured error tolerance. It also confirms the single-realization property (§4) and writes
+listenable 0 dB samples to `work/windows_noisy/_validation_samples/` — a 0 dB clip should sound like
+an instrument buried in noise, not silence or garbage.
 
 Generation writes `noise_provenance.csv`, with the clean hash, ESC-50 source/hash, deterministic
 seed, crop offset, scaling factor, realized SNR, peak, and output hash for every noisy file.
