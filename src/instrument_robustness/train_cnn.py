@@ -17,6 +17,20 @@ validation, and finalize_cnn reports the pre-committed combiner.
 Checkpoints carry state_dict, label_order and config_fingerprint, matching the contract the noise
 evaluators enforce — a checkpoint trained under a different label set or window length must fail
 to load rather than silently produce plausible predictions.
+
+RESUMING. Re-running this command retrains only the seeds that are not already finished, so a run
+killed partway costs at most one partial seed. Just run it again:
+
+    python -m instrument_robustness.train_cnn
+
+Each finished seed persists three files — the checkpoint, its validation probabilities, and a
+record carrying the config fingerprint, the architecture, and the hashes of the arrays it trained
+on. A seed is reused only when all four match the run now starting; otherwise it is retrained.
+`validation_summary.json` names the reused seeds so a resumed run is visible rather than implied.
+
+This exists because the ensemble vote used to be assembled from probabilities held in memory, so
+losing the process meant losing every completed seed. That happened twice, both times at seed 43,
+and the response both times was to spend the CPU again rather than to make the work durable.
 """
 from __future__ import annotations
 
@@ -81,6 +95,54 @@ def iterate(X: np.ndarray, y: np.ndarray, batch_size: int, shuffle: bool, rng: r
     for i in range(0, len(idx), batch_size):
         b = idx[i:i + batch_size]
         yield torch.from_numpy(X[b]), torch.from_numpy(y[b])
+
+
+def seed_store_paths(out_dir: Path, seed: int) -> tuple[Path, Path, Path]:
+    """(checkpoint, record, validation-probabilities) paths for one seed."""
+    return (out_dir / f"model_s{seed}.pt",
+            out_dir / f"seed_s{seed}.json",
+            out_dir / f"val_probs_s{seed}.npy")
+
+
+def write_seed_store(out_dir: Path, seed: int, record: dict, probs: np.ndarray,
+                     provenance: dict) -> None:
+    """Persist one finished seed so a later run can reuse it instead of retraining.
+
+    Postcondition: the record file exists only if the probabilities were fully written first.
+    Order is the whole point -- the record is the commit marker, so a run killed mid-write leaves
+    no record and the seed is simply retrained. Checking three files for mutual consistency after
+    the fact would be guesswork.
+    """
+    _, record_path, probs_path = seed_store_paths(out_dir, seed)
+    np.save(probs_path, probs.astype(np.float32))
+    record_path.write_text(json.dumps({**record, **provenance}, indent=2))
+
+
+def read_seed_store(out_dir: Path, seed: int, provenance: dict, n_val: int):
+    """A finished seed's (record, validation probabilities), or None if it must be retrained.
+
+    Preconditions: `provenance` describes the run now in progress (config fingerprint,
+    architecture, and the hashes of the feature arrays being trained on).
+    Postcondition: returns None unless all three files exist, every provenance field matches
+    exactly, and the stored probabilities have one row per current validation window.
+
+    Anything short of that is reported as absent rather than repaired. Reusing probabilities that
+    were computed against different features would corrupt the ensemble vote silently, and it is
+    the ensemble -- not any single seed -- that finalize_cnn reports.
+    """
+    checkpoint, record_path, probs_path = seed_store_paths(out_dir, seed)
+    if not (checkpoint.exists() and record_path.exists() and probs_path.exists()):
+        return None
+    try:
+        record = json.loads(record_path.read_text())
+        probs = np.load(probs_path)
+    except (OSError, ValueError, json.JSONDecodeError):
+        return None
+    if any(record.get(key) != value for key, value in provenance.items()):
+        return None
+    if probs.shape != (n_val, len(TARGET_LABELS)):
+        return None
+    return record, probs
 
 
 def train_one_seed(seed, Xtr, ytr, Xva, yva, device, weights, out_dir, model_cls):
@@ -184,13 +246,33 @@ def run_training(model_cls, output_dir: Path, seeds, device: str) -> dict:
                                f"[{weights.min():.3f}..{weights.max():.3f}]"))
     print(f"params: {sum(p.numel() for p in model_cls().parameters()):,}\n")
 
-    records, per_seed_probs = [], []
+    # Per-seed provenance. Reusing a seed is only safe if it was trained by this architecture, on
+    # these exact arrays, under this config -- so all four travel with the stored seed and must
+    # match before it is accepted.
+    provenance = {
+        "config_fingerprint": config_fingerprint(),
+        "architecture": model_cls.__name__,
+        "train_sha256": sha256(CNN_FEATURE_DIR / "train.npz"),
+        "val_sha256": sha256(CNN_FEATURE_DIR / "val.npz"),
+    }
+
+    records, per_seed_probs, reused = [], [], []
     for seed in seeds:
-        rec, probs = train_one_seed(seed, Xtr, ytr, Xva, yva, device, weights, output_dir,
-                                    model_cls)
+        stored = read_seed_store(output_dir, seed, provenance, len(Xva))
+        if stored is not None:
+            rec, probs = stored
+            reused.append(seed)
+            print(f"  s{seed} | reusing completed seed, val balanced acc "
+                  f"{rec['val_balanced_accuracy']:.4f}\n")
+        else:
+            rec, probs = train_one_seed(seed, Xtr, ytr, Xva, yva, device, weights, output_dir,
+                                        model_cls)
+            write_seed_store(output_dir, seed, rec, probs, provenance)
+            print(f"  s{seed} | val balanced acc {rec['val_balanced_accuracy']:.4f}\n")
         records.append(rec)
         per_seed_probs.append(probs)
-        print(f"  s{seed} | val balanced acc {rec['val_balanced_accuracy']:.4f}\n")
+    if reused:
+        print(f"reused {len(reused)} of {len(seeds)} seeds from a previous run: {reused}\n")
 
     stacked = np.stack(per_seed_probs)
     singles = [r["val_balanced_accuracy"] for r in records]
@@ -216,6 +298,9 @@ def run_training(model_cls, output_dir: Path, seeds, device: str) -> dict:
         "inputs": {s: {"path": str(CNN_FEATURE_DIR / f"{s}.npz"),
                        "sha256": sha256(CNN_FEATURE_DIR / f"{s}.npz")}
                    for s in ("train", "val")},
+        # Which seeds came off disk rather than being trained in this process. Every seed is
+        # provenance-checked before reuse, but a reader deserves to know the run was resumed.
+        "reused_seeds": list(reused),
         "per_seed": records,
         "single_seed_val": {"mean": float(np.mean(singles)),
                             "std": float(np.std(singles, ddof=1)) if len(singles) > 1 else 0.0,
