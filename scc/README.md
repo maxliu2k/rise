@@ -97,6 +97,17 @@ It pilots white noise by default. With ESC-50 available, pass
 `MERT_PILOT_NOISE=white:natural:mechanical` and `RISE_NOISE_ROOT` to check all three categories
 before freezing the grid.
 
+To extend only the lower end after the initial pilot, pass colon-separated noise types and SNRs.
+For example, the canonical 8,378-source build needs this final natural/mechanical check:
+
+```bash
+qsub \
+  -v RISE_DATA_ROOT="$RISE_DATA_ROOT",RISE_NOISE_ROOT="$RISE_NOISE_ROOT",MERT_OUTPUT_DIR="$PWD/artifacts/mert_8378",MERT_PILOT_NOISE=natural:mechanical,MERT_PILOT_SNRS=20:10:0:-5:-10:-15 \
+  scc/mert_snr_pilot.qsub
+```
+
+Without `MERT_PILOT_SNRS`, the Python pilot's full default candidate grid is used.
+
 ## Shared noise sweep, SVM, and MERT
 
 The clean final models above remain frozen. Put ESC-50 on the shared filesystem with both its

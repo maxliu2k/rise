@@ -19,6 +19,11 @@ pilot_output_dir="${MERT_OUTPUT_DIR:-$pilot_repo/artifacts/mert}"
 pilot_model="${MERT_MODEL_PATH:-$pilot_output_dir/best_probe.pt}"
 pilot_report="${MERT_PILOT_OUTPUT:-$pilot_output_dir/snr_pilot.json}"
 IFS=':' read -r -a pilot_noise_types <<< "${MERT_PILOT_NOISE:-white}"
+pilot_snr_args=()
+if [[ -n "${MERT_PILOT_SNRS:-}" ]]; then
+    IFS=':' read -r -a pilot_snrs <<< "$MERT_PILOT_SNRS"
+    pilot_snr_args=(--snrs "${pilot_snrs[@]}")
+fi
 
 source "$pilot_venv/bin/activate"
 cd "$pilot_repo"
@@ -40,6 +45,7 @@ python -m instrument_robustness.snr_pilot \
     --model mert \
     --model-path "$pilot_model" \
     --noise "${pilot_noise_types[@]}" \
+    "${pilot_snr_args[@]}" \
     --limit "${MERT_PILOT_LIMIT:-240}" \
     --device cuda \
     --output "$pilot_report"
