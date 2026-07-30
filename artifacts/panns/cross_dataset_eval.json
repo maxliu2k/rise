@@ -1,0 +1,35 @@
+{
+  "task": "cross_dataset_eval",
+  "description": "PANNs finetune checkpoints scored on the OTHER dataset's audio, both directions. Predictions are masked to the shared class set (currently all 12 labels shared, so the masking is an identity and the decision is 12-way).",
+  "chance_macro_f1": 0.083,
+  "shared_class_count": 12,
+  "runs": {
+    "philharmonia_model": {
+      "checkpoint": "panns_finetune_philharmonia.pt",
+      "within_test": {"accuracy": 0.9841, "macro_f1": 0.9845},
+      "cross_dataset": {
+        "on_dataset": "tinysol",
+        "accuracy": 0.4508,
+        "macro_f1": 0.3910,
+        "macro_f1_drop_vs_within": -0.5935
+      }
+    },
+    "tinysol_model": {
+      "checkpoint": "panns_finetune_tinysol.pt",
+      "within_test": {"accuracy": 0.9904, "macro_f1": 0.9943},
+      "cross_dataset": {
+        "on_dataset": "philharmonia",
+        "accuracy": 0.1585,
+        "macro_f1": 0.1389,
+        "macro_f1_drop_vs_within": -0.8554
+      }
+    }
+  },
+  "notes": [
+    "Phil-trained -> TinySOL: 4.7x chance macro-F1. Errors are timbrally reasonable (viola<->violin; tuba/trumpet mis-labeled as trombone/french-horn).",
+    "TinySOL-trained -> Phil: 1.7x chance macro-F1. Errors show mode collapse onto a small number of predicted classes (heavy dumping into 'oboe' and 'tuba' regardless of true label) -- the signature of a model that keyed on TinySOL's recording-condition regularities rather than instrument timbre.",
+    "Asymmetry is the finding: within-test macro-F1 of ~0.99 on either dataset radically overstates learned timbre in both directions, but the more homogeneous training corpus (TinySOL) transfers worse than the more varied one (Phil).",
+    "Both checkpoints were verified against current config_fingerprint() at load time (see per-checkpoint .provenance.json)."
+  ],
+  "reproduce": "python -m instrument_robustness.cross_dataset_eval --phil-model artifacts/panns/panns_finetune_philharmonia.pt --tiny-model artifacts/panns/panns_finetune_tinysol.pt  (finetune checkpoints distributed via GitHub Releases; see .provenance.json)"
+}

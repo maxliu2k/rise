@@ -1,0 +1,231 @@
+{
+  "checkpoint_filename": "panns_finetune_tinysol.pt",
+  "checkpoint_sha256": "cf7b0dae2ccbb2d159fa472249e8c6f9411a33880155883def965c800c0c186e",
+  "checkpoint_bytes": 327544037,
+  "distribution": "release",
+  "dataset": {
+    "name": "tinysol",
+    "manifest_sha256": "fa01c93a15a6336682894c11ccb7c51eb0ebc3bb655f202150098409786fffc9",
+    "manifest_producer_stage": "build_tinysol_manifest"
+  },
+  "model": {
+    "family": "panns_cnn14",
+    "mode": "finetune",
+    "label_order": [
+      "bassoon",
+      "cello",
+      "clarinet",
+      "double-bass",
+      "flute",
+      "french-horn",
+      "oboe",
+      "trombone",
+      "trumpet",
+      "tuba",
+      "viola",
+      "violin"
+    ],
+    "n_classes": 12,
+    "config_fingerprint": {
+      "fingerprint_version": 2,
+      "archive_base": "https://archive.org/download/philharmonicorchestrasamples",
+      "sr": 22050,
+      "waveform_subtype": "PCM_16",
+      "window_s": 3.0,
+      "hop_s": 3.0,
+      "short_window_policy": "tile",
+      "trim_top_db": 30,
+      "min_trim_s": 0.1,
+      "split_group_fields": [
+        "label",
+        "note"
+      ],
+      "split_policy": "label_note_pitch_group",
+      "split_fracs": [
+        0.7,
+        0.15,
+        0.15
+      ],
+      "split_seed": 0,
+      "min_window_content_s": 0.5,
+      "max_windows_per_source": 1,
+      "stft_pad_mode": "reflect",
+      "logmel_top_db": null,
+      "target_rms": 0.1,
+      "articulations": {
+        "bassoon": [
+          "normal"
+        ],
+        "cello": [
+          "arco-normal"
+        ],
+        "clarinet": [
+          "normal"
+        ],
+        "double-bass": [
+          "arco-normal"
+        ],
+        "flute": [
+          "normal"
+        ],
+        "french-horn": [
+          "normal"
+        ],
+        "oboe": [
+          "normal"
+        ],
+        "trombone": [
+          "normal"
+        ],
+        "trumpet": [
+          "normal"
+        ],
+        "tuba": [
+          "normal"
+        ],
+        "viola": [
+          "arco-normal"
+        ],
+        "violin": [
+          "arco-normal"
+        ]
+      },
+      "n_mels": 128,
+      "n_fft": 2048,
+      "hop_length": 512,
+      "n_frames": 130,
+      "n_mfcc": 20,
+      "svm_standardization": "per_feature_train",
+      "logmel_standardization": "per_mel_bin_train",
+      "labels": [
+        "bassoon",
+        "cello",
+        "clarinet",
+        "double-bass",
+        "flute",
+        "french-horn",
+        "oboe",
+        "trombone",
+        "trumpet",
+        "tuba",
+        "viola",
+        "violin"
+      ]
+    }
+  },
+  "results": {
+    "val_macro_f1": 0.9874,
+    "val_accuracy": 0.9877,
+    "test_macro_f1": 0.9943,
+    "test_accuracy": 0.9904,
+    "per_class_f1_test": {
+      "bassoon": 1.0,
+      "cello": 0.9655,
+      "clarinet": 1.0,
+      "double-bass": 0.9888,
+      "flute": 1.0,
+      "french-horn": 1.0,
+      "oboe": 1.0,
+      "trombone": 1.0,
+      "trumpet": 1.0,
+      "tuba": 1.0,
+      "viola": 0.9773,
+      "violin": 1.0
+    },
+    "meta": {
+      "mode": "finetune",
+      "device": "cuda",
+      "epochs": 25,
+      "lr": 0.0001,
+      "seed": 0,
+      "minutes": 2.1,
+      "n_train": 1490,
+      "config_fingerprint": {
+        "fingerprint_version": 2,
+        "archive_base": "https://archive.org/download/philharmonicorchestrasamples",
+        "sr": 22050,
+        "waveform_subtype": "PCM_16",
+        "window_s": 3.0,
+        "hop_s": 3.0,
+        "short_window_policy": "tile",
+        "trim_top_db": 30,
+        "min_trim_s": 0.1,
+        "split_group_fields": [
+          "label",
+          "note"
+        ],
+        "split_policy": "label_note_pitch_group",
+        "split_fracs": [
+          0.7,
+          0.15,
+          0.15
+        ],
+        "split_seed": 0,
+        "min_window_content_s": 0.5,
+        "max_windows_per_source": 1,
+        "stft_pad_mode": "reflect",
+        "logmel_top_db": null,
+        "target_rms": 0.1,
+        "articulations": {
+          "bassoon": [
+            "normal"
+          ],
+          "cello": [
+            "arco-normal"
+          ],
+          "clarinet": [
+            "normal"
+          ],
+          "double-bass": [
+            "arco-normal"
+          ],
+          "flute": [
+            "normal"
+          ],
+          "french-horn": [
+            "normal"
+          ],
+          "oboe": [
+            "normal"
+          ],
+          "trombone": [
+            "normal"
+          ],
+          "trumpet": [
+            "normal"
+          ],
+          "tuba": [
+            "normal"
+          ],
+          "viola": [
+            "arco-normal"
+          ],
+          "violin": [
+            "arco-normal"
+          ]
+        },
+        "n_mels": 128,
+        "n_fft": 2048,
+        "hop_length": 512,
+        "n_frames": 130,
+        "n_mfcc": 20,
+        "svm_standardization": "per_feature_train",
+        "logmel_standardization": "per_mel_bin_train",
+        "labels": [
+          "bassoon",
+          "cello",
+          "clarinet",
+          "double-bass",
+          "flute",
+          "french-horn",
+          "oboe",
+          "trombone",
+          "trumpet",
+          "tuba",
+          "viola",
+          "violin"
+        ]
+      }
+    }
+  }
+}
