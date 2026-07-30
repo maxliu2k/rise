@@ -1,6 +1,6 @@
 {
   "artifact": "splits.csv",
-  "sha256": "4a5b70448f482c1a6cdfcfb5c1baa0299bb8d150099a3d58244087fc217422af",
+  "sha256": "064b72f4407f340be771406e31ec6c95063af07e6bb2f8a9d9d30735dcd0ec4d",
   "stage": "step3_split",
   "fingerprint": {
     "fingerprint_version": 2,
@@ -24,6 +24,9 @@
     ],
     "split_seed": 0,
     "min_window_content_s": 0.5,
+    "max_windows_per_source": 1,
+    "stft_pad_mode": "reflect",
+    "logmel_top_db": null,
     "target_rms": 0.1,
     "articulations": {
       "bassoon": [

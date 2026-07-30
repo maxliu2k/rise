@@ -13,6 +13,7 @@ import os
 import platform
 import warnings
 from pathlib import Path
+from typing import NamedTuple
 
 for _variable in (
     "OMP_NUM_THREADS",
@@ -29,10 +30,17 @@ import pandas as pd
 import soundfile as sf
 
 from instrument_robustness.config import (
+    INSTRUMENT_BAND_HZ,
     MANIFEST_FINGERPRINT,
     MANIFEST_IN,
     MANIFEST_PRODUCER_STAGES,
+    NOISE_ACTIVE_TOP_DB,
+    NOISE_TYPES,
+    N_REPLICATES,
     ROOT,
+    SEGMENTAL_FRAME,
+    SEGMENTAL_HOP,
+    SNRS,
     SR,
     TARGET_RMS,
     WINDOWS_CSV,
@@ -41,15 +49,18 @@ from instrument_robustness.config import (
     assert_artifact_fingerprint,
     config_fingerprint,
 )
+from instrument_robustness.noise_metrics import (
+    DIAGNOSTIC_COLUMNS,
+    OCTAVE_CENTERS_HZ,
+    mixture_diagnostics,
+)
 
 warnings.filterwarnings("ignore")
 
-SNRS = [20, 10, 5, 0, -5]
-NOISE_TYPES = ["white", "natural", "mechanical"]
 NOISY_DIR = WORK / "windows_noisy"
 NOISE_MANIFEST_NAME = "noise_manifest.json"
 NOISE_PROVENANCE_NAME = "noise_provenance.csv"
-NOISE_MANIFEST_VERSION = 2
+NOISE_MANIFEST_VERSION = 4
 NOISE_ROOT = Path(
     os.environ.get("RISE_NOISE_ROOT", Path.home() / "Downloads/noise_sources")
 )
@@ -58,6 +69,10 @@ ESC50_DIR = ESC50_ROOT / "audio"
 ESC50_META = ESC50_ROOT / "meta" / "esc50.csv"
 CLIP_LEN = int(round(3.0 * SR))
 MAX_SNR_ERROR_DB = 0.1
+
+# Warn if more than this share of a mixture's noise power is DC. Audited worst case on clean windows
+# and Gaussian draws is 1.8e-4; 1e-2 is ~50x that, so tripping it means a genuinely offset clip.
+MAX_DC_POWER_SHARE = 0.01
 
 # ESC-50 target blocks: 0-19 animals/natural, 20-29 human non-speech (excluded),
 # 30-49 domestic/urban.
@@ -116,20 +131,60 @@ def dataset_fingerprint(identity: dict[str, object] | None = None) -> str:
     return str(value["dataset_fingerprint"])
 
 
+SEED_SCHEME = (
+    "sha256(dataset_fingerprint|window_id|noise_type|replicate)[:4]; SNR excluded"
+)
+
+
 def window_seed(
     window_id: str,
     noise_type: str,
     fingerprint: str | None = None,
+    replicate: int = 0,
 ) -> int:
-    """Stable seed; SNR is intentionally absent so one realization spans the curve."""
+    """Stable seed for one noise realization.
+
+    SNR is intentionally ABSENT so a single realization is merely rescaled along the SNR curve --
+    otherwise part of the drop between levels would be a different noise draw rather than a louder
+    one. `replicate` IS present, because that is exactly the axis along which a different draw is
+    wanted: replicate 1 must be an independent realization of the same condition, so that the spread
+    across replicates can be separated from the difference between models.
+
+    Preconditions: `replicate` is a non-negative integer.
+    """
     if noise_type not in NOISE_TYPES:
         raise ValueError(f"Unknown noise type: {noise_type}")
+    if int(replicate) != replicate or replicate < 0:
+        raise ValueError(f"replicate must be a non-negative integer, got {replicate!r}")
     build = dataset_fingerprint() if fingerprint is None else fingerprint
-    key = f"{build}|{window_id}|{noise_type}".encode()
+    key = f"{build}|{window_id}|{noise_type}|{int(replicate)}".encode()
     return int.from_bytes(hashlib.sha256(key).digest()[:4], "big")
 
 
-def load_esc50_index() -> dict[str, list[Path]]:
+class Esc50Clip(NamedTuple):
+    """One selected ESC-50 source clip and the corpus metadata describing it.
+
+    `target`, `category` and `fold` are carried so per-mixture provenance can record WHICH of the
+    20 ESC-50 classes inside a project category was actually drawn. Collapsing 20 classes into
+    "natural" is a defensible grouping, but it is only auditable if the original label survives
+    into the output -- and it cannot be recovered afterwards without regenerating the sweep.
+    """
+
+    path: Path
+    target: int
+    category: str
+    fold: int
+
+
+def load_esc50_index() -> dict[str, list[Esc50Clip]]:
+    """Select the ESC-50 clips for each project noise category, with their corpus metadata.
+
+    Postcondition: returns {noise_type: [Esc50Clip, ...]} ordered by filename, 800 per category.
+    The filename ordering is load-bearing: `draw_noise` indexes into this list with a seeded RNG,
+    so any change to the order changes which clip a given seed selects.
+    Raises: FileNotFoundError if audio or metadata is absent; ValueError on a missing column or an
+    unexpected clip count.
+    """
     if not ESC50_DIR.exists():
         raise FileNotFoundError(
             f"ESC-50 audio not found at {ESC50_DIR}. "
@@ -141,33 +196,66 @@ def load_esc50_index() -> dict[str, list[Path]]:
             "are required."
         )
     metadata = pd.read_csv(ESC50_META)
-    required = {"filename", "target"}
+    required = {"filename", "target", "category", "fold"}
     missing_columns = required - set(metadata.columns)
     if missing_columns:
         raise ValueError(
-            f"{ESC50_META} is missing columns: {sorted(missing_columns)}"
+            f"{ESC50_META} is missing columns: {sorted(missing_columns)}. "
+            "`category` and `fold` are required so per-mixture provenance can record which "
+            "original ESC-50 class was drawn; the standard meta/esc50.csv contains both."
         )
-    index: dict[str, list[Path]] = {}
+    index: dict[str, list[Esc50Clip]] = {}
     for noise_type, targets in ESC50_TARGETS.items():
         selected = metadata[metadata["target"].isin(list(targets))]
-        paths = [ESC50_DIR / filename for filename in sorted(selected["filename"])]
-        missing_paths = [path for path in paths if not path.is_file()]
+        clips = [
+            Esc50Clip(
+                path=ESC50_DIR / str(row.filename),
+                target=int(row.target),
+                category=str(row.category),
+                fold=int(row.fold),
+            )
+            for row in selected.sort_values("filename").itertuples(index=False)
+        ]
+        missing_paths = [clip.path for clip in clips if not clip.path.is_file()]
         if missing_paths:
             raise FileNotFoundError(
                 f"{len(missing_paths)} ESC-50 files are missing; first: {missing_paths[0]}"
             )
-        if len(paths) != 800:
+        if len(clips) != 800:
             raise ValueError(
-                f"Expected 800 ESC-50 {noise_type} clips, found {len(paths)}"
+                f"Expected 800 ESC-50 {noise_type} clips, found {len(clips)}"
             )
-        index[noise_type] = paths
+        index[noise_type] = clips
     return index
 
 
-def esc50_corpus_provenance(index: dict[str, list[Path]]) -> dict[str, object]:
-    """Record the corpus metadata and extracted-file inventory used by the sweep."""
+def esc50_category_map(index: dict[str, list[Esc50Clip]]) -> dict[str, dict[str, int]]:
+    """Which original ESC-50 categories make up each project noise category, and how many clips.
+
+    Recorded in the manifest so a paper can state the composition of "natural" and "mechanical"
+    exactly, rather than citing a numeric target range and leaving the reader to look it up.
+    """
+    composition: dict[str, dict[str, int]] = {}
+    for noise_type, clips in index.items():
+        counts: dict[str, int] = {}
+        for clip in clips:
+            key = f"{clip.target}:{clip.category}"
+            counts[key] = counts.get(key, 0) + 1
+        composition[noise_type] = dict(sorted(counts.items(), key=lambda kv: int(kv[0].split(":")[0])))
+    return composition
+
+
+def esc50_corpus_provenance(index: dict[str, list[Esc50Clip]]) -> dict[str, object]:
+    """Record the corpus metadata and extracted-file inventory used by the sweep.
+
+    Returns a `used: False` record when no ESC-50 category is in the configured grid. A white-noise
+    only sweep is a legitimate configuration -- Gaussian noise needs no corpus -- and it should not
+    require an ESC-50 download just to write a manifest.
+    """
+    if not any(index.values()):
+        return {"used": False, "reason": "no ESC-50 noise type in the configured grid"}
     inventory = hashlib.sha256()
-    all_paths = sorted({path for paths in index.values() for path in paths})
+    all_paths = sorted({clip.path for clips in index.values() for clip in clips})
     for path in all_paths:
         relative = path.relative_to(ESC50_ROOT).as_posix()
         inventory.update(f"{relative}\0{sha256_file(path)}\n".encode())
@@ -177,12 +265,18 @@ def esc50_corpus_provenance(index: dict[str, list[Path]]) -> dict[str, object]:
     ]
     archive = next((path for path in archive_candidates if path.is_file()), None)
     return {
+        "used": True,
         "metadata_path": str(ESC50_META.resolve()),
         "metadata_sha256": sha256_file(ESC50_META),
         "selected_corpus_sha256": inventory.hexdigest(),
         "selected_file_count": len(all_paths),
         "archive_path": None if archive is None else str(archive.resolve()),
         "archive_sha256": None if archive is None else sha256_file(archive),
+        "target_ranges": {
+            noise_type: [int(min(targets)), int(max(targets))]
+            for noise_type, targets in ESC50_TARGETS.items()
+        },
+        "category_composition": esc50_category_map(index),
     }
 
 
@@ -206,23 +300,31 @@ def _read_source_noise(path: Path) -> tuple[np.ndarray, int]:
 def draw_noise(
     noise_type: str,
     rng: np.random.Generator,
-    esc_index: dict[str, list[Path]],
+    esc_index: dict[str, list[Esc50Clip]],
 ) -> tuple[np.ndarray, dict[str, object]]:
-    """Draw one non-silent realization and return its complete source provenance."""
+    """Draw one non-silent realization and return its complete source provenance.
+
+    Postcondition: the returned provenance dict always carries `noise_target`, `noise_category`
+    and `noise_fold`. For generated white noise all three are None -- there is no corpus clip
+    behind it -- which keeps the provenance CSV one schema across every noise type.
+    """
     if noise_type == "white":
         noise = rng.standard_normal(CLIP_LEN).astype(np.float32)
         return noise, {
             "noise_source": "generated_gaussian",
             "noise_source_sr": SR,
             "crop_start_resampled_sample": 0,
+            "noise_target": None,
+            "noise_category": None,
+            "noise_fold": None,
         }
     if noise_type not in ESC50_TARGETS:
         raise ValueError(f"Unknown noise type: {noise_type}")
 
-    paths = esc_index[noise_type]
+    clips = esc_index[noise_type]
     for _attempt in range(20):
-        path = paths[int(rng.integers(len(paths)))]
-        noise, source_sr = _read_source_noise(path)
+        clip = clips[int(rng.integers(len(clips)))]
+        noise, source_sr = _read_source_noise(clip.path)
         if noise.size == 0:
             continue
         if noise.size < CLIP_LEN:
@@ -231,10 +333,13 @@ def draw_noise(
         segment = np.asarray(noise[start : start + CLIP_LEN], dtype=np.float32)
         if float(np.sqrt(np.mean(segment.astype(np.float64) ** 2))) >= 1e-6:
             return segment, {
-                "noise_source": path.relative_to(ESC50_ROOT).as_posix(),
-                "noise_source_path": str(path.resolve()),
+                "noise_source": clip.path.relative_to(ESC50_ROOT).as_posix(),
+                "noise_source_path": str(clip.path.resolve()),
                 "noise_source_sr": source_sr,
                 "crop_start_resampled_sample": start,
+                "noise_target": clip.target,
+                "noise_category": clip.category,
+                "noise_fold": clip.fold,
             }
     raise ValueError(
         f"Unable to draw a non-silent {noise_type} ESC-50 segment after 20 attempts"
@@ -326,9 +431,22 @@ def out_path(
     snr: int,
     window_id: str,
     *,
+    replicate: int = 0,
     noisy_dir: str | Path = NOISY_DIR,
 ) -> Path:
-    return Path(noisy_dir) / noise_type / f"snr{snr}" / f"{window_id}.wav"
+    """Where one mixture lives.
+
+    The replicate directory is always present, even when N_REPLICATES is 1. A layout that changes
+    shape depending on a config value needs two code paths on every reader, and the second one is
+    the one that never gets tested.
+    """
+    return (
+        Path(noisy_dir)
+        / noise_type
+        / f"snr{snr}"
+        / f"r{int(replicate)}"
+        / f"{window_id}.wav"
+    )
 
 
 def _write_wav_atomic(path: Path, waveform: np.ndarray) -> None:
@@ -474,87 +592,137 @@ def validate(n_samples: int = 5) -> None:
     print(f"listenable 0 dB samples: {listen_dir}")
 
 
-def generate() -> None:
-    windows = test_windows()
-    esc_index = load_esc50_index()
-    identity = dataset_build_identity()
+def generate(
+    *,
+    data_root: str | Path | None = None,
+    windows_csv: str | Path | None = None,
+    manifest_csv: str | Path | None = None,
+    manifest_fingerprint: str | Path | None = None,
+    noisy_dir: str | Path | None = None,
+) -> None:
+    """Materialize the canonical noisy test set.
+
+    Every path is an optional argument resolved AT CALL TIME rather than a module-level default
+    bound at import. That is deliberate: with import-time defaults this function could only ever run
+    against the real data root, so the generation loop -- where the seeds are drawn, the mixtures are
+    written and every diagnostic is computed -- had no way to be exercised by a test. The provenance
+    it writes cannot be reconstructed after the fact, so it is the last place that should be
+    untested.
+
+    Defaults are unchanged for production callers, which pass nothing.
+    """
+    root = Path(ROOT if data_root is None else data_root)
+    windows_csv = WINDOWS_CSV if windows_csv is None else Path(windows_csv)
+    manifest_csv = MANIFEST_IN if manifest_csv is None else Path(manifest_csv)
+    manifest_fingerprint = (
+        MANIFEST_FINGERPRINT
+        if manifest_fingerprint is None
+        else Path(manifest_fingerprint)
+    )
+    windows = test_windows(windows_csv=windows_csv)
+    # Only load the corpus if the grid actually asks for it: Gaussian noise needs none, so a
+    # white-only sweep must not demand an ESC-50 download.
+    esc_index: dict[str, list[Esc50Clip]] = (
+        load_esc50_index()
+        if any(noise_type in ESC50_TARGETS for noise_type in NOISE_TYPES)
+        else {}
+    )
+    identity = dataset_build_identity(
+        manifest_csv=manifest_csv,
+        manifest_fingerprint=manifest_fingerprint,
+        windows_csv=windows_csv,
+    )
     fingerprint = dataset_fingerprint(identity)
-    noisy_dir = Path(NOISY_DIR)
+    noisy_dir = Path(NOISY_DIR if noisy_dir is None else noisy_dir)
     _ensure_generation_target_is_empty(noisy_dir)
 
     for noise_type in NOISE_TYPES:
         for snr in SNRS:
-            (noisy_dir / noise_type / f"snr{snr}").mkdir(
-                parents=True,
-                exist_ok=True,
-            )
+            for replicate in range(N_REPLICATES):
+                (noisy_dir / noise_type / f"snr{snr}" / f"r{replicate}").mkdir(
+                    parents=True,
+                    exist_ok=True,
+                )
 
     source_hashes: dict[Path, str] = {}
     provenance_rows: list[dict[str, object]] = []
-    total = len(windows) * len(NOISE_TYPES) * len(SNRS)
+    per_window = len(NOISE_TYPES) * N_REPLICATES * len(SNRS)
+    total = len(windows) * per_window
     made = 0
     for row in windows.itertuples(index=False):
         relative_path = str(row.window_path)
         window_id = window_id_of(relative_path)
-        clean_path = Path(ROOT) / relative_path
+        clean_path = root / relative_path
         clean = read_audio_window(clean_path)
         clean_sha256 = sha256_file(clean_path)
         for noise_type in NOISE_TYPES:
-            seed = window_seed(window_id, noise_type, fingerprint)
-            noise, source = draw_noise(
-                noise_type,
-                np.random.default_rng(seed),
-                esc_index,
-            )
-            source_path_value = source.get("noise_source_path")
-            source_sha256 = None
-            if source_path_value is not None:
-                source_path = Path(str(source_path_value))
-                if source_path not in source_hashes:
-                    source_hashes[source_path] = sha256_file(source_path)
-                source_sha256 = source_hashes[source_path]
-            for snr in SNRS:
-                noisy, alpha, signal_power = mix_at_snr(clean, noise, snr)
-                output_path = out_path(
+            for replicate in range(N_REPLICATES):
+                # One independent draw per replicate; that draw is then rescaled across every SNR,
+                # so the SNR axis and the realization axis stay separable.
+                seed = window_seed(window_id, noise_type, fingerprint, replicate)
+                noise, source = draw_noise(
                     noise_type,
-                    snr,
-                    window_id,
-                    noisy_dir=noisy_dir,
+                    np.random.default_rng(seed),
+                    esc_index,
                 )
-                _write_wav_atomic(output_path, noisy)
-                reloaded = read_audio_window(output_path)
-                achieved = measured_snr(clean, reloaded)
-                if abs(achieved - snr) >= MAX_SNR_ERROR_DB:
-                    raise AssertionError(
-                        f"{output_path} achieved {achieved:.6f} dB; expected {snr}"
+                source_path_value = source.get("noise_source_path")
+                source_sha256 = None
+                if source_path_value is not None:
+                    source_path = Path(str(source_path_value))
+                    if source_path not in source_hashes:
+                        source_hashes[source_path] = sha256_file(source_path)
+                    source_sha256 = source_hashes[source_path]
+                for snr in SNRS:
+                    noisy, alpha, signal_power = mix_at_snr(clean, noise, snr)
+                    output_path = out_path(
+                        noise_type,
+                        snr,
+                        window_id,
+                        replicate=replicate,
+                        noisy_dir=noisy_dir,
                     )
-                provenance_rows.append(
-                    {
-                        "window_id": window_id,
-                        "window_path": relative_path,
-                        "clean_sha256": clean_sha256,
-                        "noise_type": noise_type,
-                        "snr_db": snr,
-                        "seed": seed,
-                        "noise_source": source["noise_source"],
-                        "noise_source_sha256": source_sha256,
-                        "noise_source_sr": source["noise_source_sr"],
-                        "crop_start_resampled_sample": source[
-                            "crop_start_resampled_sample"
-                        ],
-                        "alpha": alpha,
-                        "signal_power": signal_power,
-                        "unscaled_noise_power": float(
-                            np.mean(noise.astype(np.float64) ** 2)
-                        ),
-                        "realized_snr_db": achieved,
-                        "peak": float(np.abs(reloaded).max()),
-                        "output_path": str(output_path.relative_to(ROOT)),
-                        "output_sha256": sha256_file(output_path),
-                    }
-                )
-                made += 1
-        if made % 3000 < len(NOISE_TYPES) * len(SNRS):
+                    _write_wav_atomic(output_path, noisy)
+                    reloaded = read_audio_window(output_path)
+                    achieved = measured_snr(clean, reloaded)
+                    if abs(achieved - snr) >= MAX_SNR_ERROR_DB:
+                        raise AssertionError(
+                            f"{output_path} achieved {achieved:.6f} dB; expected {snr}"
+                        )
+                    # Diagnostics come from the RELOADED file, so they describe what the models will
+                    # actually read rather than the in-memory mixture.
+                    diagnostics = mixture_diagnostics(clean, reloaded - clean)
+                    provenance_rows.append(
+                        {
+                            "window_id": window_id,
+                            "window_path": relative_path,
+                            "clean_sha256": clean_sha256,
+                            "noise_type": noise_type,
+                            "snr_db": snr,
+                            "replicate": replicate,
+                            "seed": seed,
+                            "noise_source": source["noise_source"],
+                            "noise_source_sha256": source_sha256,
+                            "noise_source_sr": source["noise_source_sr"],
+                            "crop_start_resampled_sample": source[
+                                "crop_start_resampled_sample"
+                            ],
+                            "noise_target": source["noise_target"],
+                            "noise_category": source["noise_category"],
+                            "noise_fold": source["noise_fold"],
+                            "alpha": alpha,
+                            "signal_power": signal_power,
+                            "unscaled_noise_power": float(
+                                np.mean(noise.astype(np.float64) ** 2)
+                            ),
+                            "realized_snr_db": achieved,
+                            "peak": float(np.abs(reloaded).max()),
+                            **diagnostics,
+                            "output_path": str(output_path.relative_to(root)),
+                            "output_sha256": sha256_file(output_path),
+                        }
+                    )
+                    made += 1
+        if made % 3000 < per_window:
             print(f"{made}/{total}", flush=True)
 
     provenance = pd.DataFrame(provenance_rows)
@@ -574,6 +742,7 @@ def generate() -> None:
         "dataset": identity,
         "snrs": SNRS,
         "noise_types": NOISE_TYPES,
+        "n_replicates": N_REPLICATES,
         "n_test_windows": int(len(windows)),
         "n_files": made,
         "waveform_format": {
@@ -583,10 +752,20 @@ def generate() -> None:
             "subtype": "FLOAT",
             "post_mix_normalization": False,
         },
-        "seed_scheme": (
-            "sha256(dataset_fingerprint|window_id|noise_type)[:4]; SNR excluded"
-        ),
+        "seed_scheme": SEED_SCHEME,
         "one_realization_scaled_to_all_snrs": True,
+        "diagnostics": {
+            "instrument_band_hz": list(INSTRUMENT_BAND_HZ),
+            "octave_centers_hz": list(OCTAVE_CENTERS_HZ),
+            "segmental_frame": SEGMENTAL_FRAME,
+            "segmental_hop": SEGMENTAL_HOP,
+            "noise_active_top_db": NOISE_ACTIVE_TOP_DB,
+            "effective_snr_rates_hz": {"ast": 16000, "mert": 24000, "panns": 32000},
+            "note": (
+                "snr_db is the requested whole-window whole-spectrum SNR; these columns record "
+                "where in frequency, when in time, and at which model rate that SNR actually lands"
+            ),
+        },
         "esc50": esc50_corpus_provenance(esc_index),
         "provenance_file": NOISE_PROVENANCE_NAME,
         "provenance_sha256": sha256_file(provenance_path),
@@ -633,6 +812,7 @@ def validate_noise_manifest(
         "state": "complete",
         "snrs": SNRS,
         "noise_types": NOISE_TYPES,
+        "n_replicates": N_REPLICATES,
         "dataset": expected_identity,
         "one_realization_scaled_to_all_snrs": True,
         "waveform_format": {
@@ -642,9 +822,7 @@ def validate_noise_manifest(
             "subtype": "FLOAT",
             "post_mix_normalization": False,
         },
-        "seed_scheme": (
-            "sha256(dataset_fingerprint|window_id|noise_type)[:4]; SNR excluded"
-        ),
+        "seed_scheme": SEED_SCHEME,
     }
     mismatches = [
         key for key, expected in checks.items() if manifest.get(key) != expected
@@ -655,7 +833,7 @@ def validate_noise_manifest(
         )
 
     windows = test_windows(windows_csv=windows_csv)
-    expected_rows = len(windows) * len(NOISE_TYPES) * len(SNRS)
+    expected_rows = len(windows) * len(NOISE_TYPES) * N_REPLICATES * len(SNRS)
     if manifest.get("n_test_windows") != len(windows):
         raise ValueError("Noise manifest test-window count is stale")
     if manifest.get("n_files") != expected_rows:
@@ -677,11 +855,15 @@ def validate_noise_manifest(
         "noise_source",
         "noise_source_sha256",
         "crop_start_resampled_sample",
+        "noise_target",
+        "noise_category",
+        "noise_fold",
+        "replicate",
         "unscaled_noise_power",
         "realized_snr_db",
         "output_path",
         "output_sha256",
-    }
+    } | set(DIAGNOSTIC_COLUMNS)
     missing = required - set(provenance.columns)
     if missing:
         raise ValueError(
@@ -703,31 +885,55 @@ def validate_noise_manifest(
     if set(provenance["window_id"]) != expected_ids:
         raise ValueError("Noise provenance window IDs differ from windows.csv")
     expected_conditions = {
-        (window_id, noise_type, snr)
+        (window_id, noise_type, snr, replicate)
         for window_id in expected_ids
         for noise_type in NOISE_TYPES
         for snr in SNRS
+        for replicate in range(N_REPLICATES)
     }
     observed_conditions = set(
         zip(
             provenance["window_id"],
             provenance["noise_type"],
             provenance["snr_db"],
+            provenance["replicate"],
         )
     )
     if observed_conditions != expected_conditions:
         raise ValueError("Noise provenance does not contain the exact condition grid")
-    grouped = provenance.groupby(["window_id", "noise_type"], dropna=False)
+    grouped = provenance.groupby(
+        ["window_id", "noise_type", "replicate"], dropna=False
+    )
     for column in (
         "seed",
         "noise_source",
         "noise_source_sha256",
         "crop_start_resampled_sample",
+        "noise_target",
+        "noise_category",
+        "noise_fold",
         "unscaled_noise_power",
+        "noise_active_fraction",
     ):
         if grouped[column].nunique(dropna=False).max() != 1:
             raise ValueError(
                 f"Noise realization provenance changes across SNR in column {column}"
+            )
+
+    # DC offset inflates measured power, and measured power is what sets every SNR's gain -- so a
+    # DC-heavy noise clip ends up quieter than its label claims. Audited as negligible for clean
+    # windows and Gaussian draws (worst 1.8e-4 power share, ~7.6e-4 dB), but ESC-50 was not part of
+    # that audit and real recordings can carry a genuine offset. Warn rather than fail: the effect
+    # would have to be ~1000x larger than measured to matter against the 0.1 dB tolerance, and
+    # silently rejecting a corpus clip is worse than reporting it.
+    if "noise_dc_power_share" in provenance.columns:
+        worst_dc = float(provenance["noise_dc_power_share"].astype(float).max())
+        if worst_dc > MAX_DC_POWER_SHARE:
+            print(
+                f"! warning: a mixture's noise is {100 * worst_dc:.3f}% DC "
+                f"(threshold {100 * MAX_DC_POWER_SHARE:.3f}%). That inflates its measured power, so "
+                f"the audible noise is quieter than its SNR label. Inspect noise_dc_offset in "
+                f"{provenance_path.name}."
             )
 
     for row in provenance.itertuples(index=False):

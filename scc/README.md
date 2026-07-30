@@ -81,6 +81,19 @@ qsub -v RISE_DATA_ROOT="$RISE_DATA_ROOT" scc/mert_finalize.qsub
 The final job refits on train+validation, extracts test with the exact saved MERT revision, evaluates
 test once, and writes a guard record that prevents a second test access.
 
+Before freezing the shared noise grid, run the validation-only MERT SNR pilot with `best_probe.pt`
+(not the train+validation `final_probe.pt`):
+
+```bash
+qsub -v RISE_DATA_ROOT="$RISE_DATA_ROOT",MERT_OUTPUT_DIR="$PWD/artifacts/mert" \
+  scc/mert_snr_pilot.qsub
+```
+
+The job writes `snr_pilot.json` beside the MERT validation artifacts and never reads test audio.
+It pilots white noise by default. With ESC-50 available, pass
+`MERT_PILOT_NOISE=white:natural:mechanical` and `RISE_NOISE_ROOT` to check all three categories
+before freezing the grid.
+
 ## Shared noise sweep, SVM, and MERT
 
 The clean final models above remain frozen. Put ESC-50 on the shared filesystem with both its

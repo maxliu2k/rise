@@ -1,5 +1,5 @@
 {
-  "created_at_utc": "2026-07-28T23:57:35.817830+00:00",
+  "created_at_utc": "2026-07-30T03:40:04.151170+00:00",
   "config_fingerprint": {
     "fingerprint_version": 2,
     "archive_base": "https://archive.org/download/philharmonicorchestrasamples",
@@ -22,6 +22,9 @@
     ],
     "split_seed": 0,
     "min_window_content_s": 0.5,
+    "max_windows_per_source": 1,
+    "stft_pad_mode": "reflect",
+    "logmel_top_db": null,
     "target_rms": 0.1,
     "articulations": {
       "bassoon": [
@@ -86,9 +89,9 @@
   "protocol": "probe hyperparameters and epoch selected on validation; final probe fit on train+val; test embeddings extracted and evaluated once",
   "model": "frozen MERT-v1-95M layer-weighted linear probe",
   "selected_config": {
-    "learning_rate": 0.01,
+    "learning_rate": 0.001,
     "batch_size": 64,
-    "epochs": 24,
+    "epochs": 92,
     "seed": 0
   },
   "model_fit_splits": [
@@ -102,46 +105,46 @@
     "pooling": "mean_over_time_per_hidden_layer"
   },
   "class_weights": {
-    "bassoon": 1.0023112297058105,
-    "cello": 1.017996907234192,
-    "clarinet": 0.8286623954772949,
-    "double-bass": 0.9781954884529114,
-    "flute": 0.8415265083312988,
-    "french-horn": 1.1827272176742554,
-    "oboe": 1.3495850563049316,
-    "trombone": 0.905988872051239,
-    "trumpet": 1.4585201740264893,
-    "tuba": 0.8627321124076843,
-    "viola": 1.064648151397705,
-    "violin": 0.886239767074585
+    "bassoon": 1.0772837400436401,
+    "cello": 0.9392141103744507,
+    "clarinet": 0.9007334113121033,
+    "double-bass": 0.9146122336387634,
+    "flute": 0.8939508199691772,
+    "french-horn": 1.2820374965667725,
+    "oboe": 1.2903985977172852,
+    "trombone": 0.9202842116355896,
+    "trumpet": 1.6129982471466064,
+    "tuba": 0.8395803570747375,
+    "viola": 0.9860188364982605,
+    "violin": 0.8210004568099976
   },
-  "training_examples": 6487,
-  "validation_examples": 1319,
-  "final_fit_examples": 7806,
-  "test_examples": 1310,
-  "fit_seconds": 4.593898022983922,
+  "training_examples": 5864,
+  "validation_examples": 1259,
+  "final_fit_examples": 7123,
+  "test_examples": 1255,
+  "fit_seconds": 11.774242885992862,
   "test_metrics": {
-    "accuracy": 0.9259541984732824,
-    "macro_f1": 0.9222749477068782,
-    "weighted_f1": 0.925826968857455,
+    "accuracy": 0.9258964143426295,
+    "macro_f1": 0.9245984780371009,
+    "weighted_f1": 0.9256100504535023,
     "confusion_matrix": [
       [
-        86,
+        84,
         0,
         0,
         0,
         0,
-        4,
+        8,
         2,
-        1,
-        4,
+        0,
+        3,
         0,
         0,
         0
       ],
       [
         0,
-        98,
+        95,
         0,
         2,
         1,
@@ -150,103 +153,103 @@
         0,
         0,
         0,
-        2,
+        3,
         14
       ],
       [
         0,
         0,
+        109,
+        0,
+        0,
+        0,
+        0,
+        0,
+        2,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0,
+        109,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        4,
+        0
+      ],
+      [
+        0,
+        1,
+        5,
+        0,
+        101,
+        0,
+        6,
+        0,
+        1,
+        0,
+        3,
+        0
+      ],
+      [
+        0,
+        5,
+        0,
+        0,
+        0,
+        77,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        3,
+        0,
+        0,
+        0,
+        74,
+        0,
+        1,
+        0,
+        1,
+        0
+      ],
+      [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
         110,
-        0,
-        0,
-        0,
-        0,
-        0,
-        1,
-        0,
-        0,
-        0
-      ],
-      [
-        0,
-        0,
-        0,
-        112,
-        1,
-        0,
-        0,
-        0,
-        0,
-        0,
         3,
-        0
-      ],
-      [
-        0,
-        1,
-        2,
-        0,
-        106,
-        0,
-        10,
-        0,
-        4,
-        0,
-        4,
-        0
-      ],
-      [
-        0,
-        7,
-        0,
-        0,
-        1,
-        78,
-        0,
-        1,
-        1,
         0,
         0,
         0
       ],
       [
         0,
-        2,
-        2,
-        0,
-        0,
-        0,
-        71,
-        0,
-        1,
-        0,
-        3,
-        0
-      ],
-      [
-        2,
-        0,
-        0,
-        1,
-        0,
-        2,
-        0,
-        129,
-        4,
-        1,
-        0,
-        0
-      ],
-      [
-        0,
-        1,
         1,
         0,
         0,
         0,
         0,
-        1,
-        71,
+        0,
+        0,
+        64,
         0,
         0,
         0
@@ -266,119 +269,119 @@
         0
       ],
       [
-        0,
-        0,
-        0,
-        0,
-        1,
         1,
         0,
         0,
         0,
+        1,
         0,
-        105,
-        1
+        0,
+        0,
+        0,
+        0,
+        104,
+        0
       ],
       [
-        1,
-        0,
-        1,
-        1,
-        0,
-        1,
-        0,
-        0,
-        1,
-        0,
         2,
-        123
+        5,
+        4,
+        1,
+        0,
+        1,
+        0,
+        0,
+        1,
+        0,
+        4,
+        111
       ]
     ],
     "classification_report": {
       "bassoon": {
-        "precision": 0.9662921348314607,
-        "recall": 0.8865979381443299,
-        "f1-score": 0.9247311827956989,
+        "precision": 0.9545454545454546,
+        "recall": 0.865979381443299,
+        "f1-score": 0.9081081081081082,
         "support": 97.0
       },
       "cello": {
-        "precision": 0.8990825688073395,
-        "recall": 0.8376068376068376,
-        "f1-score": 0.8672566371681416,
-        "support": 117.0
+        "precision": 0.8796296296296297,
+        "recall": 0.8260869565217391,
+        "f1-score": 0.852017937219731,
+        "support": 115.0
       },
       "clarinet": {
-        "precision": 0.9482758620689655,
-        "recall": 0.990990990990991,
-        "f1-score": 0.9691629955947136,
+        "precision": 0.9008264462809917,
+        "recall": 0.9819819819819819,
+        "f1-score": 0.9396551724137931,
         "support": 111.0
       },
       "double-bass": {
-        "precision": 0.9655172413793104,
-        "recall": 0.9655172413793104,
-        "f1-score": 0.9655172413793104,
-        "support": 116.0
+        "precision": 0.9732142857142857,
+        "recall": 0.9478260869565217,
+        "f1-score": 0.960352422907489,
+        "support": 115.0
       },
       "flute": {
-        "precision": 0.9636363636363636,
-        "recall": 0.8346456692913385,
-        "f1-score": 0.8945147679324894,
-        "support": 127.0
+        "precision": 0.9711538461538461,
+        "recall": 0.8632478632478633,
+        "f1-score": 0.9140271493212669,
+        "support": 117.0
       },
       "french-horn": {
-        "precision": 0.9069767441860465,
-        "recall": 0.8863636363636364,
-        "f1-score": 0.896551724137931,
-        "support": 88.0
+        "precision": 0.8953488372093024,
+        "recall": 0.927710843373494,
+        "f1-score": 0.9112426035502958,
+        "support": 83.0
       },
       "oboe": {
-        "precision": 0.8554216867469879,
-        "recall": 0.8987341772151899,
-        "f1-score": 0.8765432098765432,
+        "precision": 0.9024390243902439,
+        "recall": 0.9367088607594937,
+        "f1-score": 0.9192546583850931,
         "support": 79.0
       },
       "trombone": {
-        "precision": 0.9772727272727273,
-        "recall": 0.9280575539568345,
-        "f1-score": 0.9520295202952029,
-        "support": 139.0
+        "precision": 0.990990990990991,
+        "recall": 0.9649122807017544,
+        "f1-score": 0.9777777777777777,
+        "support": 114.0
       },
       "trumpet": {
-        "precision": 0.8160919540229885,
-        "recall": 0.9594594594594594,
-        "f1-score": 0.8819875776397516,
-        "support": 74.0
+        "precision": 0.8533333333333334,
+        "recall": 0.9846153846153847,
+        "f1-score": 0.9142857142857143,
+        "support": 65.0
       },
       "tuba": {
-        "precision": 0.992,
+        "precision": 1.0,
         "recall": 1.0,
-        "f1-score": 0.9959839357429718,
+        "f1-score": 1.0,
         "support": 124.0
       },
       "viola": {
-        "precision": 0.8823529411764706,
-        "recall": 0.9722222222222222,
-        "f1-score": 0.9251101321585903,
-        "support": 108.0
+        "precision": 0.8739495798319328,
+        "recall": 0.9811320754716981,
+        "f1-score": 0.9244444444444444,
+        "support": 106.0
       },
       "violin": {
-        "precision": 0.8913043478260869,
-        "recall": 0.9461538461538461,
-        "f1-score": 0.917910447761194,
-        "support": 130.0
+        "precision": 0.888,
+        "recall": 0.8604651162790697,
+        "f1-score": 0.8740157480314961,
+        "support": 129.0
       },
-      "accuracy": 0.9259541984732824,
+      "accuracy": 0.9258964143426295,
       "macro avg": {
-        "precision": 0.9220187143295622,
-        "recall": 0.9255291310653329,
-        "f1-score": 0.9222749477068782,
-        "support": 1310.0
+        "precision": 0.9236192856733343,
+        "recall": 0.9283889026126917,
+        "f1-score": 0.9245984780371009,
+        "support": 1255.0
       },
       "weighted avg": {
-        "precision": 0.9285183967900978,
-        "recall": 0.9259541984732824,
-        "f1-score": 0.925826968857455,
-        "support": 1310.0
+        "precision": 0.9279056784140839,
+        "recall": 0.9258964143426295,
+        "f1-score": 0.9256100504535023,
+        "support": 1255.0
       }
     }
   },
@@ -400,16 +403,16 @@
   "test_evaluation_count": 1,
   "input_files": {
     "train": {
-      "path": "/projectnb/rise-grid/rise-data/features/mert/train.npz",
-      "sha256": "6a7e4d1698b3004ed5b9840d46ee4ce09206e9ff7afecd31fbfbd00498451c19"
+      "path": "/projectnb/rise-grid/rise-data/features/mert_8378/train.npz",
+      "sha256": "3ccec24d6ec240a44e40ba0fe07401b4007cad5aa29c4134eb9ef1f66c5c8a40"
     },
     "val": {
-      "path": "/projectnb/rise-grid/rise-data/features/mert/val.npz",
-      "sha256": "77236a51edfb92de57c791344ff4ffa5100329c532689680c4e895a20ab5725f"
+      "path": "/projectnb/rise-grid/rise-data/features/mert_8378/val.npz",
+      "sha256": "1441386b2972d0f8a26abec6e2a197509ae2e93234a1a4cdf63be474ba976a64"
     },
     "test": {
-      "path": "/projectnb/rise-grid/rise-data/features/mert/test.npz",
-      "sha256": "21bb049d7b101d0ba7288a27a1503892606417ab3c80d8a1c9631878dab565d7"
+      "path": "/projectnb/rise-grid/rise-data/features/mert_8378/test.npz",
+      "sha256": "e844f3fbc0b6bd1e023d89f118871cb6b5b67a89ce6a615b912789d5e07191cd"
     }
   },
   "software_versions": {
@@ -421,12 +424,12 @@
   },
   "output_files": {
     "model": {
-      "path": "/project/rise-grid/Tariq/instrument-robustness/artifacts/mert/final_probe.pt",
-      "sha256": "a0cf5b26cecd07d0ff94dae1906ba2fe74565566be1ed8e2f6e3fea161b64f20"
+      "path": "/project/rise-grid/Tariq/instrument-robustness/artifacts/mert_8378/final_probe.pt",
+      "sha256": "8b8562ae7b3b20e2e0b854fa32d3e0846e1d44217a3898237ae62a94b9b71c3d"
     },
     "test_confusion_matrix": {
-      "path": "/project/rise-grid/Tariq/instrument-robustness/artifacts/mert/test_confusion_matrix.csv",
-      "sha256": "a55dbc43fbc0f87cccb4030c6f678e02c3cb2082d8c9acd07256163a5ca430e5"
+      "path": "/project/rise-grid/Tariq/instrument-robustness/artifacts/mert_8378/test_confusion_matrix.csv",
+      "sha256": "098dad42f839a1395311c9c79f1658d80b83995192aed5b9a213af94ff53c8c2"
     }
   }
 }

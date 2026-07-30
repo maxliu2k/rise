@@ -20,21 +20,55 @@ difference between two models is real.
 
 Run `noise_sweep.py --generate` once per dataset, then point every model at `work/windows_noisy/`.
 
-## 2. Conditions — 16 total
+## 2. Conditions — 22 total
 
-| | 20 dB | 10 dB | 5 dB | 0 dB | −5 dB |
-|---|---|---|---|---|---|
-| **white** (Gaussian) | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **natural** (ESC-50) | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **mechanical** (ESC-50) | ✓ | ✓ | ✓ | ✓ | ✓ |
+The grid lives in `config.SNRS` / `config.NOISE_TYPES`, not in `noise_sweep`.
 
-plus **clean**, shared rather than duplicated → 3 × 5 + 1 = **16**.
+| | 60 dB | 50 dB | 40 dB | 30 dB | 20 dB | 10 dB | 0 dB |
+|---|---|---|---|---|---|---|---|
+| **white** (Gaussian) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **natural** (ESC-50) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **mechanical** (ESC-50) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
-For the current 1,310-window Philharmonia test split, the 15 float32 noisy conditions require
-roughly 5.2 GB before filesystem overhead. Keep them under the external data root, never in Git.
+plus **clean**, shared rather than duplicated → 3 × 7 + 1 = **22**.
 
-Lower SNR = more noise. 20 dB is mild, 0 dB is signal and noise at *equal power*, −5 dB means the
-noise is louder than the instrument.
+For the current 1,255-window Philharmonia test split, the 21 float32 noisy conditions are 26,355
+files at roughly 6.5 GB before filesystem overhead. Keep them under the external data root, never
+in Git.
+
+Lower SNR = more noise. 60 dB is a barely-there noise floor, 20 dB is mild, 0 dB is signal and noise
+at *equal power*.
+
+### Why the grid reaches so high
+
+**This replaced `[20, 10, 5, 0, -5]`, which was inherited rather than measured.** Run on the
+validation split, `snr_pilot` found every level of that grid at or below chance for the SVM:
+
+```text
+  SNR   macro-F1   retention        SNR   macro-F1   retention
+   60     0.9515       0.986         20     0.0931       0.096   <- old grid, floor
+   50     0.8497       0.881         10     0.0366       0.038   <- old grid, floor
+   40     0.5376       0.557          0     0.0132       0.014   <- old grid, floor
+   30     0.2599       0.269
+```
+
+clean macro-F1 0.9650; chance accuracy is 1/12 = 0.083. The mixer was verified first —
+`measured_snr` returns the requested value to four decimals — so this is the model, not the mixing.
+
+The SVM is the most fragile representation here by construction: its 88 features are frame
+statistics averaged across the whole window and standardized on *clean* data, and roughly 91% of
+windows are tiled from sub-second notes, so much of each window is quiet tail. A −60 dBFS noise
+floor rewrites those frames and drags the summary statistics with them.
+
+The grid therefore spans **both** regimes rather than the 55–30 dB band the SVM pilot recommended.
+60/50/40 resolves where handcrafted features fail; 20/10/0 retains the range where pretrained models
+are expected to; 30 sits on the SVM's knee. A grid tuned to the SVM alone would likely leave AST,
+MERT and PANNs at ceiling everywhere, which measures as little as an all-floor grid does.
+
+> **Not yet verified:** no pretrained model has been piloted. Re-run
+> `python -m instrument_robustness.snr_pilot` once MERT or AST has a current clean result, and
+> expect to revisit the low end. Settle the grid before `--generate`: changing it invalidates a
+> completed sweep.
 
 - **white** — Gaussian, flat across all frequencies.
 - **natural** — ESC-50 targets 0–19 (animals; natural soundscapes and water).
@@ -59,25 +93,77 @@ noisy   = clean + alpha * noise
 Getting this wrong (amplitude instead of power, or the wrong sign) produces files that *look*
 plausible but sit at the wrong SNR. See §6.
 
-## 4. One noise realization, scaled to every SNR
+## 4. One noise realization per replicate, scaled to every SNR
 
-The seed **excludes the SNR**:
+The seed **excludes the SNR** and **includes the replicate**:
 
 ```python
-seed = sha256(f"{dataset_fingerprint}|{window_id}|{noise_type}").digest()[:4]
+seed = sha256(f"{dataset_fingerprint}|{window_id}|{noise_type}|{replicate}").digest()[:4]
 ```
 
-A single noise waveform is drawn per (window, noise type) and then *scaled* to 20/10/5/0/−5 dB.
-If each level drew fresh noise, part of the drop along the curve would be **noise variability**
-rather than noise **level** — the comparison would confound "more noise" with "different noise".
-Scaling one realization isolates the SNR axis.
+Those two choices are opposites on purpose.
 
-`--validate` asserts this directly: the added component at each SNR must be a pure rescaling of
-the same waveform (cosine similarity 1.0 across all levels).
+**SNR is excluded** so a single waveform is drawn per (window, noise type, replicate) and merely
+*rescaled* across `config.SNRS`. If each level drew fresh noise, part of the drop along the curve
+would be **noise variability** rather than noise **level** — the comparison would confound "more
+noise" with "different noise". `--validate` asserts this directly: the added component at each SNR
+must be a pure rescaling of the same waveform (cosine similarity 1.0 across all levels).
+
+**Replicate is included** because that is precisely the axis along which a different draw *is*
+wanted. With one realization there is no way to separate "this model is fragile" from "this window
+drew an unlucky clip", so no claim of the form *model A is more robust than model B* is supportable:
+the spread across draws is unmeasurable. Replicate 1 is an independent draw of the same condition —
+a different ESC-50 clip and crop, or a different Gaussian sample.
+
+`config.N_REPLICATES` controls it, currently **1**. Cost is exactly linear in files, disk and
+evaluation time. **Raise it to 3 before making any comparative robustness claim.**
+
+Replicates are separate *conditions*, not averaged at scoring time — averaging there would discard
+the very quantity they exist to provide. `noise_stats` aggregates; `noise_eval_common` does not.
+Output paths always carry the replicate directory (`white/snr20/r0/…`), even at
+`N_REPLICATES = 1`, because a layout that changes shape with a config value needs two code paths on
+every reader and the second one never gets tested.
 
 The `dataset_fingerprint` hashes the actual `manifest.csv` and Step-5 `windows.csv` identities in
 addition to the configuration. A noisy set built against one data build therefore cannot be
 silently reused against another.
+
+## 4b. What the SNR label does not tell you
+
+`snr_db` is mean power over the **whole window** and the **whole spectrum**. It is exact and
+reproducible, and it is also easy to over-read in three specific ways. `noise_metrics.py` measures
+each one and `noise_provenance.csv` records it per mixture, because none of it can be reconstructed
+after the audio is written.
+
+| Concern | Columns | What it catches |
+|---|---|---|
+| **Where in frequency** | `snr_band_db` (50–8000 Hz), `snr_worst_octave_db`, `snr_worst_octave_center_hz`, `snr_octave_db` | Low-frequency rumble dominating total power while barely touching the instrument's band |
+| **When in time** | `noise_active_fraction`, `snr_segmental_min_db`, `snr_segmental_{p05,p50,p95}_db`, `snr_segmental_std_db`, `snr_segmental_active_frames` | A brief loud transient satisfying an average-power target |
+| **What the model gets** | `snr_effective_ast_16k_db`, `snr_effective_mert_24k_db`, `snr_effective_panns_32k_db` | Resampling discarding noise the model never sees |
+
+Measured on a real bassoon window, all four noise types at **the same nominal 0 dB**:
+
+```text
+noise        band   worstOct   active   segMin   eff16k   eff32k
+white        1.43     -2.68     1.00    -18.6     1.59     0.18
+rumble      31.59     25.54     1.00    -21.2     0.01     0.01
+HF-only     22.85     59.27     1.00    -19.0    23.13     1.00
+slam         1.46     -3.66     0.04    -33.6     1.60     0.18
+```
+
+Read that table before quoting a single SNR number. "0 dB rumble" leaves the instrument band at
+**+31.6 dB** — essentially unmasked. "0 dB HF-only" arrives at AST as **+23.1 dB**, because
+everything above 8 kHz is gone by the time it reaches the model. And the slam reaches 0 dB *on
+average* while being silent in 96% of frames and −33.6 dB in its worst one.
+
+Two cautions on reading these columns:
+
+- `snr_worst_octave_db` considers only octaves holding at least 1% of the clean signal's power.
+  Without that filter it reports whichever band the instrument does not occupy — a true,
+  meaningless, and noise-type-independent large negative number.
+- `noise_active_fraction` describes the **noise**, not the instrument. The pipeline stores no
+  activity mask for the instrument (audit checklist item 5), so there is still no active-region SNR
+  and the headline number remains whole-window.
 
 ## 5. Two invariants that are easy to break
 
@@ -142,10 +228,10 @@ refitted just to satisfy a file schema; paired accuracy tests need only `predict
 
 ## 10. Statistics — cluster, don't just bootstrap windows
 
-Windows are **not independent**. Several come from one recording, and every recording of the same
-(instrument, note) belongs to one pitch group — the unit step3 splits on. Resampling individual
-windows treats near-duplicates as fresh evidence and yields confidence intervals that are too
-narrow.
+Windows are **not independent enough to split or analyse naively**. The current build has one window
+per source, but recordings of the same (instrument, note) can be near-duplicates and belong to the
+same pitch group—the unit Step 3 splits on. Resampling individual windows treats those related
+recordings as fresh evidence and yields confidence intervals that are too narrow.
 
 `noise_stats.py` resamples whole **clusters** with replacement, paired across the two conditions,
 and always computes macro-F1 over the fixed 12-class label order:
