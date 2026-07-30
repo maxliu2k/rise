@@ -15,6 +15,7 @@ import json, warnings
 from concurrent.futures import ProcessPoolExecutor
 import numpy as np, pandas as pd
 from instrument_robustness.config import (
+    worker_count,
     N_FRAMES,
     N_MELS,
     ROOT,
@@ -48,7 +49,7 @@ def main():
     s2 = np.zeros(N_MELS, np.float64)      # sum of squares
     cnt = 0
     done = 0
-    with ProcessPoolExecutor() as ex:
+    with ProcessPoolExecutor(max_workers=worker_count()) as ex:
         for vec, m1, m2, nf in ex.map(_feats, train, chunksize=32):
             svm_rows.append(vec)
             s1 += m1

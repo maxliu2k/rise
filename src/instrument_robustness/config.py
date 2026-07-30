@@ -347,6 +347,30 @@ def config_fingerprint():
     }
 
 
+def worker_count():
+    """How many worker processes a parallel stage may start.
+
+    Postcondition: returns a positive int, never more than the CPUs this process may actually use.
+
+    `ProcessPoolExecutor()` with no max_workers defaults to os.cpu_count(), which reports the
+    machine's cores. Under a batch scheduler that is the COMPUTE NODE's core count, not the slots
+    the job was granted -- so an 8-slot job on a 28-core node starts 28 workers, the scheduler
+    kills the excess, and the survivors die with:
+
+        concurrent.futures.process.BrokenProcessPool: A process in the process pool was
+        terminated abruptly while the future was running or pending
+
+    Measured on BU SCC: step6_stats failed this way after 42s on `-pe omp 8`. It is not a
+    slowdown, it takes the stage down entirely, and the traceback names the pool rather than the
+    cause. Locally NSLOTS is unset and this returns os.cpu_count(), so nothing changes off-cluster.
+    """
+    for var in ("NSLOTS", "SLURM_CPUS_PER_TASK"):
+        value = os.environ.get(var, "")
+        if value.isdigit() and int(value) > 0:
+            return int(value)
+    return os.cpu_count() or 1
+
+
 class StaleArtifactError(RuntimeError):
     """An artifact was built under a different config than the one now in effect."""
 

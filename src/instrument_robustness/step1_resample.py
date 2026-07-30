@@ -12,6 +12,7 @@ import warnings, sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np, pandas as pd, librosa, soundfile as sf
 from instrument_robustness.config import (
+    worker_count,
     MANIFEST_LABELED,
     MANIFEST_RESAMPLED,
     PIPE,
@@ -91,7 +92,7 @@ def main():
     print(f"resampling {len(paths)} files to {SR} Hz mono ...")
     results = {}
     done = 0
-    with ProcessPoolExecutor() as ex:
+    with ProcessPoolExecutor(max_workers=worker_count()) as ex:
         futs = [ex.submit(resample_one, p) for p in paths]
         for f in as_completed(futs):
             rel, rpath, n, dur, status = f.result()

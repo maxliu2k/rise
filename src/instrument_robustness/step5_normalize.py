@@ -9,6 +9,7 @@ import warnings
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np, pandas as pd, librosa, soundfile as sf
 from instrument_robustness.config import (
+    worker_count,
     ROOT,
     SR,
     TARGET_RMS,
@@ -51,7 +52,7 @@ def main():
     paths = win["window_path"].tolist()
     print(f"normalizing {len(paths)} windows to RMS={TARGET_RMS} ...")
     res, done = {}, 0
-    with ProcessPoolExecutor() as ex:
+    with ProcessPoolExecutor(max_workers=worker_count()) as ex:
         futs = [ex.submit(norm_one, p) for p in paths]
         for f in as_completed(futs):
             wrel, pre, post, status = f.result()

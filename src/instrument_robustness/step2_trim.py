@@ -11,9 +11,9 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np, pandas as pd, librosa, soundfile as sf
 from pathlib import Path
 
-from instrument_robustness.config import (ROOT, RESAMPLED, TRIMMED, PIPE, SR, TRIM_TOP_DB, MIN_TRIM_S,
-                                          MANIFEST_RESAMPLED, MANIFEST_TRIMMED,
-                                          assert_artifact_fingerprint,
+from instrument_robustness.config import (ROOT, RESAMPLED, TRIMMED, PIPE, SR, TRIM_TOP_DB,
+                                          MIN_TRIM_S, MANIFEST_RESAMPLED, MANIFEST_TRIMMED,
+                                          assert_artifact_fingerprint, worker_count,
                                           write_artifact_fingerprint)
 warnings.filterwarnings("ignore")
 
@@ -41,7 +41,7 @@ def main():
     paths = df["resampled_path"].tolist()
     print(f"trimming {len(paths)} files (top_db={TRIM_TOP_DB}) ...")
     res, done = {}, 0
-    with ProcessPoolExecutor() as ex:
+    with ProcessPoolExecutor(max_workers=worker_count()) as ex:
         futs = [ex.submit(trim_one, p) for p in paths]
         for f in as_completed(futs):
             rp, tp, dur, flag = f.result()
