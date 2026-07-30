@@ -145,3 +145,25 @@ qsub -hold_jid "$noise_job" \
 Generated WAVs and provenance remain under
 `$RISE_DATA_ROOT/work/windows_noisy/`. Compact predictions, metrics, and summaries are written to
 the repository under `artifacts/svm/noise/` and `artifacts/mert/noise/`.
+
+## CNN and CRNN seed ensembles
+
+Both architectures share one job script; `RISE_ARCH` picks which. Unlike the AST and MERT jobs,
+these read the **Step-7 feature arrays**, so the data root needs the full nine-stage pipeline, not
+just `--to step5_normalize`:
+
+```bash
+export RISE_DATA_ROOT=/projectnb/rise-grid/$USER/all-samples
+
+qsub -v RISE_DATA_ROOT="$RISE_DATA_ROOT" scc/cnn_train.qsub
+qsub -N crnn_train -v RISE_DATA_ROOT="$RISE_DATA_ROOT",RISE_ARCH=crnn scc/cnn_train.qsub
+```
+
+Both are validation-only and write `artifacts/{cnn,crnn}/validation_summary.json`. There is
+deliberately no finalize job: `finalize_{cnn,crnn}` spends the single permitted test evaluation and
+must follow a human reading the validation summary.
+
+The job is resumable. Every finished seed persists its checkpoint, validation probabilities and a
+provenance record, so a run killed by the wall clock costs at most one partial seed — resubmit the
+identical command and the finished seeds are reused rather than retrained. `validation_summary.json`
+lists them under `reused_seeds`.
