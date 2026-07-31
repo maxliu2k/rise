@@ -8,8 +8,8 @@
     "panns",
     "svm"
   ],
-  "n_files": 17,
-  "total_bytes": 357422892,
+  "n_files": 16,
+  "total_bytes": 357321383,
   "files": {
     "ast_finetuned.safetensors": {
       "model": "ast",
@@ -93,12 +93,6 @@
       "model": "panns",
       "source": "artifacts/panns/panns_probe_philharmonia.pt",
       "sha256": "9a754a7f96bdf648d2738af5905eefdc8868293b7a137139a8e4d1b1346dec8b",
-      "bytes": 101509
-    },
-    "panns_probe_tinysol.pt": {
-      "model": "panns",
-      "source": "artifacts/panns/panns_probe_tinysol.pt",
-      "sha256": "7c060443486aed754ca52adb18e81d0d94f3756ad497611c6417b1e9bcd93cfd",
       "bytes": 101509
     },
     "svm_final.joblib": {
