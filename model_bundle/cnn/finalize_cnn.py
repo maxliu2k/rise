@@ -5,16 +5,19 @@
 Mirrors finalize_svm and finalize_mert. Nothing is tuned or selected here: the combiner was chosen
 on validation by train_cnn, and this reports it.
 
-FOUR GATES, in this order. Each exists because the corresponding mistake is silent:
+FIVE GATES, in this order. Each exists because the corresponding mistake is silent:
 
   1. Refuse if any final artifact already exists. Re-running test after seeing a disappointing
      number is the most natural form of test-set overfitting and leaves no trace.
   2. Require validation_summary.json with test_evaluated == false. If the summary does not
      describe a sealed test set, the selection it records cannot be trusted.
-  3. Re-hash the train/val feature arrays and compare against what validation recorded. Otherwise
+  3. Require selection_metric == "validation_macro_f1". A summary from before the metric
+     standardisation selected its combiner on balanced accuracy, a different rule than every
+     other model uses; finalizing it would silently report an inconsistent comparison.
+  4. Re-hash the train/val feature arrays and compare against what validation recorded. Otherwise
      features could have been regenerated between selection and evaluation, and the reported score
      would belong to a different dataset than the one the combiner was chosen on.
-  4. Write the status record with open("x") BEFORE loading test. An exclusive create means a crash
+  5. Write the status record with open("x") BEFORE loading test. An exclusive create means a crash
      partway through still blocks a second attempt, rather than leaving the door open.
 
 Checkpoints are loaded under the architecture they recorded, and their config fingerprint is
@@ -100,6 +103,15 @@ def run_finalize(model_cls, output_dir: Path, device: str) -> dict:
     if validation.get("architecture") != model_cls.__name__:
         raise RuntimeError(f"{validation_path} was written for "
                            f"{validation.get('architecture')!r}, not {model_cls.__name__!r}")
+    # Matches finalize_mert's gate. A validation_summary.json from before the metric
+    # standardisation selected its combiner on balanced accuracy, not macro-F1 -- finalizing that
+    # would silently report a combiner chosen by a different rule than every other model uses.
+    # Retrain rather than finalize a pre-standardisation summary.
+    if validation.get("selection_metric") != "validation_macro_f1":
+        raise RuntimeError(
+            f"{validation_path} has selection_metric={validation.get('selection_metric')!r}; "
+            f"expected 'validation_macro_f1'. Re-run train_cnn/train_crnn to reselect the "
+            f"combiner on the standardised metric before finalizing.")
     for split, rec in validation.get("inputs", {}).items():
         current = sha256(Path(rec["path"]))
         if current != rec["sha256"]:
@@ -126,10 +138,12 @@ def run_finalize(model_cls, output_dir: Path, device: str) -> dict:
     preds = COMBINERS[combiner_name](probs)
     labels = list(range(len(TARGET_LABELS)))
 
-    # macro-F1 is recorded even though the combiner was selected on balanced accuracy. It is the
-    # project's primary cross-model metric and the quantity noise_eval_common's clean-parity gate
-    # compares against, so a summary without it cannot enter the noise sweep at all. Keeping
-    # balanced accuracy and MCC alongside it costs nothing and preserves what selection used.
+    # macro-F1 is the metric the combiner was SELECTED on (see train_cnn's standardisation across
+    # all six models) and the quantity noise_eval_common's clean-parity gate compares against, so
+    # a summary without it could not enter the noise sweep at all. Balanced accuracy and MCC are
+    # kept alongside in full -- CLAUDE.md's own rule is that they are the right metric under class
+    # imbalance, and this project standardised on macro-F1 for cross-model comparability, not
+    # because macro-F1 won that argument.
     macro_f1 = float(f1_score(yte, preds, labels=labels, average="macro", zero_division=0))
     summary = {
         "architecture": model_cls.__name__,
@@ -137,7 +151,7 @@ def run_finalize(model_cls, output_dir: Path, device: str) -> dict:
         "combiner": combiner_name,
         "label_order": list(TARGET_LABELS),
         "config_fingerprint": config_fingerprint(),
-        "selection_metric": "validation_balanced_accuracy",
+        "selection_metric": "validation_macro_f1",
         "n_test": int(len(yte)),
         "test_examples": int(len(yte)),
         "test_inputs": {"path": str(CNN_FEATURE_DIR / "test.npz"),

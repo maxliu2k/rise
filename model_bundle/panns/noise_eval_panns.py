@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 from pathlib import Path
 
@@ -20,18 +19,18 @@ import torch
 from torch import nn
 
 from instrument_robustness.config import (
-    FEATURES,
+    ARTIFACTS,
     TARGET_LABELS,
     assert_fingerprint,
 )
-from instrument_robustness.noise_eval_common import run_noise_evaluation
+from instrument_robustness.noise_eval_common import load_official_summary, run_noise_evaluation
 from instrument_robustness.noise_sweep import read_audio_window, sha256_file
 from instrument_robustness.pretrained_extractors import PANNS_SR, panns_input
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model-dir", type=Path, default=FEATURES / "panns")
+    parser.add_argument("--model-dir", type=Path, default=ARTIFACTS / "panns")
     parser.add_argument("--output-dir", type=Path, default=None)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--overwrite", action="store_true")
@@ -70,7 +69,7 @@ class PannsClassifier(nn.Module):
 
 
 def load_model(path: Path, device: str) -> PannsClassifier:
-    checkpoint = torch.load(path, map_location="cpu")
+    checkpoint = torch.load(path, map_location="cpu", weights_only=False)
     if not isinstance(checkpoint, dict) or "state_dict" not in checkpoint:
         raise ValueError(
             f"{path} is an unversioned PANNs checkpoint; a fingerprinted checkpoint is required"
@@ -78,41 +77,27 @@ def load_model(path: Path, device: str) -> PannsClassifier:
     if checkpoint.get("label_order") != TARGET_LABELS:
         raise ValueError(f"Unexpected PANNs label order in {path}")
     assert_fingerprint(checkpoint.get("config_fingerprint"), str(path))
-    model = PannsClassifier()
-    model.load_state_dict(checkpoint["state_dict"])
+    from instrument_robustness.train_panns import CKPT, PannsClassifier as TrainingClassifier, build_backbone
+    expected_base = checkpoint.get("base_checkpoint_sha256")
+    if expected_base is not None and sha256_file(CKPT) != expected_base:
+        raise ValueError("Installed PANNs CNN14 base checkpoint differs from the selected model")
+    model = TrainingClassifier(build_backbone(), freeze=checkpoint.get("mode") == "probe")
+    if checkpoint.get("mode") == "probe":
+        model.head.load_state_dict(checkpoint["state_dict"])
+    else:
+        model.load_state_dict(checkpoint["state_dict"])
     return model.eval().to(device)
-
-
-def load_official_result(path: Path) -> tuple[float, int]:
-    try:
-        result = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise ValueError(f"Unable to read official PANNs result at {path}") from error
-    if not isinstance(result, dict):
-        raise ValueError(f"Expected a JSON object at {path}")
-    assert_fingerprint(
-        result.get("meta", {}).get("config_fingerprint"),
-        str(path),
-    )
-    test = result.get("test", {})
-    macro_f1 = float(test["macro_f1"])
-    confusion = np.asarray(test["confusion_matrix"])
-    expected_shape = (len(TARGET_LABELS), len(TARGET_LABELS))
-    if confusion.shape != expected_shape:
-        raise ValueError(
-            f"Unexpected PANNs test confusion shape {confusion.shape}; "
-            f"expected {expected_shape}"
-        )
-    return macro_f1, int(confusion.sum())
 
 
 def main() -> None:
     args = parse_args()
-    model_path = Path(args.model_dir) / "panns_finetune.pt"
-    result_path = Path(args.model_dir) / "results_finetune.json"
+    model_path = Path(args.model_dir) / "selected_model.pt"
+    result_path = Path(args.model_dir) / "test_summary.json"
     if not model_path.is_file():
         raise FileNotFoundError(f"Missing PANNs model: {model_path}")
-    official_macro_f1, official_examples = load_official_result(result_path)
+    official = load_official_summary(result_path, expected_model_path=model_path)
+    official_macro_f1 = float(official["test_metrics"]["macro_f1"])
+    official_examples = int(official["test_examples"])
     device = get_device()
     model = load_model(model_path, device)
 

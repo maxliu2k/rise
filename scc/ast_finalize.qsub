@@ -1,0 +1,19 @@
+#!/bin/bash -l
+#$ -P rise-grid
+#$ -N ast_final
+#$ -j y
+#$ -pe omp 4
+#$ -l gpus=1
+#$ -l gpu_c=7.0
+#$ -l gpu_memory=16G
+#$ -l h_rt=04:00:00
+#$ -l mem_per_core=8G
+set -euo pipefail
+repo="${RISE_REPO:-$SGE_O_WORKDIR}"
+venv="${AST_VENV:-$repo/.venv}"
+export RISE_DATA_ROOT="${RISE_DATA_ROOT:-$repo/all-samples}"
+output="${AST_OUTPUT_DIR:-$repo/artifacts/ast}"
+source "$venv/bin/activate"
+cd "$repo"
+export PYTHONPATH="$repo/src${PYTHONPATH:+:$PYTHONPATH}"
+python -m instrument_robustness.finalize_ast --output-dir "$output"

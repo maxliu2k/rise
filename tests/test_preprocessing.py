@@ -13,6 +13,7 @@ import soundfile as sf
 
 from instrument_robustness import prep_data
 from instrument_robustness.config import (
+    CONFLICTING_LABEL_PATHS,
     SR,
     StaleArtifactError,
     TARGET_LABELS,
@@ -20,7 +21,8 @@ from instrument_robustness.config import (
     config_fingerprint,
     write_artifact_fingerprint,
 )
-from instrument_robustness.step3_split import assign_groups, verify_no_group_leak
+from instrument_robustness.step3_split import assign_groups, assert_split_is_unsealed, verify_no_group_leak
+from instrument_robustness.step0_filter import exclude_conflicting_labels
 from instrument_robustness.step4_window import (
     MIN_CONTENT,
     WIN,
@@ -30,6 +32,14 @@ from instrument_robustness.step4_window import (
 
 
 class SplitRegressionTests(unittest.TestCase):
+    def test_frozen_dataset_prevents_split_overwrite(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            seal = Path(temporary_dir) / "dataset_freeze.json"
+            seal.write_text("{}", encoding="utf-8")
+            with patch("instrument_robustness.step3_split.DATASET_FREEZE", seal):
+                with self.assertRaisesRegex(RuntimeError, "sealed"):
+                    assert_split_is_unsealed()
+
     def test_group_assignment_is_deterministic_and_leak_free(self) -> None:
         sizes = {"violin_A4": 5, "violin_B4": 3, "violin_C5": 2}
         fracs = {"train": 0.7, "val": 0.15, "test": 0.15}
@@ -140,6 +150,36 @@ class FingerprintRegressionTests(unittest.TestCase):
         self.assertEqual(fingerprint["target_rms"], 0.1)
         self.assertEqual(fingerprint["articulations"]["violin"], ["arco-normal"])
         self.assertEqual(fingerprint["articulations"]["flute"], ["normal"])
+        self.assertEqual(
+            fingerprint["excluded_conflicting_label_paths"],
+            sorted(CONFLICTING_LABEL_PATHS),
+        )
+
+    def test_freeze_gate_detects_identical_audio_with_different_labels(self) -> None:
+        from instrument_robustness import freeze_dataset
+
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir)
+            (root / "a.wav").write_bytes(b"same audio")
+            (root / "b.wav").write_bytes(b"same audio")
+            frame = pd.DataFrame([
+                {"window_path": "a.wav", "label": "cello"},
+                {"window_path": "b.wav", "label": "viola"},
+            ])
+            with patch.object(freeze_dataset, "ROOT", root):
+                conflicts = freeze_dataset.conflicting_audio_labels(frame)
+        self.assertEqual(len(conflicts), 1)
+        self.assertEqual(conflicts[0]["labels"], ["cello", "viola"])
+
+    def test_all_known_conflicting_label_files_are_excluded(self) -> None:
+        self.assertEqual(len(CONFLICTING_LABEL_PATHS), 4)
+        frame = pd.DataFrame({
+            "path": [*sorted(CONFLICTING_LABEL_PATHS), "violin/A4/good.mp3"],
+            "label": ["cello", "french-horn", "oboe", "viola", "violin"],
+        })
+        kept, excluded = exclude_conflicting_labels(frame)
+        self.assertEqual(kept["path"].tolist(), ["violin/A4/good.mp3"])
+        self.assertEqual(excluded, sorted(CONFLICTING_LABEL_PATHS))
 
     def test_sidecar_rejects_wrong_pipeline_stage(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:

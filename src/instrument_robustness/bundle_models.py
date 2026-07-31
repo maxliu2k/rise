@@ -42,10 +42,10 @@ MODELS: dict[str, list[str]] = {
               "noise_eval_cnn.py"],
     "crnn":  ["crnn_model.py", "crnn_data.py", "train_crnn.py", "finalize_crnn.py",
               "noise_eval_crnn.py"],
-    "ast":   ["ast_data.py", "train_ast.py", "noise_eval_ast.py"],
+    "ast":   ["ast_data.py", "train_ast.py", "finalize_ast.py", "noise_eval_ast.py"],
     "mert":  ["mert_data.py", "mert_probe.py", "extract_mert.py", "train_mert.py",
               "finalize_mert.py", "noise_eval_mert.py"],
-    "panns": ["train_panns.py", "eval_panns_probe.py", "noise_eval_panns.py"],
+    "panns": ["train_panns.py", "finalize_panns.py", "eval_panns_probe.py", "noise_eval_panns.py"],
 }
 
 # Used by more than one model. Copied ONCE, not into each model folder: duplicating featurelib per
@@ -55,7 +55,8 @@ SHARED: dict[str, list[str]] = {
     "_shared": ["config.py", "featurelib.py", "logmel_input.py", "pretrained_extractors.py"],
     "_pipeline": ["prep_data.py", "run_pipeline.py", "step0_filter.py", "step1_resample.py",
                   "step2_trim.py", "step3_split.py", "step4_window.py", "step5_normalize.py",
-                  "step6_stats.py", "step7_featurize.py", "audio_inventory.py"],
+                  "step6_stats.py", "step7_featurize.py", "audio_inventory.py",
+                  "freeze_dataset.py"],
     "_noise": ["noise_sweep.py", "noise_eval_common.py", "noise_metrics.py", "noise_stats.py",
                "robustness_curve.py", "snr_pilot.py", "ensemble_scores.py"],
 }
@@ -102,6 +103,15 @@ def git_commit() -> str:
         return "unknown"
 
 
+def worktree_dirty() -> bool:
+    out = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "status", "--porcelain"],
+        capture_output=True,
+        text=True,
+    )
+    return bool(out.stdout.strip())
+
+
 def plan() -> list[tuple[str, str]]:
     """(folder, filename) for every file the bundle contains, models first."""
     return [(folder, name)
@@ -131,6 +141,7 @@ def build() -> int:
     (BUNDLE / "MANIFEST.json").write_text(json.dumps({
         "generated_by": "instrument_robustness.bundle_models",
         "built_from_commit": git_commit(),
+        "source_worktree_dirty": worktree_dirty(),
         "models": sorted(MODELS),
         "n_files": len(entries),
         "files": dict(sorted(entries.items())),

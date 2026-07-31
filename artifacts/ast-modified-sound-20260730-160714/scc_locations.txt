@@ -1,4 +1,0 @@
-SCC_MODEL=/projectnb/rise-grid/tariqhsn/rise-runs/ast-canonical-20260730-022036-train-024326/model.safetensors
-SCC_NOISE_DATA=/projectnb/rise-grid/rise-data/work/windows_noisy
-25789685e1cb0a4df0d64e5c84df84f49eff72c2831cc8e89fb02bd7676763e7  /projectnb/rise-grid/tariqhsn/rise-runs/ast-canonical-20260730-022036-train-024326/model.safetensors
-dc7d843568d2600adda250bec1636fa1024d9d1ddba5b2c766ae414e8b5c8d75  /projectnb/rise-grid/rise-data/work/windows_noisy/noise_manifest.json

@@ -161,6 +161,9 @@ def dataset_build_identity(
         "manifest_sha256": manifest_sidecar["sha256"],
         "windows_csv_sha256": windows_sidecar["sha256"],
     }
+    audio_hash = (windows_sidecar.get("metadata") or {}).get("windows_audio_inventory_sha256")
+    if audio_hash is not None:
+        identity["windows_audio_inventory_sha256"] = audio_hash
     encoded = json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()
     identity["dataset_fingerprint"] = hashlib.sha256(encoded).hexdigest()
     return identity

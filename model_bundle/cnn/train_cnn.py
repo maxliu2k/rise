@@ -31,6 +31,14 @@ on. A seed is reused only when all four match the run now starting; otherwise it
 This exists because the ensemble vote used to be assembled from probabilities held in memory, so
 losing the process meant losing every completed seed. That happened twice, both times at seed 43,
 and the response both times was to spend the CPU again rather than to make the work durable.
+
+SELECTION METRIC IS macro-F1, not balanced accuracy, as of the standardisation across all six
+models. SVM and MERT already selected on macro-F1; noise_eval_common's clean-parity gate and
+every noise metric compare on macro-F1; a CNN/CRNN result selected on something else could not
+honestly be placed beside them. Balanced accuracy and MCC are still recorded in full for every
+seed and every combiner -- CLAUDE.md's own rule is that they, not macro-F1, are the right metric
+under class imbalance, and this file does not resolve that tension, it standardises on the metric
+the rest of the project already committed to. See docs/AUDIT_CHECKLIST.md #10.
 """
 from __future__ import annotations
 
@@ -44,7 +52,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
-from sklearn.metrics import balanced_accuracy_score, matthews_corrcoef
+from sklearn.metrics import balanced_accuracy_score, f1_score, matthews_corrcoef
 
 from instrument_robustness.cnn_data import CNN as CNN_FEATURE_DIR
 from instrument_robustness.cnn_data import load_cnn
@@ -95,6 +103,15 @@ def iterate(X: np.ndarray, y: np.ndarray, batch_size: int, shuffle: bool, rng: r
     for i in range(0, len(idx), batch_size):
         b = idx[i:i + batch_size]
         yield torch.from_numpy(X[b]), torch.from_numpy(y[b])
+
+
+def _stats(values: list[float]) -> dict:
+    """mean/std/min/max over a per-seed metric. std is 0.0 for a single seed, not NaN or undefined
+    -- an n=1 std has no meaning, and CLAUDE.md's own rule is never to quote it as if it did, but
+    the field must still exist for --seeds with one entry not to crash the caller."""
+    return {"mean": float(np.mean(values)),
+            "std": float(np.std(values, ddof=1)) if len(values) > 1 else 0.0,
+            "min": float(np.min(values)), "max": float(np.max(values))}
 
 
 def seed_store_paths(out_dir: Path, seed: int) -> tuple[Path, Path, Path]:
@@ -202,10 +219,17 @@ def train_one_seed(seed, Xtr, ytr, Xva, yva, device, weights, out_dir, model_cls
 
     probs = predict_probs(model, Xva, device, BATCH_SIZE)
     preds = probs.argmax(axis=1)
+    labels = list(range(len(TARGET_LABELS)))
     return {
         "seed": seed,
         "best_epoch": best_epoch,
         "best_val_loss": float(best_loss),
+        # macro_f1 is the SELECTION metric (see run_training); balanced_accuracy and mcc are kept
+        # alongside per CLAUDE.md's own reporting rule (they do not reward a collapsed classifier
+        # under imbalance the way macro-F1 can) -- recording them costs nothing and lets a reader
+        # who distrusts the standardisation check it themselves.
+        "val_macro_f1": float(f1_score(yva, preds, labels=labels, average="macro",
+                                       zero_division=0)),
         "val_balanced_accuracy": float(balanced_accuracy_score(yva, preds)),
         "val_mcc": float(matthews_corrcoef(yva, preds)),
         "mean_epoch_s": float(np.mean(epoch_times)),
@@ -274,15 +298,37 @@ def run_training(model_cls, output_dir: Path, seeds, device: str) -> dict:
     if reused:
         print(f"reused {len(reused)} of {len(seeds)} seeds from a previous run: {reused}\n")
 
+    # Recomputed from probs rather than read out of `records`, uniformly for reused AND
+    # freshly-trained seeds. A seed reused from an older run (before val_macro_f1 existed in the
+    # per-seed store) would otherwise KeyError here, or -- worse -- silently mix an old-format
+    # record's balanced accuracy into a macro-F1 average. probs is always present either way.
+    label_ids = list(range(len(TARGET_LABELS)))
     stacked = np.stack(per_seed_probs)
-    singles = [r["val_balanced_accuracy"] for r in records]
-    combiners = {
+    singles_macro_f1 = [float(f1_score(yva, p.argmax(axis=1), labels=label_ids,
+                                       average="macro", zero_division=0))
+                        for p in per_seed_probs]
+    singles_balanced_accuracy = [r["val_balanced_accuracy"] for r in records]
+
+    # SELECTION METRIC: macro-F1. This is the project's standardised comparison metric -- SVM and
+    # MERT already select on it, PANNs' probe is scored on it, and it is what noise_eval_common's
+    # clean-parity gate compares against, so a CNN/CRNN summary selected on anything else could not
+    # honestly enter the noise sweep. Balanced accuracy is still recorded below, in full, because
+    # macro-F1 rewards a collapsed classifier more as imbalance grows (see docs/FINDINGS.md S7) --
+    # this is a standardisation choice for cross-model comparability, not a claim that macro-F1 is
+    # the better metric in the abstract.
+    combiners_macro_f1 = {
+        "soft_vote": float(f1_score(yva, soft_vote(stacked), labels=label_ids,
+                                    average="macro", zero_division=0)),
+        "hard_vote": float(f1_score(yva, hard_vote(stacked), labels=label_ids,
+                                    average="macro", zero_division=0)),
+    }
+    combiners_balanced_accuracy = {
         "soft_vote": float(balanced_accuracy_score(yva, soft_vote(stacked))),
         "hard_vote": float(balanced_accuracy_score(yva, hard_vote(stacked))),
     }
     # Chosen HERE, on validation. Selecting the better combiner after seeing test would be
     # selection on test, and would inflate whatever finalize_cnn reports.
-    chosen = max(combiners, key=combiners.get)
+    chosen = max(combiners_macro_f1, key=combiners_macro_f1.get)
 
     summary = {
         "config_fingerprint": config_fingerprint(),
@@ -302,20 +348,28 @@ def run_training(model_cls, output_dir: Path, seeds, device: str) -> dict:
         # provenance-checked before reuse, but a reader deserves to know the run was resumed.
         "reused_seeds": list(reused),
         "per_seed": records,
-        "single_seed_val": {"mean": float(np.mean(singles)),
-                            "std": float(np.std(singles, ddof=1)) if len(singles) > 1 else 0.0,
-                            "min": float(np.min(singles)), "max": float(np.max(singles))},
-        "ensemble_val": combiners,
+        "selection_metric": "validation_macro_f1",
+        # single_seed_val is macro-F1 -- it is what selection used and what summarize_results.py
+        # reads as this row's headline number. single_seed_val_balanced_accuracy is the same five
+        # seeds scored the other way, kept in full rather than reduced to "recorded but unused".
+        "single_seed_val": _stats(singles_macro_f1),
+        "single_seed_val_balanced_accuracy": _stats(singles_balanced_accuracy),
+        "ensemble_val": combiners_macro_f1,
+        "ensemble_val_balanced_accuracy": combiners_balanced_accuracy,
         "selected_combiner": chosen,
     }
     (output_dir / "validation_summary.json").write_text(json.dumps(summary, indent=2))
 
     print("=" * 66)
-    print(f"single seed (val)  {summary['single_seed_val']['mean']:.4f} "
-          f"+/- {summary['single_seed_val']['std']:.4f}")
-    for name, score in combiners.items():
-        print(f"ensemble {name:<10} {score:.4f}")
-    print(f"selected combiner: {chosen}  (chosen on validation, before any test evaluation)")
+    print(f"single seed (val)  macro-F1 {summary['single_seed_val']['mean']:.4f} "
+          f"+/- {summary['single_seed_val']['std']:.4f}"
+          f"  (balanced acc {summary['single_seed_val_balanced_accuracy']['mean']:.4f} "
+          f"+/- {summary['single_seed_val_balanced_accuracy']['std']:.4f})")
+    for name in combiners_macro_f1:
+        print(f"ensemble {name:<10} macro-F1 {combiners_macro_f1[name]:.4f}"
+              f"  (balanced acc {combiners_balanced_accuracy[name]:.4f})")
+    print(f"selected combiner: {chosen}  (chosen on validation macro-F1, "
+          f"before any test evaluation)")
     print("=" * 66)
     print(f"\nwrote {output_dir / 'validation_summary.json'}")
     return summary

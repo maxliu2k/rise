@@ -1,0 +1,19 @@
+{
+  "ast_finetuned_philharmonia_8378.safetensors": {
+    "model": "ast",
+    "role": "reported Philharmonia clean model (historical 8,378-source build; validation-balanced-accuracy selection and unsealed test; not valid for the corrected frozen build)",
+    "sha256": "25789685e1cb0a4df0d64e5c84df84f49eff72c2831cc8e89fb02bd7676763e7",
+    "bytes": 344820808,
+    "windows_csv_sha256": "cfb725e320b703364dc3f5f3b8d98782c93c594630d89e6a5e147ac33b63e8ab",
+    "git_commit": "baa5970",
+    "git_path": "artifacts/new-ast-results-20260730-022036/model.safetensors"
+  },
+  "panns_finetune_philharmonia.pt": {
+    "model": "panns",
+    "role": "reported Philharmonia clean and noise model (historical 8,378-source build; not valid for the corrected frozen build)",
+    "sha256": "00cc195e1cbea756fc0afcb1ab823d639e31668c1a859f67941c29fda40741e3",
+    "release_tag": "v1.0-panns-12class",
+    "dataset_fingerprint": "89f126e290d0a9674e4e0a2b6344dcced32fa42ebe4e872006918e044f723073",
+    "download_url": "https://github.com/maxliu2k/rise/releases/download/v1.0-panns-12class/panns_finetune_philharmonia.pt"
+  }
+}
