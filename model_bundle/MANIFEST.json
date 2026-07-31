@@ -1,0 +1,207 @@
+{
+  "generated_by": "instrument_robustness.bundle_models",
+  "built_from_commit": "79c129e4b00a92d0b5d732f1b30f1713da74a144",
+  "models": [
+    "ast",
+    "cnn",
+    "crnn",
+    "mert",
+    "panns",
+    "svm"
+  ],
+  "n_files": 48,
+  "files": {
+    "_noise/ensemble_scores.py": {
+      "source": "src/instrument_robustness/ensemble_scores.py",
+      "sha256": "a3fdee8d17bd39d7bbe4a969bd13c8ec08e48b1e868f760fd56baee3e0299fa5"
+    },
+    "_noise/noise_eval_common.py": {
+      "source": "src/instrument_robustness/noise_eval_common.py",
+      "sha256": "499140d2090710c37ccd10ff65f99510b14693753e46d376391792bd010e206a"
+    },
+    "_noise/noise_metrics.py": {
+      "source": "src/instrument_robustness/noise_metrics.py",
+      "sha256": "7352ac4d05c85519612746d3c2dc5b6405ad39fb4f304a1300c75adf41befff5"
+    },
+    "_noise/noise_stats.py": {
+      "source": "src/instrument_robustness/noise_stats.py",
+      "sha256": "55bcc29940a18fe9a05366994c8d4bd5280f647e17d701bf23a1171fd5013f0e"
+    },
+    "_noise/noise_sweep.py": {
+      "source": "src/instrument_robustness/noise_sweep.py",
+      "sha256": "efbbd51fd341af33dadd510f2c4692acc1f01523f8a2ede15990213b52ddc48f"
+    },
+    "_noise/robustness_curve.py": {
+      "source": "src/instrument_robustness/robustness_curve.py",
+      "sha256": "c1149d33d588eacb4fec0a0ebf9249aef23ef20e979773619fda4813443c3cf9"
+    },
+    "_noise/snr_pilot.py": {
+      "source": "src/instrument_robustness/snr_pilot.py",
+      "sha256": "a0e9a6106d25dab2f29810ad40c2c989366ff5c7a9d9dd8c2be7d5c5ff1f8c59"
+    },
+    "_pipeline/audio_inventory.py": {
+      "source": "src/instrument_robustness/audio_inventory.py",
+      "sha256": "86c61c22477511d42907cbf90928c0707fd7dc19eb201fee66e8342b15d22aa7"
+    },
+    "_pipeline/prep_data.py": {
+      "source": "src/instrument_robustness/prep_data.py",
+      "sha256": "d867effb970c331586de814a17ea1e031802a507eff1fa1927ee1100d5b0e44e"
+    },
+    "_pipeline/run_pipeline.py": {
+      "source": "src/instrument_robustness/run_pipeline.py",
+      "sha256": "a0524ec5208f9e882a97a4b4da6677881602eab19016bc7e09f203b0d08d504e"
+    },
+    "_pipeline/step0_filter.py": {
+      "source": "src/instrument_robustness/step0_filter.py",
+      "sha256": "4b37e3b2476e8a893a203327e57ff7cb14c1028d340f249caa683344aafe04b2"
+    },
+    "_pipeline/step1_resample.py": {
+      "source": "src/instrument_robustness/step1_resample.py",
+      "sha256": "c4121cdc7528ca64ca274378c78b92cf62bdd56897a49dc10f4b863eac2bea3f"
+    },
+    "_pipeline/step2_trim.py": {
+      "source": "src/instrument_robustness/step2_trim.py",
+      "sha256": "f77665960875d6f6da175d332e29bbc1ea0478dc195717550f08cc2561086d7a"
+    },
+    "_pipeline/step3_split.py": {
+      "source": "src/instrument_robustness/step3_split.py",
+      "sha256": "d32a31305bd466a6f4335a49532ae251a1cd14d172f1d886e2a63cf254b7d7d6"
+    },
+    "_pipeline/step4_window.py": {
+      "source": "src/instrument_robustness/step4_window.py",
+      "sha256": "cb196964f3dea827196d68cc1c002c401057cc2f6eb28b9670bfaf468f8286d0"
+    },
+    "_pipeline/step5_normalize.py": {
+      "source": "src/instrument_robustness/step5_normalize.py",
+      "sha256": "90a157d3b054a39d56f58ca0a6fb45c781b29bd9e2c34747df3c1088b849cd3d"
+    },
+    "_pipeline/step6_stats.py": {
+      "source": "src/instrument_robustness/step6_stats.py",
+      "sha256": "cee2d44ce45f880362a81c334a2f8606cf0a757995ba9fb69ca2b2c1f48c124c"
+    },
+    "_pipeline/step7_featurize.py": {
+      "source": "src/instrument_robustness/step7_featurize.py",
+      "sha256": "84a1e63b1a632565b3ef7bfff749331e71f68c64c7db089d548d72be7d5cd56a"
+    },
+    "_shared/config.py": {
+      "source": "src/instrument_robustness/config.py",
+      "sha256": "7c19236da3d896b470a9106bf5608a1019790d6dbf88f13ada2fba18490e3385"
+    },
+    "_shared/featurelib.py": {
+      "source": "src/instrument_robustness/featurelib.py",
+      "sha256": "d16817337000851425c649fe7b6871e1d9a3746169f2b42a4931294180860873"
+    },
+    "_shared/logmel_input.py": {
+      "source": "src/instrument_robustness/logmel_input.py",
+      "sha256": "ce2d1f638f2e4145d779409e1694195b3c0620913507aeaed61277e494795564"
+    },
+    "_shared/pretrained_extractors.py": {
+      "source": "src/instrument_robustness/pretrained_extractors.py",
+      "sha256": "fd0942a5c65ca5b8b8f5e382f70ec50a65113931c00cb3265478a99425bbb39b"
+    },
+    "ast/ast_data.py": {
+      "source": "src/instrument_robustness/ast_data.py",
+      "sha256": "173bbbf9e2ecde3c12781bd591ff06858b1d634ad6749e1259590a22a097e0fe"
+    },
+    "ast/noise_eval_ast.py": {
+      "source": "src/instrument_robustness/noise_eval_ast.py",
+      "sha256": "623d2a549483bfdb58553bcc24d9861abe44a9df23f6a6b72dfc38e0ef94a805"
+    },
+    "ast/train_ast.py": {
+      "source": "src/instrument_robustness/train_ast.py",
+      "sha256": "64c516924d851e230b3f3945074054524c391ab1ef087d52da6c6cc089704c6a"
+    },
+    "cnn/cnn_data.py": {
+      "source": "src/instrument_robustness/cnn_data.py",
+      "sha256": "bf133d1516c9d3e451a6431ab70e12a7b4315d9831b0c0da60724f52928892b4"
+    },
+    "cnn/cnn_model.py": {
+      "source": "src/instrument_robustness/cnn_model.py",
+      "sha256": "d0dd24a632c98f1dafb0cce593a97986e0e2d00dea8f82d8077f6f1ae8e3444d"
+    },
+    "cnn/finalize_cnn.py": {
+      "source": "src/instrument_robustness/finalize_cnn.py",
+      "sha256": "c118156b3e90bedb087fbbb20b7dfa3786e43a5fc3b3bd42763739aee64893bf"
+    },
+    "cnn/noise_eval_cnn.py": {
+      "source": "src/instrument_robustness/noise_eval_cnn.py",
+      "sha256": "16881de7989224fde7bba1ccea6fb7f2c0a1e238628c043bdf249712105e2709"
+    },
+    "cnn/train_cnn.py": {
+      "source": "src/instrument_robustness/train_cnn.py",
+      "sha256": "a7e0e3027d7bef2e1b408d6cb87654a495cfcea4ff74297304be5099c0c924e6"
+    },
+    "crnn/crnn_data.py": {
+      "source": "src/instrument_robustness/crnn_data.py",
+      "sha256": "395291b2276ee546ac6121a869e88ed03691a5813ab0fb850bba9d4d66ce49c7"
+    },
+    "crnn/crnn_model.py": {
+      "source": "src/instrument_robustness/crnn_model.py",
+      "sha256": "01d5743c7538572bcf255429ae75ca4d906f9674b4c88fe1a1a7c7d14edf21e8"
+    },
+    "crnn/finalize_crnn.py": {
+      "source": "src/instrument_robustness/finalize_crnn.py",
+      "sha256": "c5b5eaac0c82411f68e15c0369a6337155c968d0319ae0ada0c8a55b3f6e0277"
+    },
+    "crnn/noise_eval_crnn.py": {
+      "source": "src/instrument_robustness/noise_eval_crnn.py",
+      "sha256": "73be677011b051225ee19669386de157f1e0d4258dbdb2fb3a402798413f869e"
+    },
+    "crnn/train_crnn.py": {
+      "source": "src/instrument_robustness/train_crnn.py",
+      "sha256": "136d56e0511a258c07bf1231f4331ca80f6ccb3ff6de6d04518523cfa2cf2bf8"
+    },
+    "mert/extract_mert.py": {
+      "source": "src/instrument_robustness/extract_mert.py",
+      "sha256": "f2cae9daae66fad49d15ecdd373aead103ee92c4924b2e66c7cbb3b572c31adf"
+    },
+    "mert/finalize_mert.py": {
+      "source": "src/instrument_robustness/finalize_mert.py",
+      "sha256": "4ffc4630005b8f5634644a930cba0ba26eb8cadad269e1f6a75e22d33c93db3e"
+    },
+    "mert/mert_data.py": {
+      "source": "src/instrument_robustness/mert_data.py",
+      "sha256": "3f8a385db9b760aae8ae99b6684c9454fef1ea77e1562d0b78e169e1f4531525"
+    },
+    "mert/mert_probe.py": {
+      "source": "src/instrument_robustness/mert_probe.py",
+      "sha256": "b64cdbae084b04445331c356b706aeb7dfe44633758ec4cce821481f8ea56768"
+    },
+    "mert/noise_eval_mert.py": {
+      "source": "src/instrument_robustness/noise_eval_mert.py",
+      "sha256": "fc8e2cee4b0be82375d56f03dd638f6c5061334f39bd0bf0516cd8aef0281118"
+    },
+    "mert/train_mert.py": {
+      "source": "src/instrument_robustness/train_mert.py",
+      "sha256": "fadfb04edbf7c85227a89959faba6dba3837d65652ae0165296795126bcf6a71"
+    },
+    "panns/eval_panns_probe.py": {
+      "source": "src/instrument_robustness/eval_panns_probe.py",
+      "sha256": "19b7441bd3301b7079aca373e87c420bc4ac5551d93a0814f6d25dafbeedbbc1"
+    },
+    "panns/noise_eval_panns.py": {
+      "source": "src/instrument_robustness/noise_eval_panns.py",
+      "sha256": "0d823bf7d9c08b6cfea6703066bea29cf22b619e3b00372be37fc3eb37e15e64"
+    },
+    "panns/train_panns.py": {
+      "source": "src/instrument_robustness/train_panns.py",
+      "sha256": "acba0b222a2e79b5a56ec4939fef70c9bdbe87a07297f29a82688165c084a7b3"
+    },
+    "svm/finalize_svm.py": {
+      "source": "src/instrument_robustness/finalize_svm.py",
+      "sha256": "387d8af75f1c09246378e2e07e33c76d883cbed60006a0d3d91dea2df63ea07c"
+    },
+    "svm/noise_eval_svm.py": {
+      "source": "src/instrument_robustness/noise_eval_svm.py",
+      "sha256": "05eafcb5f8a91b27c3abe714f90853865c9f69c28f3acb9b776a0bacb9b4c922"
+    },
+    "svm/svm_model.py": {
+      "source": "src/instrument_robustness/svm_model.py",
+      "sha256": "daf85bdcbdebd13f8c462e4176317dc13af542f1dfb498f48ab1400dae49df64"
+    },
+    "svm/train_svm.py": {
+      "source": "src/instrument_robustness/train_svm.py",
+      "sha256": "d9d1fff179b1c60404d7d20a4d4bb796328a691df448045c5e3db9b72743b027"
+    }
+  }
+}
