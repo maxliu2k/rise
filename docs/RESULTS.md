@@ -4,14 +4,14 @@ Regenerate with `python -m instrument_robustness.summarize_results --write`. Eve
 
 ## Clean test baselines
 
-| model | macro_f1 | accuracy | n | status |
-| --- | --- | --- | --- | --- |
-| AST | 0.9917 | 0.9928 | — | canonical |
-| SVM | 0.9914 | 0.9920 | 1255.0000 | canonical |
-| PANNs | 0.9845 | 0.9841 | 1255.0000 | canonical |
-| MERT | 0.9246 | 0.9259 | 1255.0000 | canonical |
-| CNN | — | — | — | pending (not trained) |
-| CRNN | — | — | — | pending (not trained) |
+| model | split | macro_f1 | accuracy | n | status |
+| --- | --- | --- | --- | --- | --- |
+| AST | test | 0.9917 | 0.9928 | — | canonical |
+| SVM | test | 0.9914 | 0.9920 | 1255.0000 | canonical |
+| PANNs | test | 0.9845 | 0.9841 | 1255.0000 | canonical |
+| MERT | test | 0.9246 | 0.9259 | 1255.0000 | canonical |
+| CNN | val (5-seed) | 0.9523 | — | — | canonical (val only, test not run) |
+| CRNN | val (5-seed) | 0.9598 | — | — | canonical (val only, test not run) |
 
 ## Noise robustness — macro-F1 retention vs clean (replicates averaged)
 
