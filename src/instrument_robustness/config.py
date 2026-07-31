@@ -148,7 +148,14 @@ SPLIT_FRACTIONS = {"train": 0.70, "val": 0.15, "test": 0.15}
 # (so the split is identical across seeds — only model init and batch order vary, which is
 # what we want to measure). Single-seed numbers were misleading: the learning-rate probe
 # showed non-monotonic behaviour at intermediate settings that was pure seed noise.
-SEEDS = (42, 43, 44)
+# Five seeds, not three. Three is the bare minimum for a std at all, and the estimate it gives is
+# itself very noisy; five is the common reporting convention and materially tightens it.
+#
+# APPEND-ONLY. SEED below is SEEDS[0] and is the seed prep_data uses to build the pitch-group
+# split, so reordering this tuple would silently change the split and invalidate the cache, every
+# checkpoint, and every recorded number. Adding seeds at the end is safe: the per-seed store in
+# outputs/seed_metrics/ means existing seeds are not retrained.
+SEEDS = (42, 43, 44, 45, 46)
 SEED = SEEDS[0]
 BATCH_SIZE = 32
 MAX_EPOCHS = 40
