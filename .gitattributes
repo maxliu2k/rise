@@ -1,1 +1,2 @@
 artifacts/ast/model.safetensors filter=lfs diff=lfs merge=lfs -text
+models/ast_finetuned.safetensors filter=lfs diff=lfs merge=lfs -text
