@@ -1,0 +1,12 @@
+#!/bin/bash
+# Auto-regenerate docs/REPO_MAP.md so it never drifts from the tree.
+# Enable once per clone:  git config core.hooksPath .githooks
+set -euo pipefail
+repo="$(git rev-parse --show-toplevel)"
+py="$repo/all-samples/.venv/bin/python"
+[ -x "$py" ] || py="$(command -v python3 || command -v python)"
+PYTHONPATH="$repo/src" "$py" -m instrument_robustness.gen_repo_map --write >/dev/null 2>&1 || {
+    echo "pre-commit: gen_repo_map failed; committing without refreshing REPO_MAP.md" >&2
+    exit 0
+}
+git add "$repo/docs/REPO_MAP.md"
