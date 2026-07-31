@@ -27,13 +27,16 @@ from instrument_robustness.config import ARTIFACTS, REPO_ROOT, config_fingerprin
 # it. `fp` is the dotted path to that file's recorded config_fingerprint; `test` is the dotted path
 # to the block holding macro_f1/accuracy. A model with no trained checkpoint yet is listed with
 # source=None so the table shows "pending" rather than omitting the row.
+# `split` records which split the quoted macro_f1 is on. Four models are test-evaluated; CNN and
+# CRNN are so far VALIDATION-only (5-seed, test_evaluated=false), so their number is not comparable
+# to a test number and is labelled as such rather than silently tabled beside the others.
 CLEAN_SOURCES = {
-    "AST":   dict(source="new-ast-results-20260730-022036/metrics.json", fp="config_fingerprint",         test="test"),
-    "SVM":   dict(source="svm/test_summary.json",                        fp="config_fingerprint",         test="test_metrics"),
-    "PANNs": dict(source="panns/results_finetune_philharmonia.json",     fp="meta.config_fingerprint",    test="test"),
-    "MERT":  dict(source="mert/test_summary.json",                       fp="config_fingerprint",         test="test_metrics"),
-    "CNN":   dict(source=None),
-    "CRNN":  dict(source=None),
+    "AST":   dict(source="new-ast-results-20260730-022036/metrics.json", fp="config_fingerprint",      test="test",             split="test"),
+    "SVM":   dict(source="svm/test_summary.json",                        fp="config_fingerprint",      test="test_metrics",     split="test"),
+    "PANNs": dict(source="panns/results_finetune_philharmonia.json",     fp="meta.config_fingerprint", test="test",             split="test"),
+    "MERT":  dict(source="mert/test_summary.json",                       fp="config_fingerprint",      test="test_metrics",     split="test"),
+    "CNN":   dict(source="cnn/validation_summary.json",                  fp="config_fingerprint",      test="single_seed_val",  split="val (5-seed)"),
+    "CRNN":  dict(source="crnn/validation_summary.json",                 fp="config_fingerprint",      test="single_seed_val",  split="val (5-seed)"),
 }
 
 
@@ -68,20 +71,28 @@ def _n_examples(doc, test_block):
 
 def clean_row(name, spec, current_fp):
     if spec.get("source") is None:
-        return dict(model=name, macro_f1=None, accuracy=None, n=None, status="pending (not trained)")
+        return dict(model=name, split="—", macro_f1=None, accuracy=None, n=None, status="pending (not trained)")
     path = ARTIFACTS / spec["source"]
     if not path.is_file():
-        return dict(model=name, macro_f1=None, accuracy=None, n=None, status=f"MISSING {spec['source']}")
+        return dict(model=name, split="—", macro_f1=None, accuracy=None, n=None, status=f"MISSING {spec['source']}")
     doc = json.loads(path.read_text())
     fp = _dig(doc, spec["fp"])
-    test = _dig(doc, spec["test"]) or {}
+    block = _dig(doc, spec["test"]) or {}
+    # test blocks record macro_f1; the 5-seed validation summary records it as `mean`.
+    macro = _dig(block, "macro_f1")
+    if macro is None:
+        macro = _dig(block, "mean")
     stale = fp != current_fp
+    status = "STALE (config mismatch)" if stale else "canonical"
+    if not stale and spec["split"].startswith("val"):
+        status = "canonical (val only, test not run)"
     return dict(
         model=name,
-        macro_f1=_dig(test, "macro_f1"),
-        accuracy=_dig(test, "accuracy"),
-        n=_n_examples(doc, test),
-        status="STALE (config mismatch)" if stale else "canonical",
+        split=spec["split"],
+        macro_f1=macro,
+        accuracy=_dig(block, "accuracy"),
+        n=_n_examples(doc, block),
+        status=status,
     )
 
 
