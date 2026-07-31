@@ -1,0 +1,184 @@
+"""Collect every trained model's WEIGHTS into one folder, and prove they have not drifted.
+
+    python -m instrument_robustness.bundle_weights           # (re)build models/
+    python -m instrument_robustness.bundle_weights --check   # fail if any copy != its source
+
+Companion to bundle_models.py, which collects source code. This collects the trained artifacts:
+the thing you would hand someone who wants to run the six models rather than read them.
+
+WHY THE COPIES CARRY HASHES. A checkpoint is worse to duplicate than source, not better: it is a
+large opaque binary, git keeps every version forever, and a copy that silently disagrees with its
+original cannot be spotted by reading it. So every copy records the sha256 of the file it came
+from, and --check recomputes both sides. Edit nothing here; retrain, then re-run this.
+
+AST IS LFS-TRACKED AND 329 MB. `.gitattributes` matches LFS by exact path, so models/ast/ needs
+its own pattern -- without it git stores a 329 MB blob in every clone forever instead of a
+pointer. This script refuses to run if that pattern is missing, because the failure is invisible
+until someone clones.
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+from instrument_robustness.config import ARTIFACTS, REPO_ROOT
+
+DEST = REPO_ROOT / "models"
+
+# Weight files only. Metrics, confusion matrices and status files stay in artifacts/<model>/ --
+# they are results, not models, and finalize_* resolves them there.
+WEIGHTS: dict[str, list[str]] = {
+    "svm":   ["best_model.joblib", "final_model.joblib"],
+    "cnn":   [f"model_s{s}.pt" for s in (42, 43, 44, 45, 46)],
+    "crnn":  [f"model_s{s}.pt" for s in (42, 43, 44, 45, 46)],
+    "ast":   ["model.safetensors"],
+    "mert":  ["best_probe.pt", "final_probe.pt"],
+    "panns": ["panns_probe_philharmonia.pt", "panns_probe_tinysol.pt"],
+}
+
+# Paths that must be declared LFS before they are written, or git commits a raw blob.
+LFS_REQUIRED = ("models/ast/model.safetensors",)
+
+README = """\
+GENERATED -- DO NOT EDIT. Trained weights for all six models, one folder per model.
+
+Rebuild after retraining:   python -m instrument_robustness.bundle_weights
+Verify nothing has drifted: python -m instrument_robustness.bundle_weights --check
+
+MANIFEST.json records the sha256 of each source artifact. --check recomputes both the source and
+the copy, so an edited copy, a retrained source, or a missing file all fail rather than pass
+quietly.
+
+These are COPIES. artifacts/<model>/ remains where finalize_* and noise_eval_* read from, and
+where the metrics, confusion matrices and status files live. Nothing here is loaded by the code.
+
+ast/model.safetensors is Git LFS (329 MB). Clone with git-lfs installed or you get a pointer file
+that will fail to load as a model.
+"""
+
+
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def is_lfs_pointer(path: Path) -> bool:
+    """True if this is a 130-byte LFS stub rather than the real artifact.
+
+    Copying a pointer produces a file that looks like a model, is named like a model, and fails
+    at load time with something unrelated-sounding. Worth one open() to rule out.
+    """
+    with path.open("rb") as handle:
+        return handle.read(40).startswith(b"version https://git-lfs.github.com/spec")
+
+
+def assert_lfs_declared() -> None:
+    for rel in LFS_REQUIRED:
+        out = subprocess.run(["git", "-C", str(REPO_ROOT), "check-attr", "filter", "--", rel],
+                             capture_output=True, text=True)
+        if "filter: lfs" not in out.stdout:
+            raise SystemExit(
+                f"ERROR: {rel} is not declared as LFS in .gitattributes.\n"
+                f"  Committing it would put a large binary in every clone, permanently.\n"
+                f"  Add:  {rel} filter=lfs diff=lfs merge=lfs -text")
+
+
+def plan() -> list[tuple[str, str]]:
+    return [(model, name) for model, names in WEIGHTS.items() for name in names]
+
+
+def build() -> int:
+    assert_lfs_declared()
+
+    missing = [f"{m}/{n}" for m, n in plan() if not (ARTIFACTS / m / n).exists()]
+    if missing:
+        raise SystemExit(f"ERROR: {len(missing)} artifact(s) missing: {missing}\n"
+                         f"  Train the model or fix the map in {Path(__file__).name}; do not "
+                         f"skip, or the folder silently omits a model.")
+    pointers = [f"{m}/{n}" for m, n in plan() if is_lfs_pointer(ARTIFACTS / m / n)]
+    if pointers:
+        raise SystemExit(f"ERROR: these are LFS POINTERS, not real files: {pointers}\n"
+                         f"  Run `git lfs pull` first. Copying a pointer produces a broken model "
+                         f"that fails only at load time.")
+
+    if DEST.exists():
+        shutil.rmtree(DEST)
+    entries = {}
+    for model, name in plan():
+        source = ARTIFACTS / model / name
+        dest = DEST / model / name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, dest)
+        entries[f"{model}/{name}"] = {
+            "source": f"artifacts/{model}/{name}",
+            "sha256": sha256(source),
+            "bytes": source.stat().st_size,
+        }
+
+    (DEST / "README.txt").write_text(README, encoding="utf-8")
+    (DEST / "MANIFEST.json").write_text(json.dumps({
+        "generated_by": "instrument_robustness.bundle_weights",
+        "models": sorted(WEIGHTS),
+        "n_files": len(entries),
+        "total_bytes": sum(e["bytes"] for e in entries.values()),
+        "files": dict(sorted(entries.items())),
+    }, indent=2) + "\n", encoding="utf-8")
+
+    for model in sorted(WEIGHTS):
+        mb = sum(entries[f"{model}/{n}"]["bytes"] for n in WEIGHTS[model]) / 1048576
+        print(f"  {model:<6} {len(WEIGHTS[model])} file(s)  {mb:8.2f} MB")
+    print(f"\nwrote {DEST}  ({len(entries)} files, "
+          f"{sum(e['bytes'] for e in entries.values()) / 1048576:.1f} MB)")
+    return 0
+
+
+def check() -> int:
+    manifest_path = DEST / "MANIFEST.json"
+    if not manifest_path.exists():
+        print(f"FAIL: no bundle at {DEST}. Run without --check to build it.", file=sys.stderr)
+        return 1
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    problems = []
+    for rel, rec in manifest["files"].items():
+        source, copy = REPO_ROOT / rec["source"], DEST / rel
+        if not source.exists():
+            problems.append(f"{rel}: source {rec['source']} no longer exists")
+        elif not copy.exists():
+            problems.append(f"{rel}: copy missing")
+        elif sha256(source) != rec["sha256"]:
+            problems.append(f"{rel}: SOURCE CHANGED (retrained?) since the bundle was built")
+        elif sha256(copy) != rec["sha256"]:
+            problems.append(f"{rel}: copy differs from its source")
+    for model, name in plan():
+        if f"{model}/{name}" not in manifest["files"]:
+            problems.append(f"{model}/{name}: in the map but not the manifest (rebuild)")
+
+    if problems:
+        print(f"FAIL: {len(problems)} problem(s):", file=sys.stderr)
+        for p in problems:
+            print(f"  {p}", file=sys.stderr)
+        print("\nRebuild: python -m instrument_robustness.bundle_weights", file=sys.stderr)
+        return 1
+    print(f"weights OK: {len(manifest['files'])} files match their sources "
+          f"({manifest['total_bytes'] / 1048576:.1f} MB)")
+    return 0
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--check", action="store_true",
+                        help="verify the weights match artifacts/; write nothing")
+    raise SystemExit(check() if parser.parse_args().check else build())
+
+
+if __name__ == "__main__":
+    main()
