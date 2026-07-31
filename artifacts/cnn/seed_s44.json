@@ -1,0 +1,98 @@
+{
+  "seed": 44,
+  "best_epoch": 14,
+  "best_val_loss": 0.22008252235290737,
+  "val_balanced_accuracy": 0.9463569149648555,
+  "val_mcc": 0.94582271417115,
+  "mean_epoch_s": 405.9122855318234,
+  "checkpoint": "C:\\Users\\maxim\\AppData\\Local\\Temp\\claude\\C--Users-maxim-RISE-project\\bc15cd5d-5a45-4f3e-afef-6e91ee21004f\\scratchpad\\main-port\\artifacts\\cnn\\model_s44.pt",
+  "config_fingerprint": {
+    "fingerprint_version": 2,
+    "archive_base": "https://archive.org/download/philharmonicorchestrasamples",
+    "sr": 22050,
+    "waveform_subtype": "PCM_16",
+    "window_s": 3.0,
+    "hop_s": 3.0,
+    "short_window_policy": "tile",
+    "trim_top_db": 30,
+    "min_trim_s": 0.1,
+    "split_group_fields": [
+      "label",
+      "note"
+    ],
+    "split_policy": "label_note_pitch_group",
+    "split_fracs": [
+      0.7,
+      0.15,
+      0.15
+    ],
+    "split_seed": 0,
+    "min_window_content_s": 0.5,
+    "max_windows_per_source": 1,
+    "stft_pad_mode": "reflect",
+    "logmel_top_db": null,
+    "target_rms": 0.1,
+    "articulations": {
+      "bassoon": [
+        "normal"
+      ],
+      "cello": [
+        "arco-normal"
+      ],
+      "clarinet": [
+        "normal"
+      ],
+      "double-bass": [
+        "arco-normal"
+      ],
+      "flute": [
+        "normal"
+      ],
+      "french-horn": [
+        "normal"
+      ],
+      "oboe": [
+        "normal"
+      ],
+      "trombone": [
+        "normal"
+      ],
+      "trumpet": [
+        "normal"
+      ],
+      "tuba": [
+        "normal"
+      ],
+      "viola": [
+        "arco-normal"
+      ],
+      "violin": [
+        "arco-normal"
+      ]
+    },
+    "n_mels": 128,
+    "n_fft": 2048,
+    "hop_length": 512,
+    "n_frames": 130,
+    "n_mfcc": 20,
+    "svm_standardization": "per_feature_train",
+    "logmel_standardization": "per_mel_bin_train",
+    "labels": [
+      "bassoon",
+      "cello",
+      "clarinet",
+      "double-bass",
+      "flute",
+      "french-horn",
+      "oboe",
+      "trombone",
+      "trumpet",
+      "tuba",
+      "viola",
+      "violin"
+    ]
+  },
+  "architecture": "MediumCNN",
+  "train_sha256": "b8e04a4391ebbadda302df3f00309de4be30c8b7de46bad1c3cd194d7d747966",
+  "val_sha256": "7a540b9e5441861c9bb0dd75073b198d4f8d38ae752a3416d0703356045d9ed4"
+}
