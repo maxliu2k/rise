@@ -10,8 +10,8 @@ Regenerate with `python -m instrument_robustness.summarize_results --write`. Eve
 | SVM | test | 0.9914 | 0.9920 | 1255.0000 | canonical |
 | PANNs | test | 0.9845 | 0.9841 | 1255.0000 | canonical |
 | MERT | test | 0.9246 | 0.9259 | 1255.0000 | canonical |
-| CNN | val (5-seed) | 0.9523 | — | — | canonical (val only, test not run) |
-| CRNN | val (5-seed) | 0.9598 | — | — | canonical (val only, test not run) |
+| CNN | val (5-seed) | — | — | — | STALE (pre-standardisation, no selection_metric); retrain |
+| CRNN | val (5-seed) | — | — | — | STALE (pre-standardisation, no selection_metric); retrain |
 
 ## Noise robustness — macro-F1 retention vs clean (replicates averaged)
 

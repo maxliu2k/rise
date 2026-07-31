@@ -177,14 +177,28 @@ either after `noise_sweep --generate` would invalidate the shared noisy corpus.
 - **Contrast:** SVM, MERT, CNN and CRNN all have one-shot status files. AST and PANNs are the two
   outliers.
 
-### 🟡 10. CNN/CRNN optimize balanced accuracy, not macro-F1
-- **Improved:** `finalize_cnn` now *records* macro-F1 (added for item 7), so CNN/CRNN results are
-  comparable on the project's primary metric and can pass the parity gate.
-- **Still open:** `train_cnn` still *selects* on `val_balanced_accuracy`, including the combiner
-  choice. Selection metric and refit procedure remain inconsistent with SVM/MERT.
-- **Note the underlying tension:** `step4_window.py` argues balanced accuracy and MCC are the
-  *right* metrics under imbalance, while the whole evaluation stack uses macro-F1. That
-  contradiction is still unresolved project-wide, and it decides which of the two should change.
+### ✅ 10. CNN/CRNN optimize balanced accuracy, not macro-F1
+- **Resolved by standardising the whole project on macro-F1.** `train_cnn.run_training` (which
+  `train_crnn` also uses) now selects the combiner on `validation_macro_f1`, and writes
+  `selection_metric: "validation_macro_f1"`. All six models now select and report on one metric.
+- **Balanced accuracy and MCC are still recorded in full** — per seed and per combiner
+  (`single_seed_val_balanced_accuracy`, `ensemble_val_balanced_accuracy`) and in every
+  `finalize_*` test block. Nothing was lost; a reader who distrusts the standardisation can check
+  it from the same file.
+- **Two new gates make a pre-standardisation result unquotable rather than silently wrong.**
+  `finalize_cnn` refuses a summary whose `selection_metric` is not `validation_macro_f1` (gate 3),
+  and `summarize_results` marks such a row `STALE (selected on ..., not macro-F1; retrain)`
+  instead of printing a balanced-accuracy number under a macro-F1 heading.
+- **The underlying tension is a decision, not a resolution.** `step4_window.py` and CLAUDE.md argue
+  balanced accuracy and MCC are the *right* metrics under imbalance — macro-F1 pays a collapsed
+  classifier more as imbalance grows (0.3333 at a 0.50 prior, 0.4737 at 0.90). Macro-F1 was chosen
+  because four of six models, the clean-parity gate and every noise metric already used it, and
+  because SVM and MERT have already spent their single test evaluations under it; switching the
+  other way would mean re-selecting and re-spending them. Comparability won over metric quality,
+  deliberately. This is why MCC is retained everywhere: it is the collapse detector macro-F1 lacks.
+- **Consequence:** CNN and CRNN must be retrained before their numbers are quotable. Their existing
+  `validation_summary.json` files select on balanced accuracy and are now correctly reported as
+  STALE.
 
 ### 🟡 11. Inconsistent neural seed coverage
 - **CNN/CRNN:** 5 seeds (`DEFAULT_SEEDS = (42, 43, 44, 45, 46)`) plus ensembling. Good.
