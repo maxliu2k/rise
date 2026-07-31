@@ -1,2 +1,0 @@
-test_clips,accuracy,accuracy_pct,balanced_accuracy,balanced_accuracy_pct,mcc,macro_f1,macro_f1_pct
-1310,0.9870229007633587,98.7,0.9870547475359704,98.71,0.985839312892837,0.986577135104469,98.66
