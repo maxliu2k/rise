@@ -78,9 +78,26 @@ def clean_row(name, spec, current_fp):
     doc = json.loads(path.read_text())
     fp = _dig(doc, spec["fp"])
     block = _dig(doc, spec["test"]) or {}
-    # test blocks record macro_f1; the 5-seed validation summary records it as `mean`.
+    # Test blocks record macro_f1 explicitly. The CNN/CRNN 5-seed validation summary records its
+    # headline under `mean` inside single_seed_val -- which, since the metric standardisation, IS
+    # macro-F1 (train_cnn selects on it). Before that change `mean` was balanced accuracy, so a
+    # pre-standardisation summary would put a balanced-accuracy number in a macro-F1 column with
+    # no visible sign. Refuse rather than guess: the field says which metric it is.
     macro = _dig(block, "macro_f1")
     if macro is None:
+        # Reaching here means the file has no explicit macro_f1 and we are about to read `mean`
+        # out of a CNN/CRNN 5-seed block. That is only macro-F1 if the summary was written after
+        # the metric standardisation, which is exactly what selection_metric records. An ABSENT
+        # field means "written before it existed", i.e. `mean` is balanced accuracy -- so absent
+        # must fail too. Treating absent as acceptable is how a balanced-accuracy number ends up
+        # printed under a macro_f1 heading with no visible sign, which is what this table exists
+        # to prevent.
+        metric = doc.get("selection_metric")
+        if metric != "validation_macro_f1":
+            why = (f"selected on {metric}" if metric is not None
+                   else "pre-standardisation, no selection_metric")
+            return dict(model=name, split=spec["split"], macro_f1=None, accuracy=None, n=None,
+                        status=f"STALE ({why}); retrain")
         macro = _dig(block, "mean")
     stale = fp != current_fp
     status = "STALE (config mismatch)" if stale else "canonical"
@@ -147,7 +164,11 @@ def main():
     print(text)
     if args.write:
         out = REPO_ROOT / "docs" / "RESULTS.md"
-        out.write_text(text)
+        # encoding is explicit: the table uses an em-dash for missing values, and write_text()
+        # defaults to the platform encoding -- on Windows that silently rewrites the whole file as
+        # cp1252, so regenerating on a different machine than last time changes every non-ASCII
+        # byte and shows up as a spurious diff.
+        out.write_text(text, encoding="utf-8")
         print(f"wrote {out}")
 
 
