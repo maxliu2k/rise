@@ -1,4 +1,4 @@
-"""Fine-tune pretrained AST on the Step-5 normalized window splits."""
+"""Fine-tune AST using train/validation only; test remains sealed for finalize_ast."""
 import argparse
 import hashlib
 import json
@@ -17,11 +17,10 @@ from instrument_robustness.ast_data import (
     validate_ast_window_files,
 )
 from instrument_robustness.config import (
+    ARTIFACTS,
     AST_MODEL,
-    DATA_ROOT,
     INSTRUMENT_FAMILY,
     WINDOWS_CSV,
-    assert_fingerprint,
     config_fingerprint,
 )
 from instrument_robustness.pretrained_extractors import build_ast_extractor, build_ast_model
@@ -303,7 +302,6 @@ def train(
     }
     train_loader = make_ast_dataloader("train", **loader_args, shuffle=True)
     val_loader = make_ast_dataloader("val", **loader_args, shuffle=False)
-    test_loader = make_ast_dataloader("test", **loader_args, shuffle=False)
 
     model = build_ast_model(labels).to(target_device)
     model.config.instrument_robustness_fingerprint = config_fingerprint()
@@ -324,7 +322,7 @@ def train(
             flush=True,
         )
 
-    best_score = (float("-inf"), float("-inf"), float("-inf"))
+    best_score = float("-inf")
     best_epoch = None
     history = []
     for epoch in range(1, epochs + 1):
@@ -355,37 +353,24 @@ def train(
             f"MCC {val_metrics['mcc']:.3f}"
         )
 
-        score = (
-            val_metrics["balanced_accuracy"],
-            val_metrics["mcc"],
-            val_metrics["accuracy"],
-        )
+        score = val_metrics["macro_f1"]
         if score > best_score:
             best_score = score
             best_epoch = epoch
             model.save_pretrained(output_dir)
             extractor.save_pretrained(output_dir)
 
-    from transformers import ASTForAudioClassification
-
-    best_model = ASTForAudioClassification.from_pretrained(output_dir).to(target_device)
-    assert_fingerprint(
-        getattr(best_model.config, "instrument_robustness_fingerprint", None),
-        str(output_dir),
-    )
-    test_metrics, true_labels, predicted_labels = _run_epoch(
-        best_model,
-        test_loader,
-        target_device,
-        num_labels,
-        collect_predictions=True,
-        phase="test",
-    )
-    reports = _write_test_reports(output_dir, true_labels, predicted_labels, labels)
+    weights = output_dir / "model.safetensors"
+    if not weights.exists():
+        weights = output_dir / "pytorch_model.bin"
+    if not weights.exists():
+        raise FileNotFoundError(f"AST did not save model weights under {output_dir}")
     metrics = {
-        "labels": labels,
+        "protocol": "train selected by validation macro-F1; test remains sealed",
+        "model": "AST fine-tuned from " + AST_MODEL,
+        "label_order": labels,
         "num_labels": num_labels,
-        "selection_metric": "validation_balanced_accuracy",
+        "selection_metric": "validation_macro_f1",
         "best_epoch": best_epoch,
         "class_weights": (
             {
@@ -398,7 +383,6 @@ def train(
         "class_counts": {
             "train": train_loader.dataset.class_counts,
             "val": val_loader.dataset.class_counts,
-            "test": test_loader.dataset.class_counts,
         },
         "config_fingerprint": config_fingerprint(),
         "windows_manifest": {
@@ -407,78 +391,21 @@ def train(
             "window_count": window_count,
         },
         "history": history,
-        "test": test_metrics,
-        "per_instrument": reports["per_instrument"],
-        "per_family": reports["per_family"],
-    }
-    (output_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
-    _write_clean_test_summary(
-        output_dir,
-        labels=labels,
-        test_metrics=test_metrics,
-        test_examples=len(test_loader.dataset),
-        best_epoch=best_epoch,
-    )
-    print(
-        f"test loss {test_metrics['loss']:.4f} | acc {test_metrics['accuracy']:.3f} "
-        f"| balanced-acc {test_metrics['balanced_accuracy']:.3f} "
-        f"| MCC {test_metrics['mcc']:.3f}"
-    )
-    print(f"wrote test reports to {output_dir}")
-    return metrics
-
-
-def _write_clean_test_summary(
-    output_dir,
-    *,
-    labels,
-    test_metrics,
-    test_examples,
-    best_epoch,
-):
-    """Write test_summary.json in the shared clean-result contract.
-
-    metrics.json is AST's own rich record and keeps its shape. This is the separate, minimal file
-    that noise_eval_common.load_official_summary can read: it requires `label_order` to equal
-    TARGET_LABELS and a verifiable `config_fingerprint`, and run_noise_evaluation needs
-    `test_examples` and `test_metrics.macro_f1` for the clean-parity gate. Without this file the
-    AST branch cannot enter the noise sweep at all.
-
-    `output_files.model` points at the saved weights when present so the gate can confirm the
-    checkpoint being evaluated is the one this score came from.
-    """
-    weights = output_dir / "model.safetensors"
-    if not weights.exists():
-        weights = output_dir / "pytorch_model.bin"
-    summary = {
-        "protocol": (
-            "hyperparameters and epoch selected on validation balanced accuracy; "
-            "test evaluated once at the end of training"
-        ),
-        "model": "AST fine-tuned from " + AST_MODEL,
-        "selection_metric": "validation_balanced_accuracy",
-        "best_epoch": best_epoch,
-        "label_order": list(labels),
-        "config_fingerprint": config_fingerprint(),
-        "test_examples": int(test_examples),
-        "test_metrics": {
-            "accuracy": test_metrics["accuracy"],
-            "balanced_accuracy": test_metrics["balanced_accuracy"],
-            "macro_f1": test_metrics["macro_f1"],
-            "mcc": test_metrics["mcc"],
-            "loss": test_metrics["loss"],
-        },
+        "training_examples": len(train_loader.dataset),
+        "validation_examples": len(val_loader.dataset),
+        "validation_metrics": history[best_epoch - 1]["val"],
+        "test_evaluated": False,
         "output_files": {
-            "model": (
-                {"path": str(weights), "sha256": _sha256(weights)}
-                if weights.exists()
-                else None
-            )
+            "model": {"path": str(weights), "sha256": _sha256(weights)},
         },
     }
-    (output_dir / "test_summary.json").write_text(json.dumps(summary, indent=2) + "\n")
-    print(f"wrote {output_dir / 'test_summary.json'} (shared clean-result contract)")
-    return summary
+    (output_dir / "validation_summary.json").write_text(json.dumps(metrics, indent=2) + "\n")
+    print(
+        f"selected epoch {best_epoch} | validation macro-F1 "
+        f"{metrics['validation_metrics']['macro_f1']:.4f}"
+    )
+    print(f"test remains sealed; run finalize_ast exactly once for {output_dir}")
+    return metrics
 
 
 def _sha256(path):
@@ -494,7 +421,7 @@ def parse_args():
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--learning-rate", type=float, default=1e-5)
-    parser.add_argument("--output-dir", type=Path, default=DATA_ROOT / "models" / "ast")
+    parser.add_argument("--output-dir", type=Path, default=ARTIFACTS / "ast")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", help="Torch device, such as cuda or cpu")
     parser.add_argument(

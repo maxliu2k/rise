@@ -1,6 +1,6 @@
 {
   "artifact": "windows.csv",
-  "sha256": "43f570b93a3c7b8baff4bcb3bfd1431566f6628aaec161722a666ee665a72875",
+  "sha256": "481302eb3f710f7f1e993adadefa08271ea7566036c198bee639ab8af2c1638f",
   "stage": "step5_normalize",
   "fingerprint": {
     "fingerprint_version": 2,
@@ -66,6 +66,12 @@
         "arco-normal"
       ]
     },
+    "excluded_conflicting_label_paths": [
+      "cello/Ds5/cello_Ds5_05_forte_arco-normal.mp3",
+      "french-horn/E2/french-horn_E2_1_fortissimo_normal.mp3",
+      "oboe/E6/oboe_E6_15_mezzo-forte_normal.mp3",
+      "viola/G6/viola_G6_05_fortissimo_arco-normal.mp3"
+    ],
     "n_mels": 128,
     "n_fft": 2048,
     "hop_length": 512,
@@ -89,7 +95,7 @@
     ]
   },
   "metadata": {
-    "windows_audio_inventory_sha256": "0fe284c5a2ab86aaf037c6592b497ce5b65732c1cc57be37b50d1c2db6165ad3",
-    "windows_audio_file_count": 8378
+    "windows_audio_inventory_sha256": "ae2d0b800b7894f46662de888b087aba21a51301bcdea402f84efe52e5ab5e2f",
+    "windows_audio_file_count": 8374
   }
 }

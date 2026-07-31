@@ -32,7 +32,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from instrument_robustness.config import ARTIFACTS, REPO_ROOT
+from instrument_robustness.config import ARTIFACTS, DATASET_FREEZE, REPO_ROOT
 
 DEST = REPO_ROOT / "models"
 
@@ -54,13 +54,35 @@ WEIGHTS: list[tuple[str, str, str]] = [
     *[("crnn", f"model_s{s}.pt", f"crnn_seed{s}.pt") for s in (42, 43, 44, 45, 46)],
     ("mert",  "best_probe.pt",                  "mert_probe_selected.pt"),
     ("mert",  "final_probe.pt",                 "mert_probe_final.pt"),
-    # Philharmonia only. The TinySOL probe stays at artifacts/panns/ (and in the
-    # v1.0-panns-12class tag) -- it belongs to the cross-dataset experiment, not to the six-model
-    # Philharmonia comparison this folder represents.
-    ("panns", "panns_probe_philharmonia.pt",    "panns_probe_philharmonia.pt"),
     ("svm",   "best_model.joblib",              "svm_selected.joblib"),
     ("svm",   "final_model.joblib",             "svm_final.joblib"),
 ]
+
+# The reported PANNs result used this full fine-tune, not the much smaller probe formerly copied
+# into models/. It is deliberately distributed as a release asset to avoid committing another
+# 312 MB checkpoint. A pointer is honest; substituting the probe is not.
+HISTORICAL_EXTERNAL_WEIGHTS = {
+    "ast_finetuned_philharmonia_8378.safetensors": {
+        "model": "ast",
+        "role": "reported Philharmonia clean model (historical 8,378-source build; validation-balanced-accuracy selection and unsealed test; not valid for the corrected frozen build)",
+        "sha256": "25789685e1cb0a4df0d64e5c84df84f49eff72c2831cc8e89fb02bd7676763e7",
+        "bytes": 344820808,
+        "windows_csv_sha256": "cfb725e320b703364dc3f5f3b8d98782c93c594630d89e6a5e147ac33b63e8ab",
+        "git_commit": "baa5970",
+        "git_path": "artifacts/new-ast-results-20260730-022036/model.safetensors",
+    },
+}
+
+EXTERNAL_WEIGHTS = {
+    "panns_finetune_philharmonia.pt": {
+        "model": "panns",
+        "role": "reported Philharmonia clean and noise model (historical 8,378-source build; not valid for the corrected frozen build)",
+        "sha256": "00cc195e1cbea756fc0afcb1ab823d639e31668c1a859f67941c29fda40741e3",
+        "release_tag": "v1.0-panns-12class",
+        "dataset_fingerprint": "89f126e290d0a9674e4e0a2b6344dcced32fa42ebe4e872006918e044f723073",
+        "download_url": "https://github.com/maxliu2k/rise/releases/download/v1.0-panns-12class/panns_finetune_philharmonia.pt",
+    }
+}
 
 # Paths that must be declared LFS before they are written, or git commits a raw blob.
 LFS_REQUIRED = ("models/ast_finetuned.safetensors",)
@@ -78,9 +100,9 @@ Verify nothing has drifted: python -m instrument_robustness.bundle_weights --che
   svm_final.joblib              refit on TRAIN+VAL, used for the test evaluation
   mert_probe_selected.pt        fit on TRAIN, chosen on validation
   mert_probe_final.pt           refit on TRAIN+VAL, used for the test evaluation
-  panns_probe_philharmonia.pt   PANNs linear probe (the TinySOL probe stays in
-                                artifacts/panns/ -- cross-dataset experiment, not
-                                part of the six-model Philharmonia comparison)
+  panns_finetune_philharmonia.pt
+                                PANNs full fine-tune used by the historical reported
+                                clean/noise result; external release pointer in MANIFEST.json
 
 _selected and _final are NOT interchangeable. _selected is what validation chose; _final saw the
 validation split during fitting, so scoring it on validation is meaningless. For the seed
@@ -95,6 +117,10 @@ where the metrics, confusion matrices and status files live. Nothing here is loa
 
 ast_finetuned.safetensors is Git LFS. Clone with git-lfs installed, or you get a 130-byte pointer
 that fails only when something tries to load it as a model.
+
+The PANNs fine-tune is NOT copied into this folder. MANIFEST.json records its exact filename,
+SHA-256, release URL and scientific role. Download it explicitly and verify the hash. The included
+probe was removed because it cannot reproduce the reported PANNs result.
 """
 
 
@@ -134,6 +160,20 @@ def plan() -> list[tuple[str, str, str]]:
 def build() -> int:
     assert_lfs_declared()
 
+    if not DATASET_FREEZE.is_file():
+        raise SystemExit(f"ERROR: no frozen dataset record at {DATASET_FREEZE}")
+    frozen = json.loads(DATASET_FREEZE.read_text(encoding="utf-8"))["dataset_fingerprint"]
+    stale_external = [
+        name for name, record in EXTERNAL_WEIGHTS.items()
+        if record.get("dataset_fingerprint") != frozen
+    ]
+    if stale_external:
+        raise SystemExit(
+            "ERROR: external weight pointer(s) belong to a different dataset build: "
+            f"{stale_external}. Publish the corrected checkpoint and update its exact pointer; "
+            "do not substitute a historical model."
+        )
+
     missing = [f"{m}/{src}" for m, src, _ in plan() if not (ARTIFACTS / m / src).exists()]
     if missing:
         raise SystemExit(f"ERROR: {len(missing)} artifact(s) missing: {missing}\n"
@@ -162,10 +202,12 @@ def build() -> int:
     (DEST / "README.txt").write_text(README, encoding="utf-8")
     (DEST / "MANIFEST.json").write_text(json.dumps({
         "generated_by": "instrument_robustness.bundle_weights",
-        "models": sorted({m for m, _, _ in WEIGHTS}),
+        "models": sorted({m for m, _, _ in WEIGHTS} | {r["model"] for r in EXTERNAL_WEIGHTS.values()}),
         "n_files": len(entries),
         "total_bytes": sum(e["bytes"] for e in entries.values()),
         "files": dict(sorted(entries.items())),
+        "external_files": EXTERNAL_WEIGHTS,
+        "historical_external_files": HISTORICAL_EXTERNAL_WEIGHTS,
     }, indent=2) + "\n", encoding="utf-8")
 
     for name, rec in sorted(entries.items()):
@@ -196,6 +238,10 @@ def check() -> int:
     for _, _, dest_name in plan():
         if dest_name not in manifest["files"]:
             problems.append(f"{dest_name}: in the map but not the manifest (rebuild)")
+    if manifest.get("external_files") != EXTERNAL_WEIGHTS:
+        problems.append("external checkpoint pointers differ from the declared release identities")
+    if manifest.get("historical_external_files") != HISTORICAL_EXTERNAL_WEIGHTS:
+        problems.append("historical checkpoint pointers differ from their recorded identities")
 
     if problems:
         print(f"FAIL: {len(problems)} problem(s):", file=sys.stderr)

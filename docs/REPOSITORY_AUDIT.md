@@ -8,6 +8,17 @@ Audited commit: `417c57d` (`plan_noise.md: the noise methodology in plain terms`
 
 Audit mode: read-only inspection plus safe tests; no experiment, data, or model regeneration
 
+> **Post-audit remediation, 2026-07-31.** This document preserves the evidence observed at the
+> audited commit; its old counts/results are historical, not current. DATA-001 was resolved by
+> excluding all four ambiguous files (rather than guessing labels), and the pipeline was rebuilt
+> and sealed at 8,374 sources: train 5,861, validation 1,258, test 1,255; 544 pitch groups; zero
+> cross-label exact-audio groups. Dataset fingerprint:
+> `26f067648aa90f586299001a26b4eca3a294f277e98a669af97025005884b7d9`.
+> MODEL-001/MODEL-002/MODEL-003 were repaired in code: AST/PANNs now train on train/validation
+> only, select on validation macro-F1, hash their selected/base checkpoints, and use separate
+> one-time finalizers. The stale active artifacts and weight copies described below were removed;
+> all six models and the shared noise corpus still require rerunning on this frozen build.
+
 ## Evidence labels
 
 The following labels have precise meanings throughout this report:

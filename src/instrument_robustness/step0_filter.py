@@ -23,6 +23,7 @@ Filtering costs little: `normal`/`arco-normal` is 82% of the archive, not a slic
 import pandas as pd
 
 from instrument_robustness.config import (
+    CONFLICTING_LABEL_PATHS,
     MANIFEST_FINGERPRINT,
     MANIFEST_IN,
     MANIFEST_LABELED,
@@ -33,6 +34,18 @@ from instrument_robustness.config import (
     assert_artifact_fingerprint,
     write_artifact_fingerprint,
 )
+
+
+def exclude_conflicting_labels(df, expected_paths=CONFLICTING_LABEL_PATHS):
+    conflicts = df[df["path"].isin(expected_paths)]
+    found = set(conflicts["path"])
+    missing = set(expected_paths) - found
+    if missing:
+        raise RuntimeError(
+            "Expected conflicting-label source(s) are absent from manifest.csv: "
+            + ", ".join(sorted(missing))
+        )
+    return df[~df["path"].isin(expected_paths)].copy(), sorted(found)
 
 def main():
     assert_artifact_fingerprint(
@@ -57,6 +70,11 @@ def main():
     df = df[keep].copy()
     n_plain = len(df)
 
+    df, excluded_conflicts = exclude_conflicting_labels(df)
+    print(f"excluding {len(excluded_conflicts)} byte-identical, conflicting-label source files:")
+    for path in excluded_conflicts:
+        print(f"  - {path}")
+
     # Verify each file exists and is non-empty on disk.
     sizes = df["path"].map(lambda p: (ROOT / p).stat().st_size if (ROOT / p).exists() else -1)
     bad = df[sizes <= 0]
@@ -73,6 +91,7 @@ def main():
     print(f"\nrows in manifest.csv          : {n0}")
     print(f"rows after label filter       : {n_label}")
     print(f"rows after articulation filter: {n_plain}")
+    print(f"rows after conflict exclusion   : {len(df)}")
     print(f"rows after dropping defects   : {len(df)}")
     print(f"\nper-class counts (is_phrase split):")
     tab = df.groupby(["label", "is_phrase"]).size().unstack(fill_value=0)

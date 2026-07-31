@@ -18,7 +18,7 @@ fingerprinted stages for the onset-aligned, one-window-per-source dataset:
 ```bash
 prep_job=$(qsub -terse -v RISE_DATA_ROOT="$RISE_DATA_ROOT" scc/ast_prepare.qsub)
 export AST_OUTPUT_DIR="$RISE_DATA_ROOT/models/ast-canonical-$(date +%Y%m%d)"
-qsub -hold_jid "$prep_job" -v RISE_DATA_ROOT="$RISE_DATA_ROOT",AST_OUTPUT_DIR="$AST_OUTPUT_DIR" train_ast.qsub
+qsub -hold_jid "$prep_job" -v RISE_DATA_ROOT="$RISE_DATA_ROOT",AST_OUTPUT_DIR="$AST_OUTPUT_DIR" scc/train_ast.qsub
 qstat -u "$USER"
 ```
 
@@ -149,7 +149,7 @@ the repository under `artifacts/svm/noise/` and `artifacts/mert/noise/`.
 ## CNN and CRNN seed ensembles
 
 Both architectures share one job script; `RISE_ARCH` picks which. Unlike the AST and MERT jobs,
-these read the **Step-7 feature arrays**, so the data root needs the full nine-stage pipeline, not
+these read the **Step-7 feature arrays**, so the data root needs the full sealed pipeline, not
 just `--to step5_normalize`:
 
 ```bash

@@ -11,12 +11,13 @@ notes. Where an item is only partly done, the remaining work is stated explicitl
 | ⬜ **OPEN** | Not started. |
 | 📝 **WONTFIX / WRITE-UP** | Cannot be fixed in code; must be disclosed in the paper. |
 
-**Score: 11 fully fixed · 7 partial · 2 open · 2 write-up-only.**
+**Post-audit remediation (2026-07-31):** item 9 is now fixed in code. AST and PANNs training read
+only train/validation, select on validation macro-F1, and have separate hash-gated one-time
+finalizers. The next GPU runs remain outstanding.
 
 Closed outright: **1, 2, 3, 5, 6, 8, 16, 17, 18, 19, 22**.
 
-Still fully open: **9** (AST/PANNs sealed test) and **15** (external evaluation). Both need
-something code alone cannot supply — a training run, or an external corpus.
+Still fully open: **15** (external evaluation), which requires an external corpus and run.
 
 The MERT validation-only pilots are complete and the grid/replicate count are frozen. Changing
 either after `noise_sweep --generate` would invalidate the shared noisy corpus.
@@ -170,12 +171,14 @@ either after `noise_sweep --generate` would invalidate the shared noisy corpus.
 
 ## Clean-model comparison
 
-### ⬜ 9. AST and PANNs access test too early
-- **Verified open:** no `final_evaluation_status.json` under `artifacts/ast/`, and no sealed-test
-  guard in `train_ast.py` or `train_panns.py`. AST builds its test loader before training; PANNs
-  probe mode precomputes test embeddings before selection.
-- **Contrast:** SVM, MERT, CNN and CRNN all have one-shot status files. AST and PANNs are the two
-  outliers.
+### ✅ 9. AST and PANNs access test too early
+- **Fixed in code.** `train_ast.py` and `train_panns.py` contain no test loader or test embedding
+  extraction. Both write a validation-only summary with `test_evaluated: false` and select on
+  validation macro-F1.
+- `finalize_ast.py` and `finalize_panns.py` verify the configuration, label order, windows hash,
+  and selected-checkpoint hash, then exclusively create `final_evaluation_status.json` before test
+  access. Existing final artifacts make a second access fail.
+- Focused regression tests enforce both the no-test training boundary and the one-time claim.
 
 ### ✅ 10. CNN/CRNN optimize balanced accuracy, not macro-F1
 - **Resolved by standardising the whole project on macro-F1.** `train_cnn.run_training` (which
@@ -221,7 +224,8 @@ fixable — must be treated as an experimental factor and stated wherever the fa
   not asserted (a residual spread is expected). Lower-frequency MP3 artifacts remain unmeasured.
 
 ### 🟡 14. Tiling creates repeated audio
-- **Verified:** still 8,152 of 8,378 windows (**97.3%**) tiled; median `content_s` 0.906 s.
+- **Current corrected build:** 8,374 windows total; exact repetition/activity counts should be
+  regenerated before publication rather than copied from the superseded 8,378-source audit.
 - **Materially reduced in `69df21a`:** one window per source means window count no longer varies
   with recording length, removing that shortcut channel. `MediumCNN` uses global average pooling
   specifically so it cannot read loop period; `crnn_model` documents a measured probe finding no
@@ -239,8 +243,8 @@ Files from one instrument may share microphone, room, performer and session.
 - **Fixed.** `audio_inventory.py` hashes every window listed in `windows.csv` into one digest —
   `sha256` over `"<relative path>\0<file sha256>\n"`, path-sorted — and stores it in the existing
   sidecar's `metadata`. Same construction already used for the ESC-50 corpus.
-- **Recorded for the current build:** 8,378 files,
-  `0fe284c5a2ab86aaf037c6592b497ce5b65732c1cc57be37b50d1c2db6165ad3`. `--verify` round-trips to
+- **Recorded for the corrected frozen build:** 8,374 files,
+  `ae2d0b800b7894f46662de888b087aba21a51301bcdea402f84efe52e5ab5e2f`. `--verify` round-trips to
   `match`, and the pre-existing `assert_artifact_fingerprint` check still passes because the CSV
   itself is untouched — so this was added to a live build without regenerating anything.
 - **Demonstrated:** a test overwrites one WAV with same-length different bytes. The CSV sidecar check
@@ -326,8 +330,8 @@ claim.
 - **Fixed:** the README now points at what actually exists — per-stage console output, the
   fingerprint sidecars beside every manifest, and `_step4_report_block.txt` — and states explicitly
   that `pipeline_report.txt` was never written by any stage.
-- **Dead code, flagged not deleted:** `config.REPORT` still names the phantom file and has no
-  readers. Left in place per the repo's own convention on unrelated dead code.
+- **Dead code removed:** `config.REPORT` and the obsolete `.gitignore` exception no longer name
+  the phantom file.
 
 ---
 

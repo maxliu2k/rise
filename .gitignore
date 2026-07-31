@@ -251,7 +251,7 @@ all-samples/pipeline/*
 !all-samples/pipeline/splits.csv
 !all-samples/pipeline/windows.csv
 !all-samples/pipeline/norm_stats.json
-!all-samples/pipeline/pipeline_report.txt
+!all-samples/pipeline/dataset_freeze.json
 
 # --- Re-include: extraction plan docs under all-samples/features/ (docs only, never arrays) ---
 !all-samples/features/
@@ -265,4 +265,3 @@ all-samples/features/panns/*
 !all-samples/features/ast/EXTRACTION_PLAN.md
 !all-samples/features/mert/EXTRACTION_PLAN.md
 !all-samples/features/panns/EXTRACTION_PLAN.md
-

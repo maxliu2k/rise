@@ -1,8 +1,6 @@
 {
-  "artifact": "splits.csv",
-  "sha256": "e3ae5aaf634b44e35effc33c14c7eb496584b38c9afa3351079860a48b03bc6d",
-  "stage": "step3_split",
-  "fingerprint": {
+  "state": "frozen",
+  "config_fingerprint": {
     "fingerprint_version": 2,
     "archive_base": "https://archive.org/download/philharmonicorchestrasamples",
     "sr": 22050,
@@ -93,5 +91,30 @@
       "viola",
       "violin"
     ]
-  }
+  },
+  "manifest_sha256": "83b0025c250f1c295a835e4c37e3e3deb0cc07a93020c0723202a374308a08b5",
+  "windows_csv_sha256": "481302eb3f710f7f1e993adadefa08271ea7566036c198bee639ab8af2c1638f",
+  "windows_audio_inventory_sha256": "ae2d0b800b7894f46662de888b087aba21a51301bcdea402f84efe52e5ab5e2f",
+  "dataset_fingerprint": "26f067648aa90f586299001a26b4eca3a294f277e98a669af97025005884b7d9",
+  "window_audio_file_count": 8374,
+  "window_counts_by_split": {
+    "test": 1255,
+    "train": 5861,
+    "val": 1258
+  },
+  "window_counts_by_label": {
+    "bassoon": 648,
+    "cello": 746,
+    "clarinet": 770,
+    "double-bass": 764,
+    "flute": 781,
+    "french-horn": 545,
+    "oboe": 538,
+    "trombone": 759,
+    "trumpet": 433,
+    "tuba": 831,
+    "viola": 707,
+    "violin": 852
+  },
+  "cross_label_exact_audio_groups": 0
 }

@@ -505,15 +505,14 @@ mathematical views of the same canonical windows.
 | `all-samples/pipeline/norm_stats.{npz,json}` | Train-only feature statistics | SVM and mel means/stds | CURRENT local generated data |
 | `all-samples/features/{svm,cnn}/*.npz` | Materialized model arrays | `X`, `y`, metadata | CURRENT local generated data |
 | `all-samples/features/*/EXTRACTION_PLAN.md` | Pretrained-input notes | model-specific contracts | MIXED; some stale 9-class text |
-| `artifacts/{svm,mert,ast}` | Current clean checkpoints/results | summaries and confusion matrices | CURRENT clean results |
+| `artifacts/{svm,mert,ast}` | Clean checkpoints/results after reruns | summaries and confusion matrices | PENDING corrected-build reruns |
 | `legacy/9class_file_split/` | Retired leaking 9-class data/results | historical CSVs/checkpoints | LEGACY |
 | `tests/test_preprocessing.py` | Split, tiling, and fingerprint regressions | synthetic unit tests | CURRENT |
 | `tests/test_noise.py` | SNR, seed, manifest, parity, and statistics tests | `NoiseTests` | CURRENT |
 | `tests/test_{svm,mert,ast}.py` | Model data/test-access contracts | model-specific tests | CURRENT |
 
-> **Unresolved documentation conflict:** [`README.md` L86–87](../README.md#L86-L87) points to
-> `all-samples/pipeline/pipeline_report.txt`, but that file is absent in the inspected local build.
-> The smaller `_step4_report_block.txt` exists. Do not cite a nonexistent report in a paper.
+> **Resolved:** no stage writes `pipeline_report.txt`, and active documentation no longer points to
+> it. Use the fingerprinted manifests, `dataset_freeze.json`, and `_step4_report_block.txt`.
 
 ## 5. Source data and metadata
 

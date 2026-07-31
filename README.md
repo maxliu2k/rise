@@ -68,7 +68,7 @@ carry no fingerprint, and cover only 9 of the 12 classes.
 
 ## Run the pipeline
 
-One command. Nine stages, ~8 minutes warm (~13 with the first download):
+One command. Ten stages; the final stage seals the completed build:
 
 ```bash
 python -m instrument_robustness.run_pipeline
@@ -90,6 +90,7 @@ python -m instrument_robustness.step4_window      # 3.0 s window, short notes TI
 python -m instrument_robustness.step5_normalize   # per-window RMS normalize
 python -m instrument_robustness.step6_stats       # TRAIN-ONLY normalization stats
 python -m instrument_robustness.step7_featurize   # SVM / CNN / CRNN features
+python -m instrument_robustness.freeze_dataset    # hash every window and seal the split/build
 ```
 
 The order is enforced, not merely documented: every stage asserts its predecessor's fingerprint
@@ -99,10 +100,11 @@ Each stage prints its own shapes, per-class per-split counts, confound checks an
 runs, and `run_pipeline` collects the per-stage timings. The durable record is the fingerprint
 sidecar beside every manifest (`all-samples/pipeline/*.fingerprint.json`), which carries the config
 that produced it and the SHA-256 of the artifact itself. `all-samples/pipeline/_step4_report_block.txt`
-holds Step 4's window counts.
+holds Step 4's window counts. `all-samples/pipeline/dataset_freeze.json` is the authoritative build
+record; while it exists, Step 3 refuses to overwrite the split.
 
-> There is no `pipeline_report.txt`. It was referenced here for a while and never written by any
-> stage; `config.REPORT` still names it and has no readers. Do not cite it.
+> There is no `pipeline_report.txt`. It was referenced historically and never written by any
+> stage. Use the fingerprinted manifests, dataset seal, and `_step4_report_block.txt`.
 
 ## Fine-tune AST
 
@@ -116,11 +118,18 @@ python -m instrument_robustness.train_ast --epochs 10 --batch-size 8
 ```
 
 The command downloads `MIT/ast-finetuned-audioset-10-10-0.4593` on first use and writes the best
-checkpoint plus `metrics.json` to `all-samples/models/ast/` by default. For noisy runs, pass a
+validation-macro-F1 checkpoint plus `validation_summary.json` to `artifacts/ast/`. It never loads
+test. After accepting the validation selection, perform the one permitted test evaluation with:
+
+```bash
+python -m instrument_robustness.finalize_ast
+```
+
+For noisy runs, pass a
 waveform transform to `ASTWindowDataset` or `make_ast_dataloader`; it is applied to the 22050 Hz
 window before `ast_input`.
 
-After testing, that output directory also contains `test_by_instrument.csv` with accuracy,
+After finalization, that output directory also contains `test_by_instrument.csv` with accuracy,
 precision, recall, F1, and test-clip counts for each instrument; `test_by_family.csv` with
 percentage accuracy for strings, woodwinds, and brass; and `test_confusion_matrix.csv` showing
 which instruments were confused with one another.
@@ -175,6 +184,20 @@ On BU SCC, submit `scc/mert_probe.qsub` first and submit `scc/mert_finalize.qsub
 validation review. The MERT checkpoint is licensed CC-BY-NC-4.0; this branch is appropriate for
 the project's non-commercial research use, but that license must be reviewed before any
 commercial use.
+
+## Train PANNs
+
+PANNs CNN14 reads the Step-5 waveforms at its own 32 kHz input rate. Training is validation-only
+in either frozen-probe or full-fine-tune mode:
+
+```bash
+python -m instrument_robustness.train_panns --mode finetune
+```
+
+The pretrained `Cnn14_mAP=0.431.pth` file must be under `$RISE_DATA_ROOT/checkpoints/`; its SHA-256
+is recorded in both the validation summary and selected checkpoint. After validation review, run
+the single sealed test evaluation with `python -m instrument_robustness.finalize_panns`. SCC job
+wrappers are `scc/panns_train.qsub` and `scc/panns_finalize.qsub`.
 
 ## Evaluate clean-trained models under noise
 

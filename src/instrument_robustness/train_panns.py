@@ -11,8 +11,8 @@ Design notes:
   * Classification head reads CNN14's 2048-d `embedding` with softmax/CrossEntropy — NOT the
     pretrained sigmoid AudioSet head.
   * Split comes straight from windows.csv (pitch-group split) — no leakage re-introduced.
-  * Gentle inverse-frequency class weights (window imbalance is only ~2.3x); model selection and
-    reporting use macro-F1.
+  * Gentle inverse-frequency class weights; model selection uses validation macro-F1.
+  * Training never loads test. finalize_panns is the single sealed test entry point.
 
 Usage:
     python -m instrument_robustness.train_panns --mode probe
@@ -24,13 +24,15 @@ for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
            "NUMEXPR_NUM_THREADS", "NUMBA_NUM_THREADS"):
     os.environ.setdefault(_v, "1")   # keep librosa resampling in DataLoader workers single-threaded
 
-import argparse, json, time
+import argparse, hashlib, json, time
+from pathlib import Path
 import numpy as np, pandas as pd
 import torch, torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from sklearn.metrics import f1_score, confusion_matrix
 
 from instrument_robustness.config import (
+    ARTIFACTS,
     FEATURES,
     ROOT,
     TARGET_LABELS,
@@ -46,7 +48,7 @@ from instrument_robustness.pretrained_extractors import panns_input, PANNS_SR
 LABEL2IDX = {l: i for i, l in enumerate(TARGET_LABELS)}
 N_CLASSES = len(TARGET_LABELS)
 CKPT = ROOT / "checkpoints" / "Cnn14_mAP=0.431.pth"
-OUT = FEATURES / "panns"           # cache + results (gitignored)
+CACHE = FEATURES / "panns"
 
 
 def get_device():
@@ -138,7 +140,7 @@ def predict_full(model, loader, device):
 
 # --------------------------------------------------------------------------- embeddings (probe)
 def get_embeddings(model, df, split, device, args):
-    cache = OUT / f"emb_{split}.npz"
+    cache = args.cache_dir / f"emb_{split}.npz"
     if cache.exists() and not args.force:
         with np.load(cache) as data:
             assert_serialized_fingerprint(
@@ -165,7 +167,7 @@ def get_embeddings(model, df, split, device, args):
             Es.append(model.embed(x.to(device)).cpu().numpy())
             ys.append(np.asarray(y))
     E, Y = np.concatenate(Es), np.concatenate(ys)
-    OUT.mkdir(parents=True, exist_ok=True)
+    args.cache_dir.mkdir(parents=True, exist_ok=True)
     np.savez(
         cache,
         E=E,
@@ -179,11 +181,11 @@ def get_embeddings(model, df, split, device, args):
 
 
 def run_probe(args, device):
-    dfs = {s: load_split(s, args.limit) for s in ("train", "val", "test")}
+    dfs = {s: load_split(s, args.limit) for s in ("train", "val")}
     model = PannsClassifier(build_backbone(), freeze=True).to(device)
     E, Y = {}, {}
     print("extracting embeddings (frozen trunk):")
-    for s in ("train", "val", "test"):
+    for s in ("train", "val"):
         E[s], Y[s] = get_embeddings(model, dfs[s], s, device, args)
 
     Etr = torch.from_numpy(E["train"]).to(device)
@@ -194,7 +196,7 @@ def run_probe(args, device):
     lossfn = nn.CrossEntropyLoss(weight=class_weights(dfs["train"]).to(device))
     opt = torch.optim.AdamW(head.parameters(), lr=args.lr, weight_decay=1e-4)
 
-    best, best_state, bad, bs, n = -1.0, None, 0, 256, len(Ytr)
+    best, best_state, best_epoch, bad, bs, n = -1.0, None, None, 0, 256, len(Ytr)
     print("training linear head on cached embeddings:")
     for ep in range(args.epochs):
         head.train()
@@ -210,7 +212,7 @@ def run_probe(args, device):
             pv = head(Eva).argmax(1).cpu().numpy()
         f1 = f1_score(Y["val"], pv, average="macro", zero_division=0)
         if f1 > best:
-            best, bad = f1, 0
+            best, best_epoch, bad = f1, ep + 1, 0
             best_state = {k: v.detach().cpu().clone() for k, v in head.state_dict().items()}
         else:
             bad += 1
@@ -223,12 +225,11 @@ def run_probe(args, device):
     head.load_state_dict(best_state)
     with torch.no_grad():
         pv = head(Eva).argmax(1).cpu().numpy()
-        pt = head(torch.from_numpy(E["test"]).to(device)).argmax(1).cpu().numpy()
-    return {"val": report(Y["val"], pv), "test": report(Y["test"], pt)}, head
+    return {"val": report(Y["val"], pv), "best_epoch": best_epoch}, head
 
 
 def run_finetune(args, device):
-    dfs = {s: load_split(s, args.limit) for s in ("train", "val", "test")}
+    dfs = {s: load_split(s, args.limit) for s in ("train", "val")}
     model = PannsClassifier(build_backbone(), freeze=False).to(device)
     lossfn = nn.CrossEntropyLoss(weight=class_weights(dfs["train"]).to(device))
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
@@ -237,7 +238,7 @@ def run_finetune(args, device):
     va = DataLoader(WindowWaveformDataset(dfs["val"]), batch_size=args.batch_size,
                     num_workers=args.num_workers)
 
-    best, best_state, bad = -1.0, None, 0
+    best, best_state, best_epoch, bad = -1.0, None, None, 0
     for ep in range(args.epochs):
         model.train()
         t0, tot = time.time(), 0.0
@@ -253,7 +254,7 @@ def run_finetune(args, device):
         print(f"epoch {ep+1:2d}/{args.epochs}  loss={tot/len(dfs['train']):.3f}  "
               f"val_macroF1={f1:.4f}  ({time.time()-t0:.0f}s)")
         if f1 > best:
-            best, bad = f1, 0
+            best, best_epoch, bad = f1, ep + 1, 0
             best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
         else:
             bad += 1
@@ -263,10 +264,15 @@ def run_finetune(args, device):
 
     model.load_state_dict(best_state)
     yv, pv = predict_full(model, va, device)
-    yt, pt = predict_full(model, DataLoader(WindowWaveformDataset(dfs["test"]),
-                                            batch_size=args.batch_size,
-                                            num_workers=args.num_workers), device)
-    return {"val": report(yv, pv), "test": report(yt, pt)}, model
+    return {"val": report(yv, pv), "best_epoch": best_epoch}, model
+
+
+def _sha256(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def main():
@@ -281,7 +287,15 @@ def main():
     ap.add_argument("--force", action="store_true", help="recompute cached embeddings (probe)")
     ap.add_argument("--limit", type=int, default=None, help="cap windows/split (debug)")
     ap.add_argument("--smoke", action="store_true", help="tiny end-to-end sanity run then exit")
+    ap.add_argument("--cache-dir", type=Path, default=CACHE)
+    ap.add_argument("--output-dir", type=Path, default=ARTIFACTS / "panns")
     args = ap.parse_args()
+
+    if args.output_dir.exists() and any(args.output_dir.iterdir()):
+        raise SystemExit(
+            f"Output directory is not empty: {args.output_dir}. Use a fresh directory; "
+            "validation selections are never overwritten."
+        )
 
     if args.smoke:
         args.limit, args.epochs, args.num_workers = 24, 2, 0
@@ -307,25 +321,43 @@ def main():
                        "n_train": int(len(load_split("train", args.limit))),
                        "config_fingerprint": config_fingerprint()}
 
-    OUT.mkdir(parents=True, exist_ok=True)
-    res_path = OUT / f"results_{args.mode}{'_smoke' if args.smoke else ''}.json"
-    ckpt_path = OUT / f"panns_{args.mode}{'_smoke' if args.smoke else ''}.pt"
-    with open(res_path, "w") as f:
-        json.dump(metrics, f, indent=2)
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    res_path = args.output_dir / "validation_summary.json"
+    ckpt_path = args.output_dir / "selected_model.pt"
     torch.save(
         {
             "state_dict": model.state_dict(),
+            "mode": args.mode,
             "label_order": TARGET_LABELS,
             "config_fingerprint": config_fingerprint(),
+            "base_checkpoint_sha256": _sha256(CKPT),
         },
         ckpt_path,
     )
 
+    summary = {
+        "protocol": "train selected by validation macro-F1; test remains sealed",
+        "model": f"PANNs CNN14 {args.mode}",
+        "mode": args.mode,
+        "selection_metric": "validation_macro_f1",
+        "best_epoch": metrics["best_epoch"],
+        "label_order": list(TARGET_LABELS),
+        "config_fingerprint": config_fingerprint(),
+        "windows_manifest": {"path": str(WINDOWS_CSV), "sha256": _sha256(WINDOWS_CSV)},
+        "base_checkpoint": {"path": str(CKPT), "sha256": _sha256(CKPT)},
+        "training_examples": int(len(load_split("train", args.limit))),
+        "validation_examples": int(len(load_split("val", args.limit))),
+        "validation_metrics": metrics["val"],
+        "hyperparameters": metrics["meta"],
+        "test_evaluated": False,
+        "output_files": {"model": {"path": str(ckpt_path), "sha256": _sha256(ckpt_path)}},
+    }
+    res_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+
     print(f"\n==== PANNs {args.mode} done in {metrics['meta']['minutes']} min ====")
     print(f"VAL  macro-F1 {metrics['val']['macro_f1']}   acc {metrics['val']['accuracy']}")
-    print(f"TEST macro-F1 {metrics['test']['macro_f1']}   acc {metrics['test']['accuracy']}")
-    print("TEST per-class F1:", metrics["test"]["per_class_f1"])
-    print(f"wrote {res_path.name} + {ckpt_path.name} under features/panns/")
+    print("TEST remains sealed; run finalize_panns exactly once after selecting this run.")
+    print(f"wrote {res_path} and {ckpt_path}")
 
 
 if __name__ == "__main__":

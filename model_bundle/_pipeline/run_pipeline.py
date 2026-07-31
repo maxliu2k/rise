@@ -2,7 +2,7 @@
 
     python -m instrument_robustness.run_pipeline
 
-Nine stages in order, stopping at the first failure. Takes about 8 minutes on a warm cache, or
+Ten stages in order, stopping at the first failure. Takes about 8 minutes on a warm cache, or
 ~13 including the first download.
 
 WHY THIS EXISTS. The stages are individually runnable and always were, but "run these nine
@@ -47,6 +47,7 @@ STAGES = (
     "step5_normalize",
     "step6_stats",
     "step7_featurize",
+    "freeze_dataset",
 )
 
 # One thread per worker process. The stages parallelise across files themselves.

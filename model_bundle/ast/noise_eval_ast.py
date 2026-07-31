@@ -10,15 +10,12 @@ its own.
 
     noisy WAV -> read_audio_window -> ast_input (16 kHz, extractor) -> (1024,128) -> logits
 
-REQUIRES a contract-shaped `test_summary.json` in the model directory, written by train_ast. The
+REQUIRES a contract-shaped `test_summary.json` in the model directory, written by finalize_ast. The
 older `metrics.json` alone is not enough: it records `labels` rather than `label_order` and nests
 its counts differently, so `load_official_summary` cannot verify the label order or read the
 example count from it, and the clean-parity gate would have nothing to compare against.
 
-ONE SCOPE NOTE. AST's classifier was selected on validation BALANCED ACCURACY while the sweep's
-primary metric is macro-F1. The parity gate compares macro-F1 recomputed here against the macro-F1
-recorded at training time, so the gate is self-consistent -- but when AST is placed beside SVM and
-MERT, the selection asymmetry belongs in the caption.
+AST is selected on validation macro-F1, matching every other model family in the benchmark.
 """
 from __future__ import annotations
 
@@ -44,7 +41,7 @@ from instrument_robustness.noise_eval_common import (
     run_noise_evaluation,
 )
 from instrument_robustness.noise_sweep import read_audio_window, sha256_file
-from instrument_robustness.pretrained_extractors import ast_input, build_ast_extractor
+from instrument_robustness.pretrained_extractors import ast_input
 
 
 def get_device() -> str:
@@ -93,15 +90,15 @@ def main() -> None:
     summary_path = args.clean_summary or (model_dir / "test_summary.json")
     if not summary_path.is_file():
         raise FileNotFoundError(
-            f"Missing {summary_path}. train_ast writes it alongside metrics.json; re-run the AST "
-            "training/evaluation on the current data build to produce it."
+            f"Missing {summary_path}. Run finalize_ast once after validation selection."
         )
     weights = find_weights(model_dir)
     summary = load_official_summary(summary_path, expected_model_path=weights)
 
     device = args.device or get_device()
     model = load_model(model_dir, device)
-    extractor = build_ast_extractor()
+    from transformers import ASTFeatureExtractor
+    extractor = ASTFeatureExtractor.from_pretrained(str(model_dir))
     print(
         f"ast: device {device}, clean macro-F1 "
         f"{float(summary['test_metrics']['macro_f1']):.6f} over "

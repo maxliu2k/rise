@@ -74,6 +74,17 @@ STRICT_ARTICULATIONS = {
     "oboe": {"normal"}, "trombone": {"normal"}, "trumpet": {"normal"},
     "tuba": {"normal"}, "viola": {"arco-normal"}, "violin": {"arco-normal"},
 }
+
+# Two byte-identical audio pairs carry contradictory instrument labels in the upstream archive.
+# There is no trustworthy evidence in the repository for choosing either label, so Step 0 excludes
+# every member of both pairs. Keep paths relative to DATA_ROOT exactly as manifest.csv records them.
+# This policy belongs in the fingerprint because changing it changes which examples exist.
+CONFLICTING_LABEL_PATHS = {
+    "cello/Ds5/cello_Ds5_05_forte_arco-normal.mp3",
+    "viola/G6/viola_G6_05_fortissimo_arco-normal.mp3",
+    "french-horn/E2/french-horn_E2_1_fortissimo_normal.mp3",
+    "oboe/E6/oboe_E6_15_mezzo-forte_normal.mp3",
+}
 MAX_IMBALANCE = 1.5     # above this ratio, apply class weights (train_cnn, train_mert)
 
 SR = 22050            # common resample rate; Nyquist 11025 Hz sits below the lowest MP3 brick wall (~16 kHz)
@@ -282,7 +293,6 @@ MANIFEST_PRODUCER_STAGES = ("prep_data", "build_tinysol_manifest")
 
 MANIFEST_IN = DATA_ROOT / "manifest.csv"          # written by prep_data.py -- the canonical index
 MANIFEST_FINGERPRINT = DATA_ROOT / "manifest_fingerprint.json"
-REPORT = PIPE / "pipeline_report.txt"
 
 # Intermediate manifests. Previously these were named manifest_9*.csv and steps 1-3 hard-coded the
 # filenames as string literals, so config did not actually own the paths it claimed to. Both are
@@ -293,6 +303,7 @@ MANIFEST_RESAMPLED = PIPE / "manifest_resampled.csv"      # step 1 out
 MANIFEST_TRIMMED = PIPE / "manifest_trimmed.csv"          # step 2 out
 SPLITS_CSV = PIPE / "splits.csv"                          # step 3 out
 WINDOWS_CSV = PIPE / "windows.csv"                        # step 4 out
+DATASET_FREEZE = PIPE / "dataset_freeze.json"             # final content seal
 
 
 # --------------------------------------------------------------------------- provenance
@@ -336,6 +347,7 @@ def config_fingerprint():
         # 1.97:1) -- so a stale feature array would pass assert_fingerprint and train silently on
         # the technique shortcut. Sorted for a stable comparison across runs.
         "articulations": {k: sorted(v) for k, v in sorted(STRICT_ARTICULATIONS.items())},
+        "excluded_conflicting_label_paths": sorted(CONFLICTING_LABEL_PATHS),
         "n_mels": N_MELS,
         "n_fft": N_FFT,
         "hop_length": HOP,

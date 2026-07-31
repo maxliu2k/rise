@@ -39,11 +39,19 @@ import random
 
 import pandas as pd
 
-from instrument_robustness.config import (MANIFEST_TRIMMED, SPLITS_CSV, SPLIT_FRACS, SEED,
+from instrument_robustness.config import (DATASET_FREEZE, MANIFEST_TRIMMED, SPLITS_CSV, SPLIT_FRACS, SEED,
                                           TARGET_LABELS, assert_artifact_fingerprint,
                                           write_artifact_fingerprint)
 
 SPLIT_NAMES = ("train", "val", "test")
+
+
+def assert_split_is_unsealed():
+    if DATASET_FREEZE.exists():
+        raise RuntimeError(
+            f"Dataset is sealed by {DATASET_FREEZE}. Refusing to overwrite splits.csv. "
+            "For an intentional full rebuild, archive results and remove only that seal first."
+        )
 
 
 def group_key(label, note):
@@ -93,6 +101,7 @@ def verify_no_group_leak(df):
 
 
 def main():
+    assert_split_is_unsealed()
     assert_artifact_fingerprint(MANIFEST_TRIMMED, "step2_trim")
     df = pd.read_csv(MANIFEST_TRIMMED)
     missing = [c for c in ("path", "label", "note") if c not in df.columns]

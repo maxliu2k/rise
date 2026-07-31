@@ -1,6 +1,6 @@
 {
   "artifact": "manifest_resampled.csv",
-  "sha256": "d33a89522a0cf327c5059a915b45c0d665cf82dca3ed91d3a5ba88c3dfa7d29d",
+  "sha256": "642b6b71f1c531014b338853aee0d8db71ab0f408309687504dd1dddd6a2a0e3",
   "stage": "step1_resample",
   "fingerprint": {
     "fingerprint_version": 2,
@@ -66,6 +66,12 @@
         "arco-normal"
       ]
     },
+    "excluded_conflicting_label_paths": [
+      "cello/Ds5/cello_Ds5_05_forte_arco-normal.mp3",
+      "french-horn/E2/french-horn_E2_1_fortissimo_normal.mp3",
+      "oboe/E6/oboe_E6_15_mezzo-forte_normal.mp3",
+      "viola/G6/viola_G6_05_fortissimo_arco-normal.mp3"
+    ],
     "n_mels": 128,
     "n_fft": 2048,
     "hop_length": 512,

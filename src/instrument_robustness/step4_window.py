@@ -139,7 +139,7 @@ def main():
         + ("\n    ..." if len(leaked) > 10 else ""))
     print(f"window-level leak check passed: {len(spans)} pitch-groups, none spanning splits")
 
-    # persist the report block for pipeline_report.txt
+    # Persist the compact Step-4 report block beside the authoritative windows manifest.
     block = ["STEP 4 — WINDOW  (-> windows.csv, work/windows/)",
              f"{WINDOW_S}s windows, no overlap. total windows: {len(win)} from {len(args)} sources.",
              "", "per-class WINDOW counts per split:", counts.to_string(),

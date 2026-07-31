@@ -3,10 +3,9 @@
     python -m instrument_robustness.summarize_results            # print
     python -m instrument_robustness.summarize_results --write     # also write docs/RESULTS.md
 
-WHY THIS EXISTS. Each model writes results in its own schema, at its own path, and one of them
-(AST) writes to a timestamped directory while an older, STALE copy lingers under the plain name.
-Reading any single file by hand is how a superseded 0.987 gets quoted instead of the canonical
-0.992. This reads only sources it can verify against the CURRENT config_fingerprint() and marks
+WHY THIS EXISTS. Each model writes results in its own schema and directory. Reading any single
+file by hand is how a superseded result gets quoted instead of the canonical one. This reads only
+sources it can verify against the CURRENT config_fingerprint() and marks
 anything that does not match as STALE rather than printing its number as if it were live.
 
 It is deliberately a thin reader over a small explicit registry, not a directory crawl: the point
@@ -27,16 +26,11 @@ from instrument_robustness.config import ARTIFACTS, REPO_ROOT, config_fingerprin
 # it. `fp` is the dotted path to that file's recorded config_fingerprint; `test` is the dotted path
 # to the block holding macro_f1/accuracy. A model with no trained checkpoint yet is listed with
 # source=None so the table shows "pending" rather than omitting the row.
-# `split` records which split the quoted macro_f1 is on. Four models are test-evaluated; CNN and
-# CRNN are so far VALIDATION-only (5-seed, test_evaluated=false), so their number is not comparable
-# to a test number and is labelled as such rather than silently tabled beside the others.
+# `split` records which split the quoted macro_f1 is on. Every canonical row comes from the
+# one-time finalizer's test_summary.json; validation-only runs remain pending here.
 CLEAN_SOURCES = {
-    "AST":   dict(source="new-ast-results-20260730-022036/metrics.json", fp="config_fingerprint",      test="test",             split="test"),
-    "SVM":   dict(source="svm/test_summary.json",                        fp="config_fingerprint",      test="test_metrics",     split="test"),
-    "PANNs": dict(source="panns/results_finetune_philharmonia.json",     fp="meta.config_fingerprint", test="test",             split="test"),
-    "MERT":  dict(source="mert/test_summary.json",                       fp="config_fingerprint",      test="test_metrics",     split="test"),
-    "CNN":   dict(source="cnn/validation_summary.json",                  fp="config_fingerprint",      test="single_seed_val",  split="val (5-seed)"),
-    "CRNN":  dict(source="crnn/validation_summary.json",                 fp="config_fingerprint",      test="single_seed_val",  split="val (5-seed)"),
+    name: dict(source=f"{name.lower()}/test_summary.json", fp="config_fingerprint", test="test_metrics", split="test")
+    for name in ("AST", "SVM", "PANNs", "MERT", "CNN", "CRNN")
 }
 
 
