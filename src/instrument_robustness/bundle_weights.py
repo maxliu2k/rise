@@ -11,10 +11,16 @@ large opaque binary, git keeps every version forever, and a copy that silently d
 original cannot be spotted by reading it. So every copy records the sha256 of the file it came
 from, and --check recomputes both sides. Edit nothing here; retrain, then re-run this.
 
-AST IS LFS-TRACKED AND 329 MB. `.gitattributes` matches LFS by exact path, so models/ast/ needs
-its own pattern -- without it git stores a 329 MB blob in every clone forever instead of a
-pointer. This script refuses to run if that pattern is missing, because the failure is invisible
-until someone clones.
+FLAT, WITH SELF-DESCRIBING NAMES. One folder, no subdirectories, and every filename carries its
+model. That is not cosmetic: `model_s42.pt` exists under both artifacts/cnn/ and artifacts/crnn/
+and would collide outright once the folders are gone, and `model.safetensors` stops meaning
+anything the moment it leaves artifacts/ast/. Checkpoints get emailed and dropped into scratch
+directories; the name should survive that.
+
+AST IS LFS-TRACKED AND 329 MB. `.gitattributes` matches LFS by exact path, so the renamed
+models/ast_finetuned.safetensors needs its own pattern -- without it git stores a 329 MB blob in
+every clone forever instead of a pointer. This script refuses to run if that pattern is missing,
+because the failure is invisible until someone clones.
 """
 from __future__ import annotations
 
@@ -30,19 +36,32 @@ from instrument_robustness.config import ARTIFACTS, REPO_ROOT
 
 DEST = REPO_ROOT / "models"
 
-# Weight files only. Metrics, confusion matrices and status files stay in artifacts/<model>/ --
-# they are results, not models, and finalize_* resolves them there.
-WEIGHTS: dict[str, list[str]] = {
-    "svm":   ["best_model.joblib", "final_model.joblib"],
-    "cnn":   [f"model_s{s}.pt" for s in (42, 43, 44, 45, 46)],
-    "crnn":  [f"model_s{s}.pt" for s in (42, 43, 44, 45, 46)],
-    "ast":   ["model.safetensors"],
-    "mert":  ["best_probe.pt", "final_probe.pt"],
-    "panns": ["panns_probe_philharmonia.pt", "panns_probe_tinysol.pt"],
-}
+# (model, filename under artifacts/<model>/, name in models/)
+#
+# FLAT, and every name carries its model. Two reasons the originals could not simply be copied
+# across: `model_s42.pt` exists under BOTH cnn/ and crnn/ and would collide the moment the
+# subfolders go away, and `model.safetensors` says nothing about being AST once it is moved
+# anywhere else. A checkpoint gets emailed, dropped in a scratch dir, attached to an issue --
+# it should still say what it is.
+#
+# The suffix names the ROLE, and the two roles are not interchangeable:
+#   _selected  fit on TRAIN, the configuration validation chose
+#   _final     refit on TRAIN+VAL, the model the one permitted test evaluation used
+# For the seed ensembles the seed is the role: every seed is equal, none is "best".
+WEIGHTS: list[tuple[str, str, str]] = [
+    ("ast",   "model.safetensors",              "ast_finetuned.safetensors"),
+    *[("cnn",  f"model_s{s}.pt", f"cnn_seed{s}.pt")  for s in (42, 43, 44, 45, 46)],
+    *[("crnn", f"model_s{s}.pt", f"crnn_seed{s}.pt") for s in (42, 43, 44, 45, 46)],
+    ("mert",  "best_probe.pt",                  "mert_probe_selected.pt"),
+    ("mert",  "final_probe.pt",                 "mert_probe_final.pt"),
+    ("panns", "panns_probe_philharmonia.pt",    "panns_probe_philharmonia.pt"),
+    ("panns", "panns_probe_tinysol.pt",         "panns_probe_tinysol.pt"),
+    ("svm",   "best_model.joblib",              "svm_selected.joblib"),
+    ("svm",   "final_model.joblib",             "svm_final.joblib"),
+]
 
 # Paths that must be declared LFS before they are written, or git commits a raw blob.
-LFS_REQUIRED = ("models/ast/model.safetensors",)
+LFS_REQUIRED = ("models/ast_finetuned.safetensors",)
 
 README = """\
 GENERATED -- DO NOT EDIT. Trained weights for all six models, one folder per model.
@@ -91,19 +110,19 @@ def assert_lfs_declared() -> None:
                 f"  Add:  {rel} filter=lfs diff=lfs merge=lfs -text")
 
 
-def plan() -> list[tuple[str, str]]:
-    return [(model, name) for model, names in WEIGHTS.items() for name in names]
+def plan() -> list[tuple[str, str, str]]:
+    return list(WEIGHTS)
 
 
 def build() -> int:
     assert_lfs_declared()
 
-    missing = [f"{m}/{n}" for m, n in plan() if not (ARTIFACTS / m / n).exists()]
+    missing = [f"{m}/{src}" for m, src, _ in plan() if not (ARTIFACTS / m / src).exists()]
     if missing:
         raise SystemExit(f"ERROR: {len(missing)} artifact(s) missing: {missing}\n"
                          f"  Train the model or fix the map in {Path(__file__).name}; do not "
                          f"skip, or the folder silently omits a model.")
-    pointers = [f"{m}/{n}" for m, n in plan() if is_lfs_pointer(ARTIFACTS / m / n)]
+    pointers = [f"{m}/{src}" for m, src, _ in plan() if is_lfs_pointer(ARTIFACTS / m / src)]
     if pointers:
         raise SystemExit(f"ERROR: these are LFS POINTERS, not real files: {pointers}\n"
                          f"  Run `git lfs pull` first. Copying a pointer produces a broken model "
@@ -112,13 +131,13 @@ def build() -> int:
     if DEST.exists():
         shutil.rmtree(DEST)
     entries = {}
-    for model, name in plan():
-        source = ARTIFACTS / model / name
-        dest = DEST / model / name
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, dest)
-        entries[f"{model}/{name}"] = {
-            "source": f"artifacts/{model}/{name}",
+    DEST.mkdir(parents=True, exist_ok=True)
+    for model, src_name, dest_name in plan():
+        source = ARTIFACTS / model / src_name
+        shutil.copy2(source, DEST / dest_name)
+        entries[dest_name] = {
+            "model": model,
+            "source": f"artifacts/{model}/{src_name}",
             "sha256": sha256(source),
             "bytes": source.stat().st_size,
         }
@@ -126,15 +145,14 @@ def build() -> int:
     (DEST / "README.txt").write_text(README, encoding="utf-8")
     (DEST / "MANIFEST.json").write_text(json.dumps({
         "generated_by": "instrument_robustness.bundle_weights",
-        "models": sorted(WEIGHTS),
+        "models": sorted({m for m, _, _ in WEIGHTS}),
         "n_files": len(entries),
         "total_bytes": sum(e["bytes"] for e in entries.values()),
         "files": dict(sorted(entries.items())),
     }, indent=2) + "\n", encoding="utf-8")
 
-    for model in sorted(WEIGHTS):
-        mb = sum(entries[f"{model}/{n}"]["bytes"] for n in WEIGHTS[model]) / 1048576
-        print(f"  {model:<6} {len(WEIGHTS[model])} file(s)  {mb:8.2f} MB")
+    for name, rec in sorted(entries.items()):
+        print(f"  {name:<34} {rec['bytes'] / 1048576:8.2f} MB   <- {rec['source']}")
     print(f"\nwrote {DEST}  ({len(entries)} files, "
           f"{sum(e['bytes'] for e in entries.values()) / 1048576:.1f} MB)")
     return 0
@@ -158,9 +176,9 @@ def check() -> int:
             problems.append(f"{rel}: SOURCE CHANGED (retrained?) since the bundle was built")
         elif sha256(copy) != rec["sha256"]:
             problems.append(f"{rel}: copy differs from its source")
-    for model, name in plan():
-        if f"{model}/{name}" not in manifest["files"]:
-            problems.append(f"{model}/{name}: in the map but not the manifest (rebuild)")
+    for _, _, dest_name in plan():
+        if dest_name not in manifest["files"]:
+            problems.append(f"{dest_name}: in the map but not the manifest (rebuild)")
 
     if problems:
         print(f"FAIL: {len(problems)} problem(s):", file=sys.stderr)
