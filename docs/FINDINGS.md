@@ -381,6 +381,13 @@ result. Choice between (a) and (c) is still yours.
 
 ## 7. Metrics: why accuracy and F1 are not reported
 
+> **SUPERSEDED — does not govern.** The project reports **macro-F1 and accuracy**. This section
+> argued for balanced accuracy and MCC instead; that recommendation was not adopted. It is kept
+> for the record only. Do not change macro-F1 code, add balanced accuracy or MCC to reported
+> results, or cite this section as a reason to. The one caveat still worth carrying forward: a
+> collapsed classifier earns a nonzero macro-F1 that grows with imbalance, so at the low-SNR end
+> of a noise sweep, quote the majority-class baseline next to the score.
+
 Both pay a collapsed classifier the class prior, and both have floors that **drift with the split**:
 
 | majority prior | accuracy | macro F1 | balanced acc | MCC |

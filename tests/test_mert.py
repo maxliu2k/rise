@@ -418,7 +418,8 @@ class MERTTests(unittest.TestCase):
             self.assertEqual(status["state"], "complete")
             self.assertEqual(status["test_access_count"], 1)
             self.assertEqual(status["test_evaluation_count"], 1)
-            self.assertEqual(summary["model_fit_splits"], ["train", "val"])
+            # Train only -- see tests/test_svm.py for why this must not become train+val.
+            self.assertEqual(summary["model_fit_splits"], ["train"])
             self.assertEqual(summary["test_metrics"]["macro_f1"], 1.0)
 
     @unittest.skipUnless(importlib.util.find_spec("torch"), "PyTorch is optional")

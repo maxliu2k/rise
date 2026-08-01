@@ -140,9 +140,7 @@ cheap bug detection, not ceremony. Do not annotate throwaway analysis scripts.
 - **`CLASSES` ordering fixes the label indices.** Reordering silently invalidates every saved
   checkpoint. Keep it alphabetical.
 - **Splits are grouped by pitch.** The same note at different dynamics is a near-duplicate; a
-  random split inflates the score. The no-leak assertion runs every build — do not remove it.
-- **Report balanced accuracy and MCC. Never accuracy or macro-F1.** Both pay a collapsed
-  classifier the class prior and both have floors that drift with the split. See `docs/FINDINGS.md` §7.
+  random split inflates the score. The no-leak assertion runs every build — do not remove it.   
 - **Noise must be injected pre-spectrogram, through the same `wav_to_logmel` as training.**
   `noise_eval.py` imports it rather than reimplementing it. Keep it that way.
 - **`all-samples/` is the data root and is regenerated** by `run_pipeline.py`. The audio,

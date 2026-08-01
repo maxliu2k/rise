@@ -39,7 +39,13 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "artifacts" / "svm"
 FINAL_TEST_POLICY = {
     "parameter_selection": "train_fit_validation_macro_f1",
-    "final_fit_splits": ["train", "val"],
+    # Train only. The CNN, CRNN, AST and PANNs families cannot refit on train+val -- their
+    # stopping rule and (for the CNN) their ensemble combiner are both chosen on validation, so
+    # folding val into the fit would destroy the signal that defines them. SVM and MERT once did
+    # refit, which trained them on 7,119 windows against 5,861 for everyone else: a 21.5% data
+    # advantage inside a comparison whose entire point is ranking the families. Equal footing
+    # beats the small accuracy gain from the extra 1,258 windows.
+    "final_fit_splits": ["train"],
     "feature_preprocessing": (
         "reuse the existing train-statistics-standardized arrays; "
         "do not fit another scaler"

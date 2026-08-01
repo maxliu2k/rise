@@ -428,7 +428,11 @@ def main() -> None:
         "embedding_schema": train_metadata,
         "test_evaluated": False,
         "final_test_policy": {
-            "final_fit_splits": ["train", "val"],
+            # Train only. CNN/CRNN/AST/PANNs cannot refit on train+val -- their stopping
+            # rule lives on validation -- so refitting MERT there gave it 7,119 windows
+            # against 5,861 for those families, a 21.5% advantage inside the comparison
+            # the paper exists to make. Equal footing beats the extra 1,258 windows.
+            "final_fit_splits": ["train"],
             "epochs": "validation-selected best_epoch",
             "test_extraction_and_evaluations_allowed": 1,
         },
