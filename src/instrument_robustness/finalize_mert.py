@@ -45,7 +45,7 @@ FINAL_OUTPUT_NAMES = (
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Refit the validation-selected frozen MERT probe on train+validation, "
+            "Fit the validation-selected frozen MERT probe on train, "
             "extract the sealed test embeddings, and evaluate test exactly once."
         )
     )
@@ -147,8 +147,13 @@ def main() -> None:
 
     X_train, y_train = load_mert_embeddings("train", feature_dir=feature_dir)
     X_val, y_val = load_mert_embeddings("val", feature_dir=feature_dir)
-    X_final = np.concatenate([X_train, X_val], axis=0)
-    y_final = np.concatenate([y_train, y_val], axis=0)
+    # Fit on train only, NOT train+val. Validation is loaded to verify the embedding schema and
+    # input hashes recorded during selection; it must not enter the fit. The CNN/CRNN/AST/PANNs
+    # families cannot refit on train+val because their stopping rule is chosen on validation, so a
+    # MERT probe trained on 7,119 windows would be compared against models trained on 5,861.
+    # See train_mert's final_test_policy.
+    X_final = X_train
+    y_final = y_train
     class_weights = class_weight_vector(y_final)
 
     selected = validation_summary.get("best_config", {})
@@ -270,7 +275,7 @@ def main() -> None:
             "config_fingerprint": config_fingerprint(),
             "protocol": (
                 "probe hyperparameters and epoch selected on validation; final probe "
-                "fit on train+val; test embeddings extracted and evaluated once"
+                "fit on train only; test embeddings extracted and evaluated once"
             ),
             "model": "frozen MERT-v1-95M layer-weighted linear probe",
             "selected_config": {
@@ -279,7 +284,7 @@ def main() -> None:
                 "epochs": epochs,
                 "seed": seed,
             },
-            "model_fit_splits": ["train", "val"],
+            "model_fit_splits": ["train"],
             "backbone_frozen": True,
             "embedding_schema": embedding_metadata,
             "class_weights": (

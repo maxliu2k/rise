@@ -165,7 +165,7 @@ class SVMTests(unittest.TestCase):
             self.assertEqual(summary["model_fit_splits"], ["train"])
             self.assertEqual(
                 summary["final_test_policy"]["final_fit_splits"],
-                ["train", "val"],
+                ["train"],
             )
             self.assertEqual(
                 summary["final_test_policy"]["test_evaluations_allowed"],
@@ -183,7 +183,7 @@ class SVMTests(unittest.TestCase):
             self.assertEqual(model.kernel, "rbf")
             self.assertEqual(model.n_features_in_, 88)
 
-    def test_finalization_refits_train_and_val_and_only_runs_once(self) -> None:
+    def test_finalization_fits_train_only_and_only_runs_once(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
             root = Path(temporary_dir)
             feature_dir = root / "features"
@@ -254,8 +254,11 @@ class SVMTests(unittest.TestCase):
                 status = json.load(file)
             model = load_svm(output_dir / "final_model.joblib")
 
-            self.assertEqual(summary["model_fit_splits"], ["train", "val"])
-            self.assertEqual(summary["final_fit_examples"], 3 * N_CLASSES)
+            # Train only: val is loaded for hash/feature-order checks but must not be fit on.
+            # If this flips back to ["train", "val"] / 3 * N_CLASSES, SVM has regained a data
+            # advantage over the CNN/CRNN/AST/PANNs families and the comparison is unfair.
+            self.assertEqual(summary["model_fit_splits"], ["train"])
+            self.assertEqual(summary["final_fit_examples"], 2 * N_CLASSES)
             self.assertEqual(summary["test_examples"], N_CLASSES)
             self.assertEqual(summary["test_metrics"]["macro_f1"], 1.0)
             self.assertTrue(summary["test_evaluated"])
