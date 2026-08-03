@@ -28,8 +28,8 @@ from instrument_robustness.train_svm import DEFAULT_OUTPUT_DIR, evaluate, sha256
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Fit the validation-selected RBF SVC on train+val and evaluate "
-            "test exactly once. No feature scaling or tuning is performed."
+            "Fit the validation-selected RBF SVC on train and evaluate test "
+            "exactly once. No feature scaling or tuning is performed."
         )
     )
     parser.add_argument(
@@ -118,14 +118,17 @@ def main() -> None:
         raise ValueError("train.npz and val.npz use different feature orders")
 
     expected_labels = set(range(len(TARGET_LABELS)))
-    if set(np.concatenate([y_train, y_val]).tolist()) != expected_labels:
-        raise ValueError("The final development data does not contain all configured classes")
+    if set(y_train.tolist()) != expected_labels:
+        raise ValueError("The training split does not contain all configured classes")
 
-    X_final = np.concatenate([X_train, X_val], axis=0)
-    y_final = np.concatenate([y_train, y_val], axis=0)
+    # Fit on train only, NOT train+val. Validation is loaded above solely to re-hash it and check
+    # the feature order, both of which guard the integrity of the selection recorded in
+    # validation_summary.json. It must not enter the fit: the CNN/CRNN/AST/PANNs families cannot
+    # refit on train+val (their stopping rule lives on validation), so an SVM trained on 7,119
+    # windows would be compared against models trained on 5,861. See train_svm.FINAL_TEST_POLICY.
     model = build_svm(config)
     fit_started = perf_counter()
-    model.fit(X_final, y_final)
+    model.fit(X_train, y_train)
     fit_seconds = perf_counter() - fit_started
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -160,21 +163,21 @@ def main() -> None:
             "config_fingerprint": config_fingerprint(),
             "protocol": (
                 "hyperparameters selected on validation; final model fit on "
-                "train+val; test evaluated once"
+                "train only; test evaluated once"
             ),
             "selected_config": {
                 "kernel": "rbf",
                 "C": config.C,
                 "gamma": config.gamma,
             },
-            "model_fit_splits": ["train", "val"],
+            "model_fit_splits": ["train"],
             "feature_preprocessing": (
                 "existing train-statistics-standardized features reused; "
                 "no scaler refit"
             ),
             "training_examples": int(len(y_train)),
             "validation_examples": int(len(y_val)),
-            "final_fit_examples": int(len(y_final)),
+            "final_fit_examples": int(len(y_train)),
             "test_examples": int(len(y_test)),
             "fit_seconds": fit_seconds,
             "test_metrics": test_metrics,

@@ -6,11 +6,11 @@ Regenerate with `python -m instrument_robustness.summarize_results --write`. Eve
 
 | model | split | macro_f1 | accuracy | n | status |
 | --- | --- | --- | --- | --- | --- |
-| AST | — | — | — | — | MISSING ast/test_summary.json |
-| SVM | — | — | — | — | MISSING svm/test_summary.json |
-| PANNs | — | — | — | — | MISSING panns/test_summary.json |
-| MERT | — | — | — | — | MISSING mert/test_summary.json |
-| CNN | — | — | — | — | MISSING cnn/test_summary.json |
-| CRNN | — | — | — | — | MISSING crnn/test_summary.json |
+| AST | test | 0.9908 | 0.9912 | 1255 | canonical |
+| SVM | test | 0.9770 | 0.9785 | 1255 | canonical |
+| PANNs | test | 0.9868 | 0.9880 | 1255 | canonical |
+| MERT | test | 0.8931 | 0.8956 | 1255 | canonical |
+| CNN | test | 0.9708 | 0.9721 | 1255 | canonical |
+| CRNN | test | 0.9738 | 0.9753 | 1255 | canonical |
 
 _No noise sweeps found yet._
