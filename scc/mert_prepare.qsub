@@ -11,7 +11,7 @@ set -euo pipefail
 
 mert_repo="${MERT_REPO:-$SGE_O_WORKDIR}"
 mert_data_root="${RISE_DATA_ROOT:?Submit with -v RISE_DATA_ROOT=/projectnb/...}"
-mert_venv="${MERT_VENV:-/projectnb/rise-grid/venvs/$USER/mert}"
+mert_venv="${MERT_VENV:-/projectnb/rise-grid/venvs/${USER:-$(id -un)}/mert}"
 
 module load python3/3.9.9
 source "$mert_venv/bin/activate"

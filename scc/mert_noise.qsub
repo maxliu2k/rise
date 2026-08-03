@@ -31,7 +31,7 @@ cd "$noise_repo"
 
 export PYTHONPATH="$noise_repo/src${PYTHONPATH:+:$PYTHONPATH}"
 export RISE_DATA_ROOT="$noise_data_root"
-export HF_HOME="${HF_HOME:-/projectnb/rise-grid/huggingface/$USER}"
+export HF_HOME="${HF_HOME:-/projectnb/rise-grid/huggingface/${USER:-$(id -un)}}"
 export OMP_NUM_THREADS="${NSLOTS:-4}"
 export MKL_NUM_THREADS="${NSLOTS:-4}"
 export PYTHONUNBUFFERED=1
