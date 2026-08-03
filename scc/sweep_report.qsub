@@ -14,12 +14,13 @@
 set -uo pipefail
 
 repo="${RISE_REPO:-$SGE_O_WORKDIR}"
-venv="${RISE_VENV:-$repo/.venv}"
+venv="${RISE_VENV:-$(dirname "$repo")/venv}"   # sibling of the repo, not inside it
 
 if [ -n "${RISE_MODULES-python3/3.9.9}" ]; then
     module load ${RISE_MODULES:-python3/3.9.9}
 fi
-source "$venv/bin/activate"
+. "$repo/scc/activate_venv.sh"
+rise_activate "$venv"
 cd "$repo"
 export RISE_DATA_ROOT="${RISE_DATA_ROOT:-$repo/all-samples}"
 export PYTHONPATH="$repo/src${PYTHONPATH:+:$PYTHONPATH}"
