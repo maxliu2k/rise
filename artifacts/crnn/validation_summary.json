@@ -1,0 +1,302 @@
+{
+  "config_fingerprint": {
+    "fingerprint_version": 2,
+    "archive_base": "https://archive.org/download/philharmonicorchestrasamples",
+    "sr": 22050,
+    "waveform_subtype": "PCM_16",
+    "window_s": 3.0,
+    "hop_s": 3.0,
+    "short_window_policy": "tile",
+    "trim_top_db": 30,
+    "min_trim_s": 0.1,
+    "split_group_fields": [
+      "label",
+      "note"
+    ],
+    "split_policy": "label_note_pitch_group",
+    "split_fracs": [
+      0.7,
+      0.15,
+      0.15
+    ],
+    "split_seed": 0,
+    "min_window_content_s": 0.5,
+    "max_windows_per_source": 1,
+    "stft_pad_mode": "reflect",
+    "logmel_top_db": null,
+    "target_rms": 0.1,
+    "articulations": {
+      "bassoon": [
+        "normal"
+      ],
+      "cello": [
+        "arco-normal"
+      ],
+      "clarinet": [
+        "normal"
+      ],
+      "double-bass": [
+        "arco-normal"
+      ],
+      "flute": [
+        "normal"
+      ],
+      "french-horn": [
+        "normal"
+      ],
+      "oboe": [
+        "normal"
+      ],
+      "trombone": [
+        "normal"
+      ],
+      "trumpet": [
+        "normal"
+      ],
+      "tuba": [
+        "normal"
+      ],
+      "viola": [
+        "arco-normal"
+      ],
+      "violin": [
+        "arco-normal"
+      ]
+    },
+    "excluded_conflicting_label_paths": [
+      "cello/Ds5/cello_Ds5_05_forte_arco-normal.mp3",
+      "french-horn/E2/french-horn_E2_1_fortissimo_normal.mp3",
+      "oboe/E6/oboe_E6_15_mezzo-forte_normal.mp3",
+      "viola/G6/viola_G6_05_fortissimo_arco-normal.mp3"
+    ],
+    "n_mels": 128,
+    "n_fft": 2048,
+    "hop_length": 512,
+    "n_frames": 130,
+    "n_mfcc": 20,
+    "svm_standardization": "per_feature_train",
+    "logmel_standardization": "per_mel_bin_train",
+    "labels": [
+      "bassoon",
+      "cello",
+      "clarinet",
+      "double-bass",
+      "flute",
+      "french-horn",
+      "oboe",
+      "trombone",
+      "trumpet",
+      "tuba",
+      "viola",
+      "violin"
+    ]
+  },
+  "architecture": "MediumCRNN",
+  "label_order": [
+    "bassoon",
+    "cello",
+    "clarinet",
+    "double-bass",
+    "flute",
+    "french-horn",
+    "oboe",
+    "trombone",
+    "trumpet",
+    "tuba",
+    "viola",
+    "violin"
+  ],
+  "seeds": [
+    42,
+    43,
+    44,
+    45,
+    46
+  ],
+  "n_train": 5861,
+  "n_val": 1258,
+  "n_params": 294124,
+  "test_evaluated": false,
+  "inputs": {
+    "train": {
+      "path": "/projectnb/rise-grid/maxliu2k/all-samples/features/cnn/train.npz",
+      "sha256": "8e7bbf4b5db9567a1a9989d3b42b95815d3179c37838966dfe3d0a76fd79ce87"
+    },
+    "val": {
+      "path": "/projectnb/rise-grid/maxliu2k/all-samples/features/cnn/val.npz",
+      "sha256": "0beb63ca1d81abb6aebda5620fe8d5212cd9017b47393ecfee502450bd21d205"
+    }
+  },
+  "reused_seeds": [
+    42
+  ],
+  "per_seed": [
+    {
+      "seed": 42,
+      "best_epoch": 23,
+      "best_val_loss": 0.12981339632398844,
+      "val_macro_f1": 0.9549887254278709,
+      "val_balanced_accuracy": 0.9592741700186971,
+      "val_mcc": 0.957867365400682,
+      "mean_epoch_s": 192.2398774982167,
+      "checkpoint": "/projectnb/rise-grid/maxliu2k/instrument-robustness/artifacts/crnn/model_s42.pt",
+      "config_fingerprint": {
+        "fingerprint_version": 2,
+        "archive_base": "https://archive.org/download/philharmonicorchestrasamples",
+        "sr": 22050,
+        "waveform_subtype": "PCM_16",
+        "window_s": 3.0,
+        "hop_s": 3.0,
+        "short_window_policy": "tile",
+        "trim_top_db": 30,
+        "min_trim_s": 0.1,
+        "split_group_fields": [
+          "label",
+          "note"
+        ],
+        "split_policy": "label_note_pitch_group",
+        "split_fracs": [
+          0.7,
+          0.15,
+          0.15
+        ],
+        "split_seed": 0,
+        "min_window_content_s": 0.5,
+        "max_windows_per_source": 1,
+        "stft_pad_mode": "reflect",
+        "logmel_top_db": null,
+        "target_rms": 0.1,
+        "articulations": {
+          "bassoon": [
+            "normal"
+          ],
+          "cello": [
+            "arco-normal"
+          ],
+          "clarinet": [
+            "normal"
+          ],
+          "double-bass": [
+            "arco-normal"
+          ],
+          "flute": [
+            "normal"
+          ],
+          "french-horn": [
+            "normal"
+          ],
+          "oboe": [
+            "normal"
+          ],
+          "trombone": [
+            "normal"
+          ],
+          "trumpet": [
+            "normal"
+          ],
+          "tuba": [
+            "normal"
+          ],
+          "viola": [
+            "arco-normal"
+          ],
+          "violin": [
+            "arco-normal"
+          ]
+        },
+        "excluded_conflicting_label_paths": [
+          "cello/Ds5/cello_Ds5_05_forte_arco-normal.mp3",
+          "french-horn/E2/french-horn_E2_1_fortissimo_normal.mp3",
+          "oboe/E6/oboe_E6_15_mezzo-forte_normal.mp3",
+          "viola/G6/viola_G6_05_fortissimo_arco-normal.mp3"
+        ],
+        "n_mels": 128,
+        "n_fft": 2048,
+        "hop_length": 512,
+        "n_frames": 130,
+        "n_mfcc": 20,
+        "svm_standardization": "per_feature_train",
+        "logmel_standardization": "per_mel_bin_train",
+        "labels": [
+          "bassoon",
+          "cello",
+          "clarinet",
+          "double-bass",
+          "flute",
+          "french-horn",
+          "oboe",
+          "trombone",
+          "trumpet",
+          "tuba",
+          "viola",
+          "violin"
+        ]
+      },
+      "architecture": "MediumCRNN",
+      "train_sha256": "8e7bbf4b5db9567a1a9989d3b42b95815d3179c37838966dfe3d0a76fd79ce87",
+      "val_sha256": "0beb63ca1d81abb6aebda5620fe8d5212cd9017b47393ecfee502450bd21d205"
+    },
+    {
+      "seed": 43,
+      "best_epoch": 28,
+      "best_val_loss": 0.11951515217067744,
+      "val_macro_f1": 0.9628003165962099,
+      "val_balanced_accuracy": 0.964341625905725,
+      "val_mcc": 0.9639210091172197,
+      "mean_epoch_s": 0.8469343815361046,
+      "checkpoint": "/projectnb/rise-grid/maxliu2k/instrument-robustness/artifacts/crnn/model_s43.pt"
+    },
+    {
+      "seed": 44,
+      "best_epoch": 21,
+      "best_val_loss": 0.1228204497666615,
+      "val_macro_f1": 0.9610348154752518,
+      "val_balanced_accuracy": 0.963261550980029,
+      "val_mcc": 0.9622367778277969,
+      "mean_epoch_s": 0.7600416719616423,
+      "checkpoint": "/projectnb/rise-grid/maxliu2k/instrument-robustness/artifacts/crnn/model_s44.pt"
+    },
+    {
+      "seed": 45,
+      "best_epoch": 30,
+      "best_val_loss": 0.10824357536536255,
+      "val_macro_f1": 0.9642782093566664,
+      "val_balanced_accuracy": 0.9665221170645985,
+      "val_mcc": 0.9664079108157139,
+      "mean_epoch_s": 0.7583639321597538,
+      "checkpoint": "/projectnb/rise-grid/maxliu2k/instrument-robustness/artifacts/crnn/model_s45.pt"
+    },
+    {
+      "seed": 46,
+      "best_epoch": 39,
+      "best_val_loss": 0.12931695346984395,
+      "val_macro_f1": 0.9643217376236018,
+      "val_balanced_accuracy": 0.9667525729542921,
+      "val_mcc": 0.9664450268803114,
+      "mean_epoch_s": 0.7591252618905855,
+      "checkpoint": "/projectnb/rise-grid/maxliu2k/instrument-robustness/artifacts/crnn/model_s46.pt"
+    }
+  ],
+  "selection_metric": "validation_macro_f1",
+  "single_seed_val": {
+    "mean": 0.9614847608959203,
+    "std": 0.003872447731750287,
+    "min": 0.9549887254278709,
+    "max": 0.9643217376236018
+  },
+  "single_seed_val_balanced_accuracy": {
+    "mean": 0.9640304073846682,
+    "std": 0.003038445060296763,
+    "min": 0.9592741700186971,
+    "max": 0.9667525729542921
+  },
+  "ensemble_val": {
+    "soft_vote": 0.9673890985529762,
+    "hard_vote": 0.9663329989023235
+  },
+  "ensemble_val_balanced_accuracy": {
+    "soft_vote": 0.9691162338101118,
+    "hard_vote": 0.9682571272809022
+  },
+  "selected_combiner": "soft_vote"
+}

@@ -1,0 +1,413 @@
+{
+  "protocol": "train selected by validation macro-F1; test remains sealed",
+  "model": "AST fine-tuned from MIT/ast-finetuned-audioset-10-10-0.4593",
+  "label_order": [
+    "bassoon",
+    "cello",
+    "clarinet",
+    "double-bass",
+    "flute",
+    "french-horn",
+    "oboe",
+    "trombone",
+    "trumpet",
+    "tuba",
+    "viola",
+    "violin"
+  ],
+  "num_labels": 12,
+  "selection_metric": "validation_macro_f1",
+  "best_epoch": 10,
+  "class_weights": {
+    "bassoon": 1.0758076906204224,
+    "cello": 0.9465439319610596,
+    "clarinet": 0.8929006457328796,
+    "double-bass": 0.9163540005683899,
+    "flute": 0.8912712931632996,
+    "french-horn": 1.2886983156204224,
+    "oboe": 1.2921075820922852,
+    "trombone": 0.9198054075241089,
+    "trumpet": 1.6119362115859985,
+    "tuba": 0.8377644419670105,
+    "viola": 0.9867003560066223,
+    "violin": 0.8222503066062927
+  },
+  "class_counts": {
+    "train": {
+      "bassoon": 454,
+      "cello": 516,
+      "clarinet": 547,
+      "double-bass": 533,
+      "flute": 548,
+      "french-horn": 379,
+      "oboe": 378,
+      "trombone": 531,
+      "trumpet": 303,
+      "tuba": 583,
+      "viola": 495,
+      "violin": 594
+    },
+    "val": {
+      "bassoon": 97,
+      "cello": 115,
+      "clarinet": 112,
+      "double-bass": 116,
+      "flute": 116,
+      "french-horn": 83,
+      "oboe": 81,
+      "trombone": 114,
+      "trumpet": 65,
+      "tuba": 124,
+      "viola": 106,
+      "violin": 129
+    }
+  },
+  "config_fingerprint": {
+    "fingerprint_version": 2,
+    "archive_base": "https://archive.org/download/philharmonicorchestrasamples",
+    "sr": 22050,
+    "waveform_subtype": "PCM_16",
+    "window_s": 3.0,
+    "hop_s": 3.0,
+    "short_window_policy": "tile",
+    "trim_top_db": 30,
+    "min_trim_s": 0.1,
+    "split_group_fields": [
+      "label",
+      "note"
+    ],
+    "split_policy": "label_note_pitch_group",
+    "split_fracs": [
+      0.7,
+      0.15,
+      0.15
+    ],
+    "split_seed": 0,
+    "min_window_content_s": 0.5,
+    "max_windows_per_source": 1,
+    "stft_pad_mode": "reflect",
+    "logmel_top_db": null,
+    "target_rms": 0.1,
+    "articulations": {
+      "bassoon": [
+        "normal"
+      ],
+      "cello": [
+        "arco-normal"
+      ],
+      "clarinet": [
+        "normal"
+      ],
+      "double-bass": [
+        "arco-normal"
+      ],
+      "flute": [
+        "normal"
+      ],
+      "french-horn": [
+        "normal"
+      ],
+      "oboe": [
+        "normal"
+      ],
+      "trombone": [
+        "normal"
+      ],
+      "trumpet": [
+        "normal"
+      ],
+      "tuba": [
+        "normal"
+      ],
+      "viola": [
+        "arco-normal"
+      ],
+      "violin": [
+        "arco-normal"
+      ]
+    },
+    "excluded_conflicting_label_paths": [
+      "cello/Ds5/cello_Ds5_05_forte_arco-normal.mp3",
+      "french-horn/E2/french-horn_E2_1_fortissimo_normal.mp3",
+      "oboe/E6/oboe_E6_15_mezzo-forte_normal.mp3",
+      "viola/G6/viola_G6_05_fortissimo_arco-normal.mp3"
+    ],
+    "n_mels": 128,
+    "n_fft": 2048,
+    "hop_length": 512,
+    "n_frames": 130,
+    "n_mfcc": 20,
+    "svm_standardization": "per_feature_train",
+    "logmel_standardization": "per_mel_bin_train",
+    "labels": [
+      "bassoon",
+      "cello",
+      "clarinet",
+      "double-bass",
+      "flute",
+      "french-horn",
+      "oboe",
+      "trombone",
+      "trumpet",
+      "tuba",
+      "viola",
+      "violin"
+    ]
+  },
+  "windows_manifest": {
+    "path": "/projectnb/rise-grid/maxliu2k/all-samples/pipeline/windows.csv",
+    "sha256": "7574909e419c753b3c38add9c61958660163bbf1c08b2dd1fa067a498e0ecfb1",
+    "window_count": 8374
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train": {
+        "loss": 0.26397507321095864,
+        "accuracy": 0.9322641187510664,
+        "accuracy_pct": 93.23,
+        "balanced_accuracy": 0.9296190477849668,
+        "balanced_accuracy_pct": 92.96,
+        "mcc": 0.9259575329463889,
+        "macro_f1": 0.9286277593727384,
+        "macro_f1_pct": 92.86
+      },
+      "val": {
+        "loss": 0.07090198354342499,
+        "accuracy": 0.9785373608903021,
+        "accuracy_pct": 97.85,
+        "balanced_accuracy": 0.9773988020592129,
+        "balanced_accuracy_pct": 97.74,
+        "mcc": 0.976621103459063,
+        "macro_f1": 0.9760883529327309,
+        "macro_f1_pct": 97.61
+      }
+    },
+    {
+      "epoch": 2,
+      "train": {
+        "loss": 0.005542716525561076,
+        "accuracy": 0.999829380651766,
+        "accuracy_pct": 99.98,
+        "balanced_accuracy": 0.9998430634023855,
+        "balanced_accuracy_pct": 99.98,
+        "mcc": 0.999813360668556,
+        "macro_f1": 0.999811664156212,
+        "macro_f1_pct": 99.98
+      },
+      "val": {
+        "loss": 0.023629531025366832,
+        "accuracy": 0.9912559618441972,
+        "accuracy_pct": 99.13,
+        "balanced_accuracy": 0.9907096538522694,
+        "balanced_accuracy_pct": 99.07,
+        "mcc": 0.9904526342182742,
+        "macro_f1": 0.9902729758123588,
+        "macro_f1_pct": 99.03
+      }
+    },
+    {
+      "epoch": 3,
+      "train": {
+        "loss": 0.001261582572675839,
+        "accuracy": 1.0,
+        "accuracy_pct": 100.0,
+        "balanced_accuracy": 1.0,
+        "balanced_accuracy_pct": 100.0,
+        "mcc": 1.0,
+        "macro_f1": 1.0,
+        "macro_f1_pct": 100.0
+      },
+      "val": {
+        "loss": 0.02895986203140163,
+        "accuracy": 0.9872813990461049,
+        "accuracy_pct": 98.73,
+        "balanced_accuracy": 0.9864057335853502,
+        "balanced_accuracy_pct": 98.64,
+        "mcc": 0.9861160185697462,
+        "macro_f1": 0.986189647543128,
+        "macro_f1_pct": 98.62
+      }
+    },
+    {
+      "epoch": 4,
+      "train": {
+        "loss": 0.000678223821507267,
+        "accuracy": 1.0,
+        "accuracy_pct": 100.0,
+        "balanced_accuracy": 1.0,
+        "balanced_accuracy_pct": 100.0,
+        "mcc": 1.0,
+        "macro_f1": 1.0,
+        "macro_f1_pct": 100.0
+      },
+      "val": {
+        "loss": 0.023031726553747415,
+        "accuracy": 0.9904610492845787,
+        "accuracy_pct": 99.05,
+        "balanced_accuracy": 0.9894262594049147,
+        "balanced_accuracy_pct": 98.94,
+        "mcc": 0.9895859047600317,
+        "macro_f1": 0.9892753160317368,
+        "macro_f1_pct": 98.93
+      }
+    },
+    {
+      "epoch": 5,
+      "train": {
+        "loss": 0.0004161750613271617,
+        "accuracy": 1.0,
+        "accuracy_pct": 100.0,
+        "balanced_accuracy": 1.0,
+        "balanced_accuracy_pct": 100.0,
+        "mcc": 1.0,
+        "macro_f1": 1.0,
+        "macro_f1_pct": 100.0
+      },
+      "val": {
+        "loss": 0.023099575351367724,
+        "accuracy": 0.9920508744038156,
+        "accuracy_pct": 99.21,
+        "balanced_accuracy": 0.9914342915334288,
+        "balanced_accuracy_pct": 99.14,
+        "mcc": 0.9913215340047347,
+        "macro_f1": 0.991028113138011,
+        "macro_f1_pct": 99.1
+      }
+    },
+    {
+      "epoch": 6,
+      "train": {
+        "loss": 0.0002717763873932569,
+        "accuracy": 1.0,
+        "accuracy_pct": 100.0,
+        "balanced_accuracy": 1.0,
+        "balanced_accuracy_pct": 100.0,
+        "mcc": 1.0,
+        "macro_f1": 1.0,
+        "macro_f1_pct": 100.0
+      },
+      "val": {
+        "loss": 0.021192321675470163,
+        "accuracy": 0.9920508744038156,
+        "accuracy_pct": 99.21,
+        "balanced_accuracy": 0.9911612696212185,
+        "balanced_accuracy_pct": 99.12,
+        "mcc": 0.9913252744538263,
+        "macro_f1": 0.9910130769158392,
+        "macro_f1_pct": 99.1
+      }
+    },
+    {
+      "epoch": 7,
+      "train": {
+        "loss": 0.00018342706108107626,
+        "accuracy": 1.0,
+        "accuracy_pct": 100.0,
+        "balanced_accuracy": 1.0,
+        "balanced_accuracy_pct": 100.0,
+        "mcc": 1.0,
+        "macro_f1": 1.0,
+        "macro_f1_pct": 100.0
+      },
+      "val": {
+        "loss": 0.02031323150953719,
+        "accuracy": 0.9920508744038156,
+        "accuracy_pct": 99.21,
+        "balanced_accuracy": 0.9911612696212185,
+        "balanced_accuracy_pct": 99.12,
+        "mcc": 0.9913252744538263,
+        "macro_f1": 0.9910130769158392,
+        "macro_f1_pct": 99.1
+      }
+    },
+    {
+      "epoch": 8,
+      "train": {
+        "loss": 0.00012527031931767774,
+        "accuracy": 1.0,
+        "accuracy_pct": 100.0,
+        "balanced_accuracy": 1.0,
+        "balanced_accuracy_pct": 100.0,
+        "mcc": 1.0,
+        "macro_f1": 1.0,
+        "macro_f1_pct": 100.0
+      },
+      "val": {
+        "loss": 0.02095004853208376,
+        "accuracy": 0.9920508744038156,
+        "accuracy_pct": 99.21,
+        "balanced_accuracy": 0.9911612696212185,
+        "balanced_accuracy_pct": 99.12,
+        "mcc": 0.9913252744538263,
+        "macro_f1": 0.9910130769158392,
+        "macro_f1_pct": 99.1
+      }
+    },
+    {
+      "epoch": 9,
+      "train": {
+        "loss": 8.729196779288668e-05,
+        "accuracy": 1.0,
+        "accuracy_pct": 100.0,
+        "balanced_accuracy": 1.0,
+        "balanced_accuracy_pct": 100.0,
+        "mcc": 1.0,
+        "macro_f1": 1.0,
+        "macro_f1_pct": 100.0
+      },
+      "val": {
+        "loss": 0.021962330050917585,
+        "accuracy": 0.9920508744038156,
+        "accuracy_pct": 99.21,
+        "balanced_accuracy": 0.9911612696212185,
+        "balanced_accuracy_pct": 99.12,
+        "mcc": 0.9913252744538263,
+        "macro_f1": 0.9910130769158392,
+        "macro_f1_pct": 99.1
+      }
+    },
+    {
+      "epoch": 10,
+      "train": {
+        "loss": 6.13608529176068e-05,
+        "accuracy": 1.0,
+        "accuracy_pct": 100.0,
+        "balanced_accuracy": 1.0,
+        "balanced_accuracy_pct": 100.0,
+        "mcc": 1.0,
+        "macro_f1": 1.0,
+        "macro_f1_pct": 100.0
+      },
+      "val": {
+        "loss": 0.020346039259011912,
+        "accuracy": 0.9928457869634341,
+        "accuracy_pct": 99.28,
+        "balanced_accuracy": 0.9920203761504282,
+        "balanced_accuracy_pct": 99.2,
+        "mcc": 0.9921895524940054,
+        "macro_f1": 0.9918319243050648,
+        "macro_f1_pct": 99.18
+      }
+    }
+  ],
+  "training_examples": 5861,
+  "validation_examples": 1258,
+  "validation_metrics": {
+    "loss": 0.020346039259011912,
+    "accuracy": 0.9928457869634341,
+    "accuracy_pct": 99.28,
+    "balanced_accuracy": 0.9920203761504282,
+    "balanced_accuracy_pct": 99.2,
+    "mcc": 0.9921895524940054,
+    "macro_f1": 0.9918319243050648,
+    "macro_f1_pct": 99.18
+  },
+  "test_evaluated": false,
+  "output_files": {
+    "model": {
+      "path": "/projectnb/rise-grid/maxliu2k/instrument-robustness/artifacts/ast/model.safetensors",
+      "sha256": "a37bd70d51356ae32b24fd09b57e22572847c94c920a0db1ac7c3b369f1cc6b1"
+    }
+  }
+}

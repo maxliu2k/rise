@@ -18,20 +18,33 @@ def digest(path: Path) -> str:
 
 class FinalizationContractTests(unittest.TestCase):
     def test_external_panns_pointer_names_the_reported_finetune(self) -> None:
-        record = EXTERNAL_WEIGHTS["panns_finetune_philharmonia.pt"]
+        """The external pointers name the FINE-TUNE that produced the reported number.
+
+        This guarded against substituting the much smaller PANNs linear probe for the full
+        fine-tune the reported result actually used. The 8,378-build entry moved to
+        HISTORICAL_EXTERNAL_WEIGHTS when the corrected 97b1cdd2 build was trained; the guarantee
+        is unchanged, so it is asserted in both places rather than dropped.
+        """
+        historical = HISTORICAL_EXTERNAL_WEIGHTS["panns_finetune_philharmonia_8378.pt"]
         self.assertEqual(
-            record["sha256"],
+            historical["sha256"],
             "00cc195e1cbea756fc0afcb1ab823d639e31668c1a859f67941c29fda40741e3",
         )
-        self.assertIn("v1.0-panns-12class", record["download_url"])
-        self.assertNotEqual(
-            record["dataset_fingerprint"],
-            "26f067648aa90f586299001a26b4eca3a294f277e98a669af97025005884b7d9",
-        )
+        self.assertIn("v1.0-panns-12class", historical["download_url"])
         self.assertEqual(
             HISTORICAL_EXTERNAL_WEIGHTS["ast_finetuned_philharmonia_8378.safetensors"]["sha256"],
             "25789685e1cb0a4df0d64e5c84df84f49eff72c2831cc8e89fb02bd7676763e7",
         )
+
+        # The CURRENT pointers must describe the corrected build, and must not silently reuse a
+        # historical checkpoint's hash -- that substitution is exactly what build() refuses.
+        frozen = "97b1cdd2936b81c8c4d8728ef5243f174267b7df800b7e5d01568d45ef9ce3cf"
+        historical_hashes = {r["sha256"] for r in HISTORICAL_EXTERNAL_WEIGHTS.values()}
+        self.assertEqual(set(EXTERNAL_WEIGHTS), {"ast_finetuned.safetensors", "panns_finetune.pt"})
+        for name, record in EXTERNAL_WEIGHTS.items():
+            self.assertEqual(record["dataset_fingerprint"], frozen, name)
+            self.assertNotIn(record["sha256"], historical_hashes, name)
+            self.assertTrue(record["scc_path"].endswith(name), name)
 
     def test_panns_selection_contract_and_single_claim(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:

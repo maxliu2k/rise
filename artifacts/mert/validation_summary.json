@@ -1,0 +1,463 @@
+{
+  "created_at_utc": "2026-08-03T01:51:03.444236+00:00",
+  "config_fingerprint": {
+    "fingerprint_version": 2,
+    "archive_base": "https://archive.org/download/philharmonicorchestrasamples",
+    "sr": 22050,
+    "waveform_subtype": "PCM_16",
+    "window_s": 3.0,
+    "hop_s": 3.0,
+    "short_window_policy": "tile",
+    "trim_top_db": 30,
+    "min_trim_s": 0.1,
+    "split_group_fields": [
+      "label",
+      "note"
+    ],
+    "split_policy": "label_note_pitch_group",
+    "split_fracs": [
+      0.7,
+      0.15,
+      0.15
+    ],
+    "split_seed": 0,
+    "min_window_content_s": 0.5,
+    "max_windows_per_source": 1,
+    "stft_pad_mode": "reflect",
+    "logmel_top_db": null,
+    "target_rms": 0.1,
+    "articulations": {
+      "bassoon": [
+        "normal"
+      ],
+      "cello": [
+        "arco-normal"
+      ],
+      "clarinet": [
+        "normal"
+      ],
+      "double-bass": [
+        "arco-normal"
+      ],
+      "flute": [
+        "normal"
+      ],
+      "french-horn": [
+        "normal"
+      ],
+      "oboe": [
+        "normal"
+      ],
+      "trombone": [
+        "normal"
+      ],
+      "trumpet": [
+        "normal"
+      ],
+      "tuba": [
+        "normal"
+      ],
+      "viola": [
+        "arco-normal"
+      ],
+      "violin": [
+        "arco-normal"
+      ]
+    },
+    "excluded_conflicting_label_paths": [
+      "cello/Ds5/cello_Ds5_05_forte_arco-normal.mp3",
+      "french-horn/E2/french-horn_E2_1_fortissimo_normal.mp3",
+      "oboe/E6/oboe_E6_15_mezzo-forte_normal.mp3",
+      "viola/G6/viola_G6_05_fortissimo_arco-normal.mp3"
+    ],
+    "n_mels": 128,
+    "n_fft": 2048,
+    "hop_length": 512,
+    "n_frames": 130,
+    "n_mfcc": 20,
+    "svm_standardization": "per_feature_train",
+    "logmel_standardization": "per_mel_bin_train",
+    "labels": [
+      "bassoon",
+      "cello",
+      "clarinet",
+      "double-bass",
+      "flute",
+      "french-horn",
+      "oboe",
+      "trombone",
+      "trumpet",
+      "tuba",
+      "viola",
+      "violin"
+    ]
+  },
+  "model": "frozen MERT-v1-95M layer-weighted linear probe",
+  "selection_metric": "validation_macro_f1",
+  "best_config": {
+    "learning_rate": 0.005,
+    "batch_size": 64,
+    "best_epoch": 38,
+    "seed": 0
+  },
+  "validation_metrics": {
+    "accuracy": 0.9141494435612083,
+    "macro_f1": 0.9112320110701746,
+    "weighted_f1": 0.9132995761354689,
+    "confusion_matrix": [
+      [
+        70,
+        7,
+        6,
+        0,
+        9,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        4
+      ],
+      [
+        2,
+        106,
+        0,
+        1,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        3,
+        1
+      ],
+      [
+        0,
+        0,
+        112,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        109,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        7,
+        0
+      ],
+      [
+        0,
+        3,
+        0,
+        0,
+        90,
+        0,
+        1,
+        0,
+        3,
+        0,
+        7,
+        12
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        1,
+        80,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        77,
+        0,
+        2,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        3,
+        0,
+        0,
+        1,
+        0,
+        106,
+        4,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        10,
+        0,
+        0,
+        0,
+        0,
+        1,
+        53,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        124,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        99,
+        5
+      ],
+      [
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        3,
+        124
+      ]
+    ],
+    "classification_report": {
+      "bassoon": {
+        "precision": 0.9722222222222222,
+        "recall": 0.7216494845360825,
+        "f1-score": 0.8284023668639053,
+        "support": 97.0
+      },
+      "cello": {
+        "precision": 0.8983050847457628,
+        "recall": 0.9217391304347826,
+        "f1-score": 0.9098712446351931,
+        "support": 115.0
+      },
+      "clarinet": {
+        "precision": 0.835820895522388,
+        "recall": 1.0,
+        "f1-score": 0.9105691056910569,
+        "support": 112.0
+      },
+      "double-bass": {
+        "precision": 0.990909090909091,
+        "recall": 0.9396551724137931,
+        "f1-score": 0.9646017699115044,
+        "support": 116.0
+      },
+      "flute": {
+        "precision": 0.8823529411764706,
+        "recall": 0.7758620689655172,
+        "f1-score": 0.8256880733944955,
+        "support": 116.0
+      },
+      "french-horn": {
+        "precision": 0.963855421686747,
+        "recall": 0.963855421686747,
+        "f1-score": 0.963855421686747,
+        "support": 83.0
+      },
+      "oboe": {
+        "precision": 0.9871794871794872,
+        "recall": 0.9506172839506173,
+        "f1-score": 0.9685534591194969,
+        "support": 81.0
+      },
+      "trombone": {
+        "precision": 0.9724770642201835,
+        "recall": 0.9298245614035088,
+        "f1-score": 0.9506726457399103,
+        "support": 114.0
+      },
+      "trumpet": {
+        "precision": 0.8548387096774194,
+        "recall": 0.8153846153846154,
+        "f1-score": 0.8346456692913385,
+        "support": 65.0
+      },
+      "tuba": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1-score": 1.0,
+        "support": 124.0
+      },
+      "viola": {
+        "precision": 0.825,
+        "recall": 0.9339622641509434,
+        "f1-score": 0.8761061946902655,
+        "support": 106.0
+      },
+      "violin": {
+        "precision": 0.8493150684931506,
+        "recall": 0.9612403100775194,
+        "f1-score": 0.9018181818181819,
+        "support": 129.0
+      },
+      "accuracy": 0.9141494435612083,
+      "macro avg": {
+        "precision": 0.9193563321527436,
+        "recall": 0.9094825260836773,
+        "f1-score": 0.9112320110701746,
+        "support": 1258.0
+      },
+      "weighted avg": {
+        "precision": 0.9188561685763426,
+        "recall": 0.9141494435612083,
+        "f1-score": 0.9132995761354689,
+        "support": 1258.0
+      }
+    }
+  },
+  "learned_layer_weights": [
+    0.0014969765907153487,
+    0.45708411931991577,
+    0.45727303624153137,
+    0.001518618781119585,
+    0.0009587458334863186,
+    0.0008780897478573024,
+    0.0008487976738251746,
+    0.000935456482693553,
+    0.0008591437945142388,
+    0.0028943156357854605,
+    0.006905995775014162,
+    0.0016518773045390844,
+    0.06669489294290543
+  ],
+  "label_order": [
+    "bassoon",
+    "cello",
+    "clarinet",
+    "double-bass",
+    "flute",
+    "french-horn",
+    "oboe",
+    "trombone",
+    "trumpet",
+    "tuba",
+    "viola",
+    "violin"
+  ],
+  "training_examples": 5861,
+  "validation_examples": 1258,
+  "model_fit_splits": [
+    "train"
+  ],
+  "backbone_frozen": true,
+  "class_weight_policy": {
+    "name": "inverse_frequency_if_max_min_exceeds_threshold",
+    "threshold": 1.5,
+    "train_max_min_ratio": 1.9603960396039604,
+    "weights": {
+      "bassoon": 1.0758076906204224,
+      "cello": 0.9465439319610596,
+      "clarinet": 0.8929006457328796,
+      "double-bass": 0.9163540005683899,
+      "flute": 0.8912712931632996,
+      "french-horn": 1.2886983156204224,
+      "oboe": 1.2921075820922852,
+      "trombone": 0.9198054075241089,
+      "trumpet": 1.6119362115859985,
+      "tuba": 0.8377644419670105,
+      "viola": 0.9867003560066223,
+      "violin": 0.8222503066062927
+    }
+  },
+  "embedding_schema": {
+    "model_id": "m-a-p/MERT-v1-95M",
+    "model_revision": "12af15fef9d0ac838c3f475bfbbf26d2060dd4f5",
+    "pooling": "mean_over_time_per_hidden_layer"
+  },
+  "test_evaluated": false,
+  "final_test_policy": {
+    "final_fit_splits": [
+      "train"
+    ],
+    "epochs": "validation-selected best_epoch",
+    "test_extraction_and_evaluations_allowed": 1
+  },
+  "input_files": {
+    "train": {
+      "path": "/projectnb/rise-grid/maxliu2k/all-samples/features/mert/train.npz",
+      "sha256": "ef22eb372c310c3b4a2ffa19d2ac9a9315b6392223c94be4ab8b50da097ea284"
+    },
+    "val": {
+      "path": "/projectnb/rise-grid/maxliu2k/all-samples/features/mert/val.npz",
+      "sha256": "4819f726196f3c9f50583f9f0f38eb29cacae8257bf5a1a6ff6c98838ea06a14"
+    }
+  },
+  "software_versions": {
+    "python": "3.9.9",
+    "numpy": "2.0.2",
+    "pandas": "2.3.3",
+    "scikit_learn": "1.6.1",
+    "torch": "2.8.0+cu128"
+  },
+  "output_files": {
+    "validation_search": {
+      "path": "/projectnb/rise-grid/maxliu2k/instrument-robustness/artifacts/mert/validation_search.csv",
+      "sha256": "752cd8e1f37a6e9e76fb82a8baf7ea6a80e520b1479637b26ffc4ca7e9de9a89"
+    },
+    "validation_confusion_matrix": {
+      "path": "/projectnb/rise-grid/maxliu2k/instrument-robustness/artifacts/mert/validation_confusion_matrix.csv",
+      "sha256": "354036b89691dfbf3e30602bd915324ad93ea1e9f40279796ea8c8582abdbf94"
+    },
+    "model": {
+      "path": "/projectnb/rise-grid/maxliu2k/instrument-robustness/artifacts/mert/best_probe.pt",
+      "sha256": "00c78a5793b9878d8d0012ff8c32a7dbb765e3b245e1bf921438d323533c12a8"
+    }
+  }
+}
