@@ -72,6 +72,26 @@ CLIP_LEN = int(round(3.0 * SR))
 MAX_SNR_ERROR_DB = 0.1
 MIN_CENTERED_NOISE_RMS = 1e-6
 
+# How far the cosine similarity between two SNR levels' added components may fall below 1 before
+# validate() calls it a re-drawn realization.
+#
+# The property guarded: for one (window, noise_type) the SAME realization must be reused at every
+# SNR, scaled only by alpha. Otherwise SNR is not the only thing varying along the curve.
+#
+# The bound is set from measurement, not taste. `noisy` is stored float32, so recovering the added
+# component as `noisy - clean` costs a rounding step, and the deviation is never exactly zero.
+# Measured on the sealed 97b1cdd2 build, 5 validate windows x 3 noise types x 8 SNRs:
+#
+#   same realization, rounding only     6e-8 .. 6.62e-6      <- what we must tolerate
+#   genuinely different realization     0.992 .. 0.996       <- what we must catch
+#
+# The two populations are five orders of magnitude apart. 1e-3 sits ~150x above the worst
+# rounding and ~1000x below the cheapest real failure. The previous bound was 1e-6 -- BELOW the
+# rounding floor -- so on 2026-08-03 it failed the whole sweep on a mechanical draw measuring
+# 6.62e-6, which was correct arithmetic. A threshold inside the noise it is measuring reports
+# noise.
+MAX_REALIZATION_COSINE_DEVIATION = 1e-3
+
 # Reject a completed corpus if more than this share of a mixture's noise power is residual DC.
 # Every realization is explicitly centered before scaling, so crossing 1% indicates that the
 # generated files no longer implement the recorded protocol.
@@ -602,9 +622,14 @@ def validate(n_samples: int = 5) -> None:
                 )
                 for component in added_components
             ]
-            if min(similarities) <= 1 - 1e-6:
+            worst_deviation = 1 - min(similarities)
+            if worst_deviation > MAX_REALIZATION_COSINE_DEVIATION:
                 raise AssertionError(
-                    f"{noise_type} did not reuse one realization across SNRs"
+                    f"{noise_type} did not reuse one realization across SNRs: "
+                    f"worst cosine deviation {worst_deviation:.3e} exceeds "
+                    f"{MAX_REALIZATION_COSINE_DEVIATION:.0e} "
+                    f"(window {window_id}; a re-drawn realization measures ~1.0, "
+                    f"float32 rounding measures ~1e-7)"
                 )
 
     results = pd.DataFrame(rows)

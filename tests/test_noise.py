@@ -45,6 +45,7 @@ from instrument_robustness.noise_sweep import (
     load_esc50_index,
     measured_snr,
     mix_at_snr,
+    MAX_REALIZATION_COSINE_DEVIATION,
     noise_preprocessing_protocol,
     read_audio_window,
     sha256_file,
@@ -358,6 +359,53 @@ class NoiseTests(unittest.TestCase):
         for snr in SNRS:
             mixture, _, _ = mix_at_snr(clean, noise, snr)
             self.assertAlmostEqual(measured_snr(clean, mixture), snr, places=4)
+
+    def test_realization_tolerance_separates_rounding_from_a_redrawn_realization(self) -> None:
+        """The reuse bound must sit between float32 rounding and an actually different draw.
+
+        validate() checks that one realization is scaled to every SNR by comparing the added
+        components `noisy - clean`. `noisy` is float32, so that subtraction is never exact and
+        the cosine deviation has a nonzero floor. The bound was originally 1e-6, which is BELOW
+        that floor: on 2026-08-03 it failed the entire sweep on a mechanical draw measuring
+        6.62e-6 of correct arithmetic.
+
+        This pins both sides. If it fires, the bound has drifted into the rounding noise again
+        (lower assert) or grown so loose it would accept a genuinely re-drawn realization
+        (upper assert).
+        """
+        rng = np.random.default_rng(0)
+        clean = rng.standard_normal(CLIP_LEN).astype(np.float32)
+        clean *= 0.1 / float(np.sqrt(np.mean(clean.astype(np.float64) ** 2)))
+
+        def added_components(noise: np.ndarray) -> list[np.ndarray]:
+            return [mix_at_snr(clean, noise, snr)[0] - clean for snr in SNRS]
+
+        def cosine(first: np.ndarray, second: np.ndarray) -> float:
+            unit = lambda v: v / (np.linalg.norm(v) + 1e-12)  # noqa: E731
+            return float(abs(np.dot(unit(first), unit(second))))
+
+        one = rng.standard_normal(CLIP_LEN).astype(np.float32)
+        components = added_components(one)
+        rounding = 1 - min(cosine(c, components[0]) for c in components)
+
+        other = rng.standard_normal(CLIP_LEN).astype(np.float32)
+        redrawn = 1 - cosine(added_components(other)[-1], components[0])
+
+        self.assertLess(rounding, MAX_REALIZATION_COSINE_DEVIATION)
+        self.assertGreater(redrawn, MAX_REALIZATION_COSINE_DEVIATION)
+        # and the two must not be anywhere near each other
+        self.assertGreater(redrawn / max(rounding, 1e-12), 1e3)
+
+        # Synthetic Gaussian input rounds far more kindly than real audio -- it lands near 1e-7,
+        # which would have slipped under the old 1e-6 bound too. So this assertion, not the one
+        # above, is what actually pins the 2026-08-03 regression: the worst rounding MEASURED on
+        # the sealed 97b1cdd2 build (mechanical, 6.62e-6) must sit well inside the bound.
+        WORST_MEASURED_ROUNDING = 6.62e-6
+        self.assertGreater(
+            MAX_REALIZATION_COSINE_DEVIATION,
+            WORST_MEASURED_ROUNDING * 10,
+            "bound is within 10x of rounding measured on real audio; it will false-alarm",
+        )
 
     def test_float_window_preserves_headroom_and_rejects_wrong_length(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
