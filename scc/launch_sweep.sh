@@ -29,11 +29,25 @@ VC="${VENV_CORE:-/projectnb/rise-grid/maxliu2k/venv}"
 VP="${VENV_PRETRAINED:-/projectnb/rise-grid/maxliu2k/venv_pretrained}"
 VM="${VENV_MERT:-/projectnb/rise-grid/maxliu2k/venv_mert}"
 HF="${HF_HOME:-/projectnb/rise-grid/maxliu2k/hf_cache}"
-MAIL="${RISE_MAIL:-}"                       # set to get SGE begin/abort/end mail
+MAIL="${RISE_MAIL:-}"                       # set to get SGE mail; see the policy below
 STATUS="$REPO/sweep_status.log"
 
-mailopt=()
-[ -n "$MAIL" ] && mailopt=(-m abe -M "$MAIL")
+# MAIL POLICY: silence unless something breaks, plus exactly one "it is done".
+#
+# This used to be `-m abe` on all eight jobs -- abort, BEGIN and end. Eight begin-mails and
+# eight end-mails per launch, times two launches on 2026-08-03 (the first aborted six times),
+# is roughly twenty messages, none of which carried a decision. Mail you learn to delete
+# unread is worse than no mail: the one that matters arrives in the same pile.
+#
+# So: every worker mails ONLY on abort. sweep_report, the single terminal job, also mails on
+# end -- and because it is held on all six evaluations and runs even when they fail, that one
+# message is a true "the sweep is over, read docs/NOISE_RESULTS.md" for the whole graph.
+mailfail=()                                 # workers: abort only
+maildone=()                                 # terminal job: abort + end
+if [ -n "$MAIL" ]; then
+    mailfail=(-m a  -M "$MAIL")
+    maildone=(-m ae -M "$MAIL")
+fi
 
 say() { printf '%s\n' "$*" | tee -a "$STATUS"; }
 
@@ -70,7 +84,7 @@ COMMON="RISE_REPO=$REPO,RISE_DATA_ROOT=$DATA"
 # bootstrap and cluster sign test in noise_stats.py require pairing. The audit's NOISE-001 found
 # PANNs scored against a different corpus than the others, silently invalidating every
 # comparison involving it.
-gen=$(qsub -terse "${mailopt[@]}" -N noise_generate \
+gen=$(qsub -terse "${mailfail[@]}" -N noise_generate \
       -v "$COMMON,RISE_NOISE_ROOT=$NOISE,RISE_VENV=$VC" \
       -o "$REPO/noise_generate.log" scc/noise_generate.qsub)
 say "  noise_generate  $gen"
@@ -88,14 +102,14 @@ for spec in "svm:scc/svm_noise.qsub:RISE_VENV=$VC" \
             "panns:scc/rise_noise_eval.qsub:RISE_MODEL=panns,RISE_VENV=$VP"; do
     m="${spec%%:*}"; rest="${spec#*:}"; script="${rest%%:*}"; extra="${rest#*:}"
     vars="$COMMON"; [ -n "$extra" ] && vars="$vars,$extra"
-    jid=$(qsub -terse "${mailopt[@]}" -N "${m}_noise" -hold_jid "$gen" \
+    jid=$(qsub -terse "${mailfail[@]}" -N "${m}_noise" -hold_jid "$gen" \
           -v "$vars" -o "$REPO/${m}_noise.log" "$script")
     evals="${evals:+$evals,}$jid"
     say "  ${m}_noise      $jid"
 done
 
 # ---- 3. one report, held on all six ----------------------------------------------------------
-rep=$(qsub -terse "${mailopt[@]}" -N sweep_report -hold_jid "$evals" \
+rep=$(qsub -terse "${maildone[@]}" -N sweep_report -hold_jid "$evals" \
       -v "$COMMON,RISE_VENV=$VC" -o "$REPO/sweep_report.log" scc/sweep_report.qsub)
 say "  sweep_report    $rep"
 say ""
