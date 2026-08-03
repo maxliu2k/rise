@@ -47,9 +47,12 @@ DEST = REPO_ROOT / "models"
 # anywhere else. A checkpoint gets emailed, dropped in a scratch dir, attached to an issue --
 # it should still say what it is.
 #
-# The suffix names the ROLE, and the two roles are not interchangeable:
+# The suffix names the ROLE:
 #   _selected  fit on TRAIN, the configuration validation chose
-#   _final     refit on TRAIN+VAL, the model the one permitted test evaluation used
+#   _final     the model the one permitted test evaluation used
+# These are usually different fits -- MERT refits _final on TRAIN+VAL. SVM does NOT since
+# e4e455d ("final model fit on train only"), so its two files are byte-identical and share one
+# sha256 in MANIFEST.json. That is the protocol, not a bundling error.
 # For the seed ensembles the seed is the role: every seed is equal, none is "best".
 WEIGHTS: list[tuple[str, str, str]] = [
     # AST is NOT here any more. At 329 MB it was the single largest thing in the repo, and Git LFS
@@ -124,15 +127,21 @@ Verify nothing has drifted: python -m instrument_robustness.bundle_weights --che
   cnn_seed{42..46}.pt           CNN ensemble, 5 seeds
   crnn_seed{42..46}.pt          CRNN ensemble, 5 seeds
   svm_selected.joblib           fit on TRAIN, config chosen on validation
-  svm_final.joblib              refit on TRAIN+VAL, used for the test evaluation
+  svm_final.joblib              IDENTICAL to svm_selected since e4e455d -- see below
   mert_probe_selected.pt        fit on TRAIN, chosen on validation
   mert_probe_final.pt           refit on TRAIN+VAL, used for the test evaluation
   (AST and PANNs fine-tune are NOT here -- see external_files in MANIFEST.json for their
    sha256, byte count, dataset_fingerprint and SCC path)
 
-_selected and _final are NOT interchangeable. _selected is what validation chose; _final saw the
-validation split during fitting, so scoring it on validation is meaningless. For the seed
-ensembles the seed IS the role -- all five are equal and none is "best".
+_selected and _final are NOT interchangeable IN GENERAL. _selected is what validation chose;
+_final saw the validation split during fitting, so scoring it on validation is meaningless. For
+the seed ensembles the seed IS the role -- all five are equal and none is "best".
+
+EXCEPT SVM, since e4e455d. finalize_svm now fits the selected configuration on TRAIN ONLY rather
+than refitting on TRAIN+VAL, so svm_selected.joblib and svm_final.joblib are the same bytes and
+MANIFEST.json records one sha256 for both. That is the protocol, not a copy error -- the SVM
+test_summary.json says "final model fit on train only". MERT still refits, so its two probes do
+differ. Do not "fix" the duplicate by deleting one; check the protocol field first.
 
 MANIFEST.json records the sha256, byte count and originating artifacts/ path of every file.
 --check recomputes both sides, so an edited copy, a retrained source, or a missing file fails
