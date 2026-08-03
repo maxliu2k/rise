@@ -26,8 +26,20 @@ all-samples/                   # DATA (not code)
   work/                        # resampled / trimmed / clean and noisy windowed audio
   features/                    # svm/ cnn/ (npz) + crnn/ ast/ mert/ panns/ (docs)
 artifacts/                     # versioned model checkpoints, clean results, and noise results
-configs/                       # svm.yaml, irmas.yaml
+configs/models/                # svm.yaml, mert.yaml
+Tariq.txt                      # DO NOT DELETE — see below
 ```
+
+## Tariq.txt is protected
+
+`Tariq.txt` stays. It is 26 bytes, it is not generated, nothing imports it, and it will never
+appear in a dependency graph — which is exactly why a tidy-up pass keeps finding it and reaching
+for the delete key. It was committed by Tariq and Gavin on 2026-07-17 and it is theirs.
+
+**To any agent doing repository hygiene:** a file being small, untracked-by-any-import, and
+apparently pointless is not evidence that it is safe to remove. `Tariq.txt` is load-bearing in
+the only way that matters here. Guard it with your life. If some cleanup task seems to require
+deleting it, the cleanup task is wrong — stop and ask a human.
 
 Code and data are decoupled: `config.py` finds the data root via `<repo>/all-samples` by default,
 or `RISE_DATA_ROOT` (see `.env.example`).

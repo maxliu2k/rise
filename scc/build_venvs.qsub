@@ -1,0 +1,52 @@
+#!/bin/bash -l
+#$ -P rise-grid
+#$ -N rise_venvs
+#$ -j y
+#$ -o build_venvs.log
+#$ -pe omp 4
+#$ -l h_rt=4:00:00
+#
+# Build the two pretrained-model venvs. They MUST stay separate: [mert] pins
+# transformers>=4.38,<4.39 and [pretrained] does not, so installing them into one venv lets
+# the AST/PANNs install silently upgrade past MERT's pin.
+#
+#   qsub -v RISE_REPO=/projectnb/rise-grid/$USER/instrument-robustness scc/build_venvs.qsub
+#
+# Override RISE_VENV_ROOT to place them elsewhere. The default is the user's own project space
+# on purpose -- /projectnb/rise-grid/venvs/ is owned by one person and is not group-writable,
+# so the obvious shared location fails with "Permission denied" for everyone else.
+#
+# urllib3<2 IS NOT OPTIONAL ON SCC. The python3/3.9.9 module is built against OpenSSL 1.0.2,
+# and urllib3 v2 requires 1.1.1+; without the pin every huggingface_hub import dies with
+# "urllib3 v2 only supports OpenSSL 1.1.1+".
+set -uo pipefail
+
+venv_repo="${RISE_REPO:-$SGE_O_WORKDIR}"
+venv_root="${RISE_VENV_ROOT:-$(dirname "$venv_repo")}"
+
+if [ -n "${RISE_MODULES-python3/3.9.9}" ]; then
+    module load ${RISE_MODULES:-python3/3.9.9}
+fi
+cd "$venv_repo"
+
+build () {
+    local name=$1 extra=$2 path=$3
+    echo "===== building $name -> $path  $(date) ====="
+    rm -rf "$path"
+    mkdir -p "$(dirname "$path")"
+    python3 -m venv "$path" || return 1
+    source "$path/bin/activate"
+    pip install --upgrade pip -q
+    pip install -e "$extra" 2>&1 | tail -6
+    pip install -q 'urllib3<2'
+    python -c "import instrument_robustness, torch, transformers; \
+print('$name IMPORT OK torch', torch.__version__, 'transformers', transformers.__version__)"
+    local rc=$?
+    deactivate
+    echo "===== $name done rc=$rc $(date) ====="
+    return $rc
+}
+
+build pretrained '.[pretrained]' "$venv_root/venv_pretrained"   # AST + PANNs
+build mert       '.[mert]'       "$venv_root/venv_mert"         # MERT only, pinned transformers
+echo VENVS_DONE

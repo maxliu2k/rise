@@ -13,6 +13,7 @@ repo="${RISE_REPO:-$SGE_O_WORKDIR}"
 venv="${PANNS_VENV:-$repo/.venv}"
 export RISE_DATA_ROOT="${RISE_DATA_ROOT:-$repo/all-samples}"
 output="${PANNS_OUTPUT_DIR:-$repo/artifacts/panns}"
+module load python3/3.9.9
 source "$venv/bin/activate"
 cd "$repo"
 export PYTHONPATH="$repo/src${PYTHONPATH:+:$PYTHONPATH}"
