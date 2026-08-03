@@ -101,6 +101,45 @@ MAX_DC_POWER_SHARE = 0.01
 # 30-49 domestic/urban.
 ESC50_TARGETS = {"natural": range(0, 20), "mechanical": range(30, 50)}
 
+# --- DEMAND ------------------------------------------------------------------------------------
+# 18 environments, each a 16-microphone array recording ONE scene for 300 s at 48 kHz.
+DEMAND_ROOT = Path(
+    os.environ.get("RISE_DEMAND_ROOT", NOISE_ROOT / "DEMAND")
+)
+
+# ONE CHANNEL, NOT SIXTEEN. ch01..ch16 are sixteen microphones of the same array capturing the
+# same acoustic event at the same instant. They are near-duplicates that differ by array
+# geometry, not sixteen independent samples of the environment. Indexing all sixteen would
+# multiply the apparent corpus by 16 while adding almost no acoustic diversity -- the same
+# mistake as splitting this dataset's windows randomly instead of by pitch group, and it would
+# inflate the ambient condition's effective sample size in exactly the way that is hardest to
+# notice afterwards.
+DEMAND_CHANNEL = "ch01"
+
+# Extra source frames read either side of a window so the resampler's filter has support and the
+# output is not short by a sample or two. Cheap insurance; the segment is trimmed to CLIP_LEN.
+RESAMPLE_MARGIN_FRAMES = 4096
+
+# Grouped the way DEMAND itself does: domestic, nature, office, public, street, transportation.
+# The grouping is recorded per mixture as provenance; it does not select anything.
+DEMAND_ENVIRONMENTS: dict[str, str] = {
+    "DKITCHEN": "domestic", "DLIVING": "domestic", "DWASHING": "domestic",
+    "NFIELD": "nature", "NPARK": "nature", "NRIVER": "nature",
+    "OHALLWAY": "office", "OMEETING": "office", "OOFFICE": "office",
+    "PCAFETER": "public", "PRESTO": "public", "PSTATION": "public",
+    "SCAFE": "street", "SPSQUARE": "street", "STRAFFIC": "street",
+    "TBUS": "transportation", "TCAR": "transportation", "TMETRO": "transportation",
+}
+
+# Which project noise type each DEMAND environment feeds. Kept as a dict of the same shape as
+# ESC50_TARGETS so a reader can see both corpus mappings in one place.
+#
+# NOT YET IN config.NOISE_TYPES. The SNR grid was frozen from `snr_pilot` measurements taken on
+# white/natural/mechanical only, and an unpiloted grid is how this project ended up with an
+# inherited grid that sat entirely at or below chance. Run the pilot on `ambient` before adding
+# it to NOISE_TYPES.
+DEMAND_TARGETS = {"ambient": tuple(DEMAND_ENVIRONMENTS)}
+
 
 def diagnostic_protocol() -> dict[str, object]:
     """Settings that define the SNR diagnostics stored with every mixture."""
@@ -240,6 +279,125 @@ class Esc50Clip(NamedTuple):
     fold: int
 
 
+class DemandRecording(NamedTuple):
+    """One DEMAND environment recording, and the metadata describing it.
+
+    `environment` and `grouping` are carried for the same reason Esc50Clip carries `category`:
+    collapsing 18 environments into "ambient" is only auditable if the original environment
+    survives into per-mixture provenance. `frames` is the source length, cached at index time so
+    a draw can pick a crop offset without opening the file twice.
+    """
+
+    path: Path
+    environment: str
+    grouping: str
+    channel: str
+    frames: int
+    samplerate: int
+
+
+def load_demand_index(demand_root: Path | None = None) -> dict[str, list[DemandRecording]]:
+    """Index one channel of every DEMAND environment.
+
+    Preconditions: `demand_root` contains one directory per environment named in
+    DEMAND_ENVIRONMENTS, each holding `<DEMAND_CHANNEL>.wav`.
+    Postcondition: returns {noise_type: [DemandRecording, ...]} ordered by environment name, one
+    entry per environment. The ordering is load-bearing exactly as it is for ESC-50 -- `draw_noise`
+    indexes into this list with a seeded RNG, so reordering changes which environment a seed picks.
+    Raises: FileNotFoundError if the root or any environment channel is missing; ValueError if a
+    recording is too short to yield one window.
+    """
+    root = Path(demand_root) if demand_root is not None else DEMAND_ROOT
+    if not root.exists():
+        raise FileNotFoundError(
+            f"DEMAND not found at {root}. Set RISE_DEMAND_ROOT, or drop `ambient` from the "
+            "noise types."
+        )
+
+    recordings: list[DemandRecording] = []
+    for environment in sorted(DEMAND_ENVIRONMENTS):
+        path = root / environment / f"{DEMAND_CHANNEL}.wav"
+        if not path.is_file():
+            raise FileNotFoundError(
+                f"DEMAND environment {environment} has no {DEMAND_CHANNEL}.wav at {path}"
+            )
+        info = sf.info(str(path))
+        if info.channels != 1:
+            raise ValueError(f"{path} has {info.channels} channels; expected mono")
+        # Enough source frames to yield CLIP_LEN after resampling to SR, plus the resampler margin.
+        needed = _source_frames_for_window(info.samplerate)
+        if info.frames < needed:
+            raise ValueError(
+                f"{path} has {info.frames} frames; need at least {needed} to cut one "
+                f"{CLIP_LEN}-sample window at {SR} Hz"
+            )
+        recordings.append(
+            DemandRecording(
+                path=path,
+                environment=environment,
+                grouping=DEMAND_ENVIRONMENTS[environment],
+                channel=DEMAND_CHANNEL,
+                frames=int(info.frames),
+                samplerate=int(info.samplerate),
+            )
+        )
+
+    if len(recordings) != len(DEMAND_ENVIRONMENTS):
+        raise ValueError(
+            f"Indexed {len(recordings)} DEMAND environments; expected "
+            f"{len(DEMAND_ENVIRONMENTS)}"
+        )
+    return {noise_type: list(recordings) for noise_type in DEMAND_TARGETS}
+
+
+def _source_frames_for_window(source_sr: int) -> int:
+    """Source frames needed to produce one CLIP_LEN window at SR, including resampler margin."""
+    if source_sr == SR:
+        return CLIP_LEN
+    return int(np.ceil(CLIP_LEN * source_sr / SR)) + RESAMPLE_MARGIN_FRAMES
+
+
+def _read_source_segment(
+    path: Path,
+    start_frame: int,
+    source_sr: int,
+) -> np.ndarray:
+    """Read ONE window's worth of audio from `path` starting at `start_frame`, resampled to SR.
+
+    DEMAND recordings are 300 s at 48 kHz -- 14.4 M frames. Decoding and resampling all of that
+    to use 3 s of it, once per mixture, would dominate generation time. This reads only the span
+    it needs.
+
+    Postcondition: returns exactly CLIP_LEN float32 samples at SR.
+    Raises: ValueError if the file yields fewer frames than requested or non-finite samples.
+    """
+    frames = _source_frames_for_window(source_sr)
+    segment, read_sr = sf.read(
+        str(path),
+        start=int(start_frame),
+        frames=frames,
+        dtype="float32",
+        always_2d=False,
+    )
+    if read_sr != source_sr:
+        raise ValueError(f"{path} reported {source_sr} Hz at index time, {read_sr} Hz now")
+    if segment.ndim == 2:
+        segment = segment.mean(axis=1)
+    if segment.shape[0] < frames:
+        raise ValueError(
+            f"{path}: read {segment.shape[0]} frames from offset {start_frame}; expected {frames}"
+        )
+    if not np.all(np.isfinite(segment)):
+        raise ValueError(f"{path} contains non-finite samples at offset {start_frame}")
+    if read_sr != SR:
+        segment = librosa.resample(segment, orig_sr=read_sr, target_sr=SR)
+    if segment.shape[0] < CLIP_LEN:
+        raise ValueError(
+            f"{path}: resampled segment is {segment.shape[0]} samples; expected >= {CLIP_LEN}"
+        )
+    return np.asarray(segment[:CLIP_LEN], dtype=np.float32)
+
+
 def load_esc50_index() -> dict[str, list[Esc50Clip]]:
     """Select the ESC-50 clips for each project noise category, with their corpus metadata.
 
@@ -365,12 +523,16 @@ def draw_noise(
     noise_type: str,
     rng: np.random.Generator,
     esc_index: dict[str, list[Esc50Clip]],
+    demand_index: dict[str, list[DemandRecording]] | None = None,
 ) -> tuple[np.ndarray, dict[str, object]]:
     """Draw one centered, non-silent realization and return its source provenance.
 
-    Postcondition: the returned provenance dict always carries `noise_target`, `noise_category`
-    and `noise_fold`. For generated white noise all three are None -- there is no corpus clip
-    behind it -- which keeps the provenance CSV one schema across every noise type.
+    Preconditions: `demand_index` is required for any noise type in DEMAND_TARGETS and ignored
+    otherwise, so a caller that never asks for `ambient` needs no DEMAND download.
+    Postcondition: the returned provenance dict always carries `noise_target`, `noise_category`,
+    `noise_fold`, `noise_environment` and `noise_channel`. Fields that do not apply to the corpus
+    behind a given type are None rather than absent -- generated white noise has no clip, and
+    DEMAND has no ESC-50 target -- which keeps the provenance CSV one schema across every type.
     """
     if noise_type == "white":
         noise = rng.standard_normal(CLIP_LEN).astype(np.float32)
@@ -384,7 +546,44 @@ def draw_noise(
             "noise_target": None,
             "noise_category": None,
             "noise_fold": None,
+            "noise_environment": None,
+            "noise_channel": None,
         }
+
+    if noise_type in DEMAND_TARGETS:
+        if demand_index is None:
+            raise ValueError(
+                f"{noise_type} needs a DEMAND index; call load_demand_index() and pass it"
+            )
+        recordings = demand_index[noise_type]
+        for _attempt in range(20):
+            recording = recordings[int(rng.integers(len(recordings)))]
+            # Crop offset is drawn in SOURCE frames, because that is what sf.read seeks in.
+            last_start = recording.frames - _source_frames_for_window(recording.samplerate)
+            start = int(rng.integers(0, max(last_start, 0) + 1))
+            segment = _read_source_segment(recording.path, start, recording.samplerate)
+            segment = (
+                segment.astype(np.float64) - np.mean(segment, dtype=np.float64)
+            ).astype(np.float32)
+            if (
+                float(np.sqrt(np.mean(segment.astype(np.float64) ** 2)))
+                >= MIN_CENTERED_NOISE_RMS
+            ):
+                return segment, {
+                    "noise_source": f"{recording.environment}/{recording.channel}.wav",
+                    "noise_source_path": str(recording.path.resolve()),
+                    "noise_source_sr": recording.samplerate,
+                    "crop_start_resampled_sample": start,
+                    "noise_target": None,
+                    "noise_category": recording.grouping,
+                    "noise_fold": None,
+                    "noise_environment": recording.environment,
+                    "noise_channel": recording.channel,
+                }
+        raise ValueError(
+            f"Unable to draw a non-silent centered {noise_type} DEMAND segment after 20 attempts"
+        )
+
     if noise_type not in ESC50_TARGETS:
         raise ValueError(f"Unknown noise type: {noise_type}")
 
@@ -413,6 +612,8 @@ def draw_noise(
                 "noise_target": clip.target,
                 "noise_category": clip.category,
                 "noise_fold": clip.fold,
+                "noise_environment": None,
+                "noise_channel": None,
             }
     raise ValueError(
         f"Unable to draw a non-silent centered {noise_type} ESC-50 segment "
