@@ -17,10 +17,13 @@ and would collide outright once the folders are gone, and `model.safetensors` st
 anything the moment it leaves artifacts/ast/. Checkpoints get emailed and dropped into scratch
 directories; the name should survive that.
 
-AST IS LFS-TRACKED AND 329 MB. `.gitattributes` matches LFS by exact path, so the renamed
-models/ast_finetuned.safetensors needs its own pattern -- without it git stores a 329 MB blob in
-every clone forever instead of a pointer. This script refuses to run if that pattern is missing,
-because the failure is invisible until someone clones.
+THE TWO 300 MB CHECKPOINTS ARE POINTERS, NOT FILES. AST (329 MB) and the PANNs fine-tune
+(312 MB) live in EXTERNAL_WEIGHTS rather than being copied here. Git LFS was the obvious
+alternative and is the wrong tool: LFS storage is not reclaimable, because deleting the file
+leaves the object referenced by history. Two superseded AST checkpoints already cost the
+repository owner ~658 MB permanently. A pointer also carries `dataset_fingerprint`, which is what
+lets build() refuse a checkpoint from a different dataset build -- LFS would hand it over
+silently.
 """
 from __future__ import annotations
 
@@ -49,7 +52,12 @@ DEST = REPO_ROOT / "models"
 #   _final     refit on TRAIN+VAL, the model the one permitted test evaluation used
 # For the seed ensembles the seed is the role: every seed is equal, none is "best".
 WEIGHTS: list[tuple[str, str, str]] = [
-    ("ast",   "model.safetensors",              "ast_finetuned.safetensors"),
+    # AST is NOT here any more. At 329 MB it was the single largest thing in the repo, and Git LFS
+    # storage is not reclaimable: deleting the file leaves the object referenced by history, so the
+    # two superseded AST checkpoints already cost ~658 MB of the owner's LFS quota permanently.
+    # Adding a third per retrain is not sustainable when the dataset fingerprint changes. It is an
+    # EXTERNAL_WEIGHTS pointer instead -- which also gains the dataset_fingerprint check that LFS
+    # cannot do.
     *[("cnn",  f"model_s{s}.pt", f"cnn_seed{s}.pt")  for s in (42, 43, 44, 45, 46)],
     *[("crnn", f"model_s{s}.pt", f"crnn_seed{s}.pt") for s in (42, 43, 44, 45, 46)],
     ("mert",  "best_probe.pt",                  "mert_probe_selected.pt"),
@@ -71,21 +79,41 @@ HISTORICAL_EXTERNAL_WEIGHTS = {
         "git_commit": "baa5970",
         "git_path": "artifacts/new-ast-results-20260730-022036/model.safetensors",
     },
-}
-
-EXTERNAL_WEIGHTS = {
-    "panns_finetune_philharmonia.pt": {
+    "panns_finetune_philharmonia_8378.pt": {
         "model": "panns",
         "role": "reported Philharmonia clean and noise model (historical 8,378-source build; not valid for the corrected frozen build)",
         "sha256": "00cc195e1cbea756fc0afcb1ab823d639e31668c1a859f67941c29fda40741e3",
         "release_tag": "v1.0-panns-12class",
         "dataset_fingerprint": "89f126e290d0a9674e4e0a2b6344dcced32fa42ebe4e872006918e044f723073",
         "download_url": "https://github.com/maxliu2k/rise/releases/download/v1.0-panns-12class/panns_finetune_philharmonia.pt",
-    }
+    },
+}
+
+EXTERNAL_WEIGHTS = {
+    "ast_finetuned.safetensors": {
+        "model": "ast",
+        "role": "reported clean model for the corrected frozen build; test macro-F1 0.9908 on 1255 examples",
+        "sha256": "a37bd70d51356ae32b24fd09b57e22572847c94c920a0db1ac7c3b369f1cc6b1",
+        "bytes": 344820808,
+        "dataset_fingerprint": "97b1cdd2936b81c8c4d8728ef5243f174267b7df800b7e5d01568d45ef9ce3cf",
+        "scc_path": "/projectnb/rise-grid/models/97b1cdd2/ast_finetuned.safetensors",
+        "download_url": None,   # pending a release upload; see scc_path meanwhile
+    },
+    "panns_finetune.pt": {
+        "model": "panns",
+        "role": "reported clean model for the corrected frozen build (--mode finetune); test macro-F1 0.9868 on 1255 examples",
+        "sha256": "5b102c8aaa91071391ff257f2ce978b624910019780c6fc91a3e51159d702143",
+        "bytes": 327544421,
+        "dataset_fingerprint": "97b1cdd2936b81c8c4d8728ef5243f174267b7df800b7e5d01568d45ef9ce3cf",
+        "scc_path": "/projectnb/rise-grid/models/97b1cdd2/panns_finetune.pt",
+        "download_url": None,   # pending a release upload; see scc_path meanwhile
+    },
 }
 
 # Paths that must be declared LFS before they are written, or git commits a raw blob.
-LFS_REQUIRED = ("models/ast_finetuned.safetensors",)
+# Empty on purpose: every weight now copied into models/ is a few MB, and the two 300 MB
+# checkpoints are EXTERNAL_WEIGHTS pointers rather than LFS objects. See the WEIGHTS comment.
+LFS_REQUIRED: tuple[str, ...] = ()
 
 README = """\
 GENERATED -- DO NOT EDIT. Trained weights for all six models, flat in one folder.
@@ -93,16 +121,14 @@ GENERATED -- DO NOT EDIT. Trained weights for all six models, flat in one folder
 Rebuild after retraining:   python -m instrument_robustness.bundle_weights
 Verify nothing has drifted: python -m instrument_robustness.bundle_weights --check
 
-  ast_finetuned.safetensors     AST, fine-tuned            (Git LFS, 329 MB)
   cnn_seed{42..46}.pt           CNN ensemble, 5 seeds
   crnn_seed{42..46}.pt          CRNN ensemble, 5 seeds
   svm_selected.joblib           fit on TRAIN, config chosen on validation
   svm_final.joblib              refit on TRAIN+VAL, used for the test evaluation
   mert_probe_selected.pt        fit on TRAIN, chosen on validation
   mert_probe_final.pt           refit on TRAIN+VAL, used for the test evaluation
-  panns_finetune_philharmonia.pt
-                                PANNs full fine-tune used by the historical reported
-                                clean/noise result; external release pointer in MANIFEST.json
+  (AST and PANNs fine-tune are NOT here -- see external_files in MANIFEST.json for their
+   sha256, byte count, dataset_fingerprint and SCC path)
 
 _selected and _final are NOT interchangeable. _selected is what validation chose; _final saw the
 validation split during fitting, so scoring it on validation is meaningless. For the seed
@@ -115,8 +141,9 @@ rather than passing quietly.
 These are COPIES. artifacts/<model>/ remains where finalize_* and noise_eval_* read from, and
 where the metrics, confusion matrices and status files live. Nothing here is loaded by the code.
 
-ast_finetuned.safetensors is Git LFS. Clone with git-lfs installed, or you get a 130-byte pointer
-that fails only when something tries to load it as a model.
+The two 300 MB checkpoints (AST, PANNs fine-tune) are NOT here. They are EXTERNAL_WEIGHTS
+entries in bundle_weights.py, each carrying sha256, byte count and dataset_fingerprint, and are
+readable on SCC at /projectnb/rise-grid/models/<fingerprint>/. Verify against SHA256SUMS there.
 
 The PANNs fine-tune is NOT copied into this folder. MANIFEST.json records its exact filename,
 SHA-256, release URL and scientific role. Download it explicitly and verify the hash. The included
