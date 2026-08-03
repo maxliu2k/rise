@@ -332,6 +332,13 @@ class SnrPilotSplitTests(unittest.TestCase):
 
 
 class SnrPilotSccScriptTests(unittest.TestCase):
+    # This test executes a real SCC qsub script through bash and stubs `python` by prepending a
+    # directory to PATH. That construction is POSIX-only: PATH is joined with ':', which is the
+    # separator on Linux but not on Windows, so under Git Bash the stub is never found and the
+    # script dies with 127 before reaching the assertion. Skipped on Windows rather than left
+    # permanently red -- a suite with a standing failure teaches you to ignore the next one.
+    # Linux and the SCC still run it, which is where the script actually has to work.
+    @unittest.skipIf(os.name == "nt", "executes a bash qsub script with a POSIX ':' PATH")
     def test_custom_noise_types_and_snrs_are_forwarded(self) -> None:
         repo = Path(__file__).resolve().parents[1]
         script = repo / "scc" / "mert_snr_pilot.qsub"

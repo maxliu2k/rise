@@ -14,13 +14,13 @@ set -euo pipefail
 
 mert_repo="${MERT_REPO:-$SGE_O_WORKDIR}"
 mert_data_root="${RISE_DATA_ROOT:?Submit with -v RISE_DATA_ROOT=/projectnb/...}"
-mert_venv="${MERT_VENV:-/projectnb/rise-grid/venvs/$USER/mert}"
+mert_venv="${MERT_VENV:-/projectnb/rise-grid/venvs/${USER:-$(id -un)}/mert}"
 mert_feature_dir="${MERT_FEATURE_DIR:-$mert_data_root/features/mert}"
 mert_output_dir="${MERT_OUTPUT_DIR:-$mert_repo/artifacts/mert}"
 mert_windows_csv="$mert_data_root/pipeline/windows.csv"
 
 export RISE_DATA_ROOT="$mert_data_root"
-export HF_HOME="${HF_HOME:-/projectnb/rise-grid/huggingface/$USER}"
+export HF_HOME="${HF_HOME:-/projectnb/rise-grid/huggingface/${USER:-$(id -un)}}"
 export OMP_NUM_THREADS="${NSLOTS:-4}"
 export MKL_NUM_THREADS="${NSLOTS:-4}"
 export PYTHONUNBUFFERED=1
