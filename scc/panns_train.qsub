@@ -25,6 +25,7 @@ export OMP_NUM_THREADS="${NSLOTS:-4}"
 export MKL_NUM_THREADS="${NSLOTS:-4}"
 export PYTHONUNBUFFERED=1
 
+module load python3/3.9.9
 source "$panns_venv/bin/activate"
 cd "$panns_repo"
 export PYTHONPATH="$panns_repo/src${PYTHONPATH:+:$PYTHONPATH}"

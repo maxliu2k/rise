@@ -183,7 +183,15 @@ either after `noise_sweep --generate` would invalidate the shared noisy corpus.
 ### ✅ 10. CNN/CRNN optimize balanced accuracy, not macro-F1
 - **Resolved by standardising the whole project on macro-F1.** `train_cnn.run_training` (which
   `train_crnn` also uses) now selects the combiner on `validation_macro_f1`, and writes
-  `selection_metric: "validation_macro_f1"`. All six models now select and report on one metric.
+  `selection_metric: "validation_macro_f1"`.
+- **Correction.** This section previously claimed "all six models now select and report on one
+  metric". That was false when written: `train_ast` was left selecting on
+  `(balanced_accuracy, mcc, accuracy)` and recording
+  `selection_metric: "validation_balanced_accuracy"`. `docs/REPOSITORY_AUDIT.md` MODEL-002 caught
+  it. `train_ast` was changed in `75d81b2` to select on a plain `validation_macro_f1` scalar and to
+  stop loading the test split at all, so the claim now holds for the code — but **every AST
+  artifact saved before that change was selected on balanced accuracy and must be retrained**,
+  exactly as CNN and CRNN were.
 - **Balanced accuracy and MCC are still recorded in full** — per seed and per combiner
   (`single_seed_val_balanced_accuracy`, `ensemble_val_balanced_accuracy`) and in every
   `finalize_*` test block. Nothing was lost; a reader who distrusts the standardisation can check
@@ -192,6 +200,15 @@ either after `noise_sweep --generate` would invalidate the shared noisy corpus.
   `finalize_cnn` refuses a summary whose `selection_metric` is not `validation_macro_f1` (gate 3),
   and `summarize_results` marks such a row `STALE (selected on ..., not macro-F1; retrain)`
   instead of printing a balanced-accuracy number under a macro-F1 heading.
+- **That second gate does not cover AST, and the hole is open.** `summarize_results.clean_row`
+  reads `test.macro_f1` first and only consults `selection_metric` when that field is *absent*.
+  It is absent for the CNN/CRNN 5-seed summaries, which is the case it was written for; AST's
+  `metrics.json` records `test.macro_f1` explicitly, so the branch never runs and a
+  balanced-accuracy-selected AST result still prints `canonical`. Widening the check to run
+  unconditionally would be correct for AST but would also fail PANNs, which selects on validation
+  macro-F1 (`train_panns` early-stops on it) yet records no `selection_metric` field at all. The
+  honest fix is to emit `selection_metric` from `train_panns` and then make the check
+  unconditional; until then, read the AST row as stale by hand.
 - **The underlying tension is a decision, not a resolution.** `step4_window.py` and CLAUDE.md argue
   balanced accuracy and MCC are the *right* metrics under imbalance — macro-F1 pays a collapsed
   classifier more as imbalance grows (0.3333 at a 0.50 prior, 0.4737 at 0.90). Macro-F1 was chosen

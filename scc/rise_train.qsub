@@ -1,0 +1,83 @@
+#!/bin/bash -l
+#$ -P rise-grid
+#$ -N rise_train
+#$ -j y
+#$ -pe omp 4
+#$ -l gpus=1
+#$ -l gpu_c=7.0
+#$ -l gpu_memory=16G
+#$ -l h_rt=12:00:00
+#$ -l mem_per_core=8G
+#
+# Train AND finalize one of the three from-scratch models against the sealed build.
+#
+#   qsub -N svm_train  -v RISE_MODEL=svm  -o svm_train.log  scc/rise_train.qsub
+#   qsub -N cnn_train  -v RISE_MODEL=cnn  -o cnn_train.log  scc/rise_train.qsub
+#   qsub -N crnn_train -v RISE_MODEL=crnn -o crnn_train.log scc/rise_train.qsub
+#
+# WHY gpu_c=7.0, NOT 6.0. scc/cnn_train.qsub still asks for 6.0, which admits P100s, and a
+# torch 2.8.0+cu128 venv ships no kernels for them -- "no kernel image is available for
+# execution on the device". 7.0 excludes them. Do NOT work around that by forcing --device cpu:
+# measured on this dataset, CNN is 192 s/epoch on CPU and 1.4 s/epoch on an A40, CRNN 192 s
+# vs 0.8 s. The GPU request is the difference between minutes and most of a day.
+#
+# SVM is sklearn and ignores the GPU; it is here so all three from-scratch models share one
+# entry point and one seal gate. Submit it with -l gpus=0 if the GPU queue is busy.
+set -uo pipefail
+
+rise_repo="${RISE_REPO:-$SGE_O_WORKDIR}"
+rise_venv="${RISE_VENV:-$rise_repo/.venv}"
+model="${RISE_MODEL:?set -v RISE_MODEL=svm|cnn|crnn}"
+case "$model" in
+    svm|cnn|crnn) ;;
+    *) echo "RISE_MODEL must be svm, cnn or crnn; got '$model'" >&2; exit 1 ;;
+esac
+
+if [ -n "${RISE_MODULES-python3/3.9.9}" ]; then
+    module load ${RISE_MODULES:-python3/3.9.9}
+fi
+source "$rise_venv/bin/activate"
+cd "$rise_repo"
+
+export RISE_DATA_ROOT="${RISE_DATA_ROOT:-$rise_repo/all-samples}"
+export PYTHONPATH="$rise_repo/src${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONUNBUFFERED=1
+export TMPDIR="/scratch/$USER.$JOB_ID"; mkdir -p "$TMPDIR"
+export NUMBA_CACHE_DIR="$TMPDIR/numba"; mkdir -p "$NUMBA_CACHE_DIR"
+
+# Cap every thread pool to the SCHEDULER's slot count, not the node's core count. Without this
+# OpenMP/MKL size themselves to nproc (28 on some nodes) inside a 4-slot cgroup. Measured: this
+# did NOT change epoch time here -- the win was the GPU -- but an unbounded pool inside a cgroup
+# is wrong regardless, and it is the same class of bug config.worker_count() exists to prevent.
+export OMP_NUM_THREADS="${NSLOTS:-1}"
+export MKL_NUM_THREADS="${NSLOTS:-1}"
+export OPENBLAS_NUM_THREADS="${NSLOTS:-1}"
+export NUMEXPR_NUM_THREADS="${NSLOTS:-1}"
+export NUMBA_NUM_THREADS="${NSLOTS:-1}"
+
+# SEAL GATE. `-hold_jid` releases a held job when its predecessor COMPLETES, not when it
+# SUCCEEDS -- so a pipeline that dies in one second still green-lights everything queued behind
+# it, which is exactly how a training run against the PREVIOUS build gets started silently.
+# If this fires, the bug it has found is "the pipeline did not actually rebuild the data".
+python - <<'PY' || { echo "SEAL GATE FAILED - refusing to train" >&2; exit 1; }
+import json, os, sys
+from instrument_robustness.noise_sweep import dataset_build_identity
+path = os.path.join(os.environ["RISE_DATA_ROOT"], "pipeline", "dataset_freeze.json")
+if not os.path.exists(path):
+    sys.exit(f"no dataset seal at {path}; run scc/pipeline_rebuild.qsub first")
+got = json.load(open(path)).get("dataset_fingerprint")
+want = dataset_build_identity()["dataset_fingerprint"]
+if got != want:
+    sys.exit(f"seal fingerprint {got} != current config {want}")
+print("dataset seal OK:", got)
+PY
+
+echo "=== $model on $(hostname) slots=${NSLOTS:-?} start $(date) ==="
+if [ "$model" = svm ]; then
+    python -m instrument_robustness.train_svm && python -m instrument_robustness.finalize_svm
+else
+    python -m "instrument_robustness.train_$model" && python -m "instrument_robustness.finalize_$model"
+fi
+rc=$?
+echo "RISE_EXIT=$rc model=$model end $(date)"
+exit $rc

@@ -19,6 +19,7 @@ mert_feature_dir="${MERT_FEATURE_DIR:-$mert_data_root/features/mert}"
 mert_output_dir="${MERT_OUTPUT_DIR:-$mert_repo/artifacts/mert}"
 mert_windows_csv="$mert_data_root/pipeline/windows.csv"
 
+module load python3/3.9.9
 source "$mert_venv/bin/activate"
 cd "$mert_repo"
 

@@ -1,0 +1,42 @@
+#!/bin/bash -l
+#$ -P rise-grid
+#$ -N rise_pipeline
+#$ -j y
+#$ -o pipeline_rebuild.log
+#$ -pe omp 4
+#$ -l h_rt=6:00:00
+#
+# Build the dataset ONCE, all ten stages, and seal it.
+#
+#   qsub -v RISE_DATA_ROOT=/projectnb/rise-grid/$USER/all-samples scc/pipeline_rebuild.qsub
+#
+# Every other job in scc/ assumes this has already run. In particular scc/mert_prepare.qsub no
+# longer re-runs the stages itself: once freeze_dataset has written dataset_freeze.json,
+# step3_split.assert_split_is_unsealed refuses to overwrite splits.csv, so a second builder
+# is not merely redundant, it is a guaranteed failure.
+#
+# TMPDIR/NUMBA_CACHE_DIR are pointed at node-local scratch on purpose. Leaving them on the
+# shared filesystem is what produced the BrokenProcessPool failures in step6_stats.
+set -uo pipefail
+
+pipe_repo="${RISE_REPO:-$SGE_O_WORKDIR}"
+pipe_venv="${RISE_VENV:-$pipe_repo/.venv}"
+
+if [ -n "${RISE_MODULES-python3/3.9.9}" ]; then
+    module load ${RISE_MODULES:-python3/3.9.9}
+fi
+source "$pipe_venv/bin/activate"
+cd "$pipe_repo"
+
+export RISE_DATA_ROOT="${RISE_DATA_ROOT:-$pipe_repo/all-samples}"
+export PYTHONPATH="$pipe_repo/src${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONUNBUFFERED=1
+export TMPDIR="/scratch/$USER.$JOB_ID"; mkdir -p "$TMPDIR"
+export NUMBA_CACHE_DIR="$TMPDIR/numba"; mkdir -p "$NUMBA_CACHE_DIR"
+
+echo "host $(hostname) slots ${NSLOTS:-?} start $(date)"
+echo "data root: $RISE_DATA_ROOT"
+python -m instrument_robustness.run_pipeline
+rc=$?
+echo "PIPELINE_EXIT=$rc end $(date)"
+exit $rc

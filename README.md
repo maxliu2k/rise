@@ -26,7 +26,7 @@ all-samples/                   # DATA (not code)
   work/                        # resampled / trimmed / clean and noisy windowed audio
   features/                    # svm/ cnn/ (npz) + crnn/ ast/ mert/ panns/ (docs)
 artifacts/                     # versioned model checkpoints, clean results, and noise results
-configs/                       # svm.yaml, irmas.yaml
+configs/models/                # svm.yaml, mert.yaml
 ```
 
 Code and data are decoupled: `config.py` finds the data root via `<repo>/all-samples` by default,

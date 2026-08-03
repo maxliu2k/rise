@@ -26,6 +26,7 @@ export MKL_NUM_THREADS="${NSLOTS:-4}"
 export PYTHONUNBUFFERED=1
 export TOKENIZERS_PARALLELISM=false
 
+module load python3/3.9.9
 source "$mert_venv/bin/activate"
 cd "$mert_repo"
 export PYTHONPATH="$mert_repo/src${PYTHONPATH:+:$PYTHONPATH}"
