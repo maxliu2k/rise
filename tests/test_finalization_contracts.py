@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from instrument_robustness.config import TARGET_LABELS, config_fingerprint
-from instrument_robustness import finalize_ast, finalize_panns
+from instrument_robustness import finalize_ast, finalize_panns, summarize_results
 from instrument_robustness.bundle_weights import EXTERNAL_WEIGHTS, HISTORICAL_EXTERNAL_WEIGHTS
 
 
@@ -17,6 +17,45 @@ def digest(path: Path) -> str:
 
 
 class FinalizationContractTests(unittest.TestCase):
+    def test_summarize_gates_on_selection_metric_even_when_macro_f1_is_present(self) -> None:
+        """A balanced-accuracy-selected result must not print `canonical`.
+
+        The gate used to run only when a summary had NO explicit macro_f1, so any result that
+        recorded one skipped it entirely -- an AST checkpoint selected on balanced accuracy
+        printed `canonical` for weeks purely because its summary also carried a macro-F1 number.
+        If this test fires, that hole has reopened.
+        """
+        spec = dict(source="m/test_summary.json", fp="config_fingerprint",
+                    test="test_metrics", split="test")
+        fingerprint = config_fingerprint()
+        base = {"config_fingerprint": fingerprint, "test_examples": 1255,
+                "test_metrics": {"macro_f1": 0.99, "accuracy": 0.99}}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); (root / "m").mkdir()
+            summary = root / "m" / "test_summary.json"
+
+            with patch.object(summarize_results, "ARTIFACTS", root):
+                # selected on balanced accuracy -> refused, despite a valid macro_f1 being present
+                summary.write_text(json.dumps(
+                    {**base, "selection_metric": "validation_balanced_accuracy"}))
+                row = summarize_results.clean_row("M", spec, fingerprint)
+                self.assertIn("STALE", row["status"])
+                self.assertIsNone(row["macro_f1"])
+
+                # no metric anywhere -> also refused, rather than guessed
+                summary.write_text(json.dumps(base))
+                self.assertIn("STALE", summarize_results.clean_row("M", spec, fingerprint)["status"])
+
+                # absent here but recorded in the sibling validation summary -> accepted.
+                # finalize_svm/finalize_mert spent their one test evaluation before they began
+                # propagating the field, so this fallback is what keeps them out of a false STALE.
+                (root / "m" / "validation_summary.json").write_text(
+                    json.dumps({"selection_metric": "validation_macro_f1"}))
+                row = summarize_results.clean_row("M", spec, fingerprint)
+                self.assertEqual(row["status"], "canonical")
+                self.assertAlmostEqual(row["macro_f1"], 0.99)
+
     def test_external_panns_pointer_names_the_reported_finetune(self) -> None:
         """The external pointers name the FINE-TUNE that produced the reported number.
 

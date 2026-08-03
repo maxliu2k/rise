@@ -57,170 +57,33 @@ qsub -N panns_final -hold_jid panns_train   -v RISE_REPO=$RISE_REPO,RISE_DATA_RO
    or have the owner run `chmod g+w`.
 
 
-## AST training on the 12-class Philharmonia data
+## Superseded per-model sections
 
-Use `main` and keep the generated audio outside the repository:
+The AST, MERT, noise, and CNN/CRNN sections that used to live here have been removed rather than
+left to rot. They described a different world:
 
-```bash
-cd /project/rise-grid/repos/$USER/instrument-robustness
-git switch main
-git pull --ff-only origin main
-export RISE_DATA_ROOT="/projectnb/rise-grid/$USER/rise-data/philharmonia"
-```
+- **Different roots.** They used `/project/rise-grid/repos/$USER/...`,
+  `/project/rise-grid/Tariq/...` and `RISE_DATA_ROOT=.../rise-data/philharmonia`. Following one
+  section and then another gave you two different data roots, silently.
+- **Different workflow.** They said CNN and CRNN were validation-only and needed a manual
+  finalize step. `scc/rise_train.qsub` trains AND finalizes in one job, behind a seal gate.
+- **Nine stages.** The pipeline has ten; the tenth, `freeze_dataset`, is what seals the build.
 
-Submit the CPU preprocessing job first. It invokes the canonical `run_pipeline`
-entry point, downloads the configured Philharmonia sources, and rebuilds all nine
-fingerprinted stages for the onset-aligned, one-window-per-source dataset:
+Everything they covered is in "Start here" above, which was verified end to end on 2026-08-02.
 
-```bash
-prep_job=$(qsub -terse -v RISE_DATA_ROOT="$RISE_DATA_ROOT" scc/ast_prepare.qsub)
-export AST_OUTPUT_DIR="$RISE_DATA_ROOT/models/ast-canonical-$(date +%Y%m%d)"
-qsub -hold_jid "$prep_job" -v RISE_DATA_ROOT="$RISE_DATA_ROOT",AST_OUTPUT_DIR="$AST_OUTPUT_DIR" scc/train_ast.qsub
-qstat -u "$USER"
-```
-
-The GPU job verifies all 12 labels, provenance, and every window file before it
-downloads AST or begins training. `AST_OUTPUT_DIR` is required and must be fresh,
-so the invalid pre-crop checkpoint cannot be silently reused or overwritten.
-
-## MERT probe
-
-Use the shared clone on `main`:
+For the noise sweep specifically:
 
 ```bash
-cd /project/rise-grid/Tariq/instrument-robustness
-git switch main
-git pull --ff-only origin main
+qsub -v RISE_REPO=$RISE_REPO,RISE_DATA_ROOT=$RISE_DATA_ROOT,RISE_NOISE_ROOT=/projectnb/rise-grid/noise-sources/ESC-50-master      scc/noise_generate.qsub                       # ONCE. Every model must read these same files.
+
+qsub -N svm_noise   -v RISE_REPO=$RISE_REPO,RISE_DATA_ROOT=$RISE_DATA_ROOT                  -o svm_noise.log   scc/svm_noise.qsub
+qsub -N mert_noise  -v RISE_REPO=$RISE_REPO,RISE_DATA_ROOT=$RISE_DATA_ROOT,NOISE_VENV=$VM   -o mert_noise.log  scc/mert_noise.qsub
+for m in cnn crnn ast panns; do
+  qsub -N ${m}_noise -v RISE_REPO=$RISE_REPO,RISE_DATA_ROOT=$RISE_DATA_ROOT,RISE_MODEL=$m -o ${m}_noise.log scc/rise_noise_eval.qsub
+done
 ```
 
-Create or reactivate the MERT environment:
-
-```bash
-python3 -m venv "/projectnb/rise-grid/venvs/$USER/mert"  # first time only
-source "/projectnb/rise-grid/venvs/$USER/mert/bin/activate"
-python -m pip install --upgrade pip
-python -m pip install -e ".[mert]"
-```
-
-MERT needs the current fingerprinted Step-5 window audio—not `download_data.py` and not the retired
-9-class archives. Use the shared project data root:
-
-```bash
-export RISE_DATA_ROOT=/projectnb/rise-grid/rise-data
-```
-
-If `$RISE_DATA_ROOT/pipeline/windows.csv` or `$RISE_DATA_ROOT/work/windows/` is absent, submit the
-CPU preparation job and hold the train/validation GPU job behind it:
-
-```bash
-prep_job=$(qsub -terse -v RISE_DATA_ROOT="$RISE_DATA_ROOT" scc/mert_prepare.qsub)
-qsub -hold_jid "$prep_job" -v RISE_DATA_ROOT="$RISE_DATA_ROOT" scc/mert_probe.qsub
-qstat -u "$USER"
-```
-
-If the corrected Step-5 data already exists, submit only:
-
-```bash
-qsub -v RISE_DATA_ROOT="$RISE_DATA_ROOT" scc/mert_probe.qsub
-```
-
-That GPU job extracts only train/validation embeddings and selects the probe using validation
-macro-F1. It cannot access test. When it finishes, inspect and freeze:
-
-```text
-artifacts/mert/validation_summary.json
-artifacts/mert/validation_search.csv
-```
-
-Only after accepting the validation choice, submit the separate final job:
-
-```bash
-qsub -v RISE_DATA_ROOT="$RISE_DATA_ROOT" scc/mert_finalize.qsub
-```
-
-The final job refits on train+validation, extracts test with the exact saved MERT revision, evaluates
-test once, and writes a guard record that prevents a second test access.
-
-Before freezing the shared noise grid, run the validation-only MERT SNR pilot with `best_probe.pt`
-(not the train+validation `final_probe.pt`):
-
-```bash
-qsub -v RISE_DATA_ROOT="$RISE_DATA_ROOT",MERT_OUTPUT_DIR="$PWD/artifacts/mert" \
-  scc/mert_snr_pilot.qsub
-```
-
-The job writes `snr_pilot.json` beside the MERT validation artifacts and never reads test audio.
-It pilots white noise by default. With ESC-50 available, pass
-`MERT_PILOT_NOISE=white:natural:mechanical` and `RISE_NOISE_ROOT` to check all three categories
-before freezing the grid.
-
-To extend only the lower end after the initial pilot, pass colon-separated noise types and SNRs.
-For example, the canonical 8,378-source build needs this final natural/mechanical check:
-
-```bash
-qsub \
-  -v RISE_DATA_ROOT="$RISE_DATA_ROOT",RISE_NOISE_ROOT="$RISE_NOISE_ROOT",MERT_OUTPUT_DIR="$PWD/artifacts/mert_8378",MERT_PILOT_NOISE=natural:mechanical,MERT_PILOT_SNRS=20:10:0:-5:-10:-15 \
-  scc/mert_snr_pilot.qsub
-```
-
-Without `MERT_PILOT_SNRS`, the Python pilot's full default candidate grid is used.
-
-## Shared noise sweep, SVM, and MERT
-
-The clean final models above remain frozen. Put ESC-50 on the shared filesystem with both its
-`audio/` directory and `meta/esc50.csv`, then set:
-
-```bash
-cd /project/rise-grid/Tariq/instrument-robustness
-git switch main
-git pull --ff-only origin main
-
-export RISE_DATA_ROOT=/projectnb/rise-grid/rise-data
-export RISE_NOISE_ROOT=/projectnb/rise-grid/noise-sources
-```
-
-Generate the shared noisy test set once:
-
-```bash
-noise_job=$(qsub -terse \
-  -v RISE_DATA_ROOT="$RISE_DATA_ROOT",RISE_NOISE_ROOT="$RISE_NOISE_ROOT" \
-  scc/noise_generate.qsub)
-```
-
-Hold the CPU SVM evaluation and GPU MERT evaluation behind that same generation job:
-
-```bash
-qsub -hold_jid "$noise_job" \
-  -v RISE_DATA_ROOT="$RISE_DATA_ROOT" \
-  scc/svm_noise.qsub
-
-qsub -hold_jid "$noise_job" \
-  -v RISE_DATA_ROOT="$RISE_DATA_ROOT" \
-  scc/mert_noise.qsub
-```
-
-Generated WAVs and provenance remain under
-`$RISE_DATA_ROOT/work/windows_noisy/`. Compact predictions, metrics, and summaries are written to
-the repository under `artifacts/svm/noise/` and `artifacts/mert/noise/`.
-
-## CNN and CRNN seed ensembles
-
-Both architectures share one job script; `RISE_ARCH` picks which. Unlike the AST and MERT jobs,
-these read the **Step-7 feature arrays**, so the data root needs the full sealed pipeline, not
-just `--to step5_normalize`:
-
-```bash
-export RISE_DATA_ROOT=/projectnb/rise-grid/$USER/all-samples
-
-qsub -v RISE_DATA_ROOT="$RISE_DATA_ROOT" scc/cnn_train.qsub
-qsub -N crnn_train -v RISE_DATA_ROOT="$RISE_DATA_ROOT",RISE_ARCH=crnn scc/cnn_train.qsub
-```
-
-Both are validation-only and write `artifacts/{cnn,crnn}/validation_summary.json`. There is
-deliberately no finalize job: `finalize_{cnn,crnn}` spends the single permitted test evaluation and
-must follow a human reading the validation summary.
-
-The job is resumable. Every finished seed persists its checkpoint, validation probabilities and a
-provenance record, so a run killed by the wall clock costs at most one partial seed — resubmit the
-identical command and the finished seeds are reused rather than retrained. `validation_summary.json`
-lists them under `reused_seeds`.
+Generate **once**. Predictions are only paired if every model reads the same realized corpus, and
+the paired bootstrap and cluster sign test in `noise_stats.py` require pairing. The audit's
+NOISE-001 found saved PANNs results scored against a different corpus than SVM/MERT/AST, which
+invalidated every cross-model comparison involving PANNs — that is what generating once prevents.

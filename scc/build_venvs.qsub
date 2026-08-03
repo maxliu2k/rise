@@ -47,6 +47,17 @@ print('$name IMPORT OK torch', torch.__version__, 'transformers', transformers._
     return $rc
 }
 
-build pretrained '.[pretrained]' "$venv_root/venv_pretrained"   # AST + PANNs
-build mert       '.[mert]'       "$venv_root/venv_mert"         # MERT only, pinned transformers
+# PROPAGATE FAILURE. Without this the job ends on `echo VENVS_DONE`, whose status is 0, so a
+# build that failed still reports success -- and `-hold_jid` releases on COMPLETION, not success.
+# The combination launches training against a venv that does not exist. `set -e` alone is not
+# enough here: the builds are deliberately allowed to continue past a failure so the log shows
+# BOTH results rather than stopping at the first, so the status is collected explicitly.
+rc=0
+build pretrained '.[pretrained]' "$venv_root/venv_pretrained" || rc=1   # AST + PANNs
+build mert       '.[mert]'       "$venv_root/venv_mert"       || rc=1   # MERT, pinned transformers
+
+if [ "$rc" -ne 0 ]; then
+    echo "VENVS_FAILED - at least one venv did not build; see the log above" >&2
+    exit 1
+fi
 echo VENVS_DONE

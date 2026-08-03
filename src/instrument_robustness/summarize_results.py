@@ -77,21 +77,33 @@ def clean_row(name, spec, current_fp):
     # macro-F1 (train_cnn selects on it). Before that change `mean` was balanced accuracy, so a
     # pre-standardisation summary would put a balanced-accuracy number in a macro-F1 column with
     # no visible sign. Refuse rather than guess: the field says which metric it is.
+    # THE SELECTION METRIC IS CHECKED FOR EVERY MODEL, not only the ones missing macro_f1.
+    # It used to be checked only inside the `macro is None` branch below, which meant any result
+    # carrying an explicit macro_f1 skipped the gate entirely -- a checkpoint selected on
+    # balanced accuracy still printed `canonical` purely because its summary happened to record
+    # a macro-F1 number too. That is exactly the silently-wrong-number shape this table exists to
+    # stop, and AST sat in it for weeks.
+    #
+    # finalize_svm and finalize_mert only began propagating the field from the validation summary
+    # after their one permitted test evaluation was already spent, so their existing
+    # test_summary.json cannot carry it and cannot be regenerated without re-spending the test.
+    # Fall back to the sibling validation_summary.json, which does record it. Nothing here guesses:
+    # if neither file states the metric, the row is refused.
+    metric = doc.get("selection_metric")
+    if metric is None:
+        sibling = path.parent / "validation_summary.json"
+        if sibling.is_file():
+            metric = json.loads(sibling.read_text()).get("selection_metric")
+    if metric != "validation_macro_f1":
+        why = (f"selected on {metric}" if metric is not None
+               else "no selection_metric in test or validation summary")
+        return dict(model=name, split=spec["split"], macro_f1=None, accuracy=None, n=None,
+                    status=f"STALE ({why}); retrain")
+
     macro = _dig(block, "macro_f1")
     if macro is None:
-        # Reaching here means the file has no explicit macro_f1 and we are about to read `mean`
-        # out of a CNN/CRNN 5-seed block. That is only macro-F1 if the summary was written after
-        # the metric standardisation, which is exactly what selection_metric records. An ABSENT
-        # field means "written before it existed", i.e. `mean` is balanced accuracy -- so absent
-        # must fail too. Treating absent as acceptable is how a balanced-accuracy number ends up
-        # printed under a macro_f1 heading with no visible sign, which is what this table exists
-        # to prevent.
-        metric = doc.get("selection_metric")
-        if metric != "validation_macro_f1":
-            why = (f"selected on {metric}" if metric is not None
-                   else "pre-standardisation, no selection_metric")
-            return dict(model=name, split=spec["split"], macro_f1=None, accuracy=None, n=None,
-                        status=f"STALE ({why}); retrain")
+        # No explicit macro_f1, so we are reading `mean` out of a CNN/CRNN 5-seed block. Since the
+        # metric standardisation that IS macro-F1; the gate above has already established it.
         macro = _dig(block, "mean")
     stale = fp != current_fp
     status = "STALE (config mismatch)" if stale else "canonical"

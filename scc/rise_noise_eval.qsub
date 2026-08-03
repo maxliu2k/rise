@@ -1,0 +1,70 @@
+#!/bin/bash -l
+#$ -P rise-grid
+#$ -N rise_noise
+#$ -j y
+#$ -pe omp 4
+#$ -l gpus=1
+#$ -l gpu_c=7.0
+#$ -l gpu_memory=16G
+#$ -l h_rt=24:00:00
+#$ -l mem_per_core=8G
+#
+# Score one model against the shared noisy corpus.
+#
+#   qsub -N cnn_noise   -v RISE_MODEL=cnn   -o cnn_noise.log   scc/rise_noise_eval.qsub
+#   qsub -N crnn_noise  -v RISE_MODEL=crnn  -o crnn_noise.log  scc/rise_noise_eval.qsub
+#   qsub -N ast_noise   -v RISE_MODEL=ast   -o ast_noise.log   scc/rise_noise_eval.qsub
+#   qsub -N panns_noise -v RISE_MODEL=panns -o panns_noise.log scc/rise_noise_eval.qsub
+#
+# SVM and MERT keep their own scripts (scc/svm_noise.qsub, scc/mert_noise.qsub) because their
+# resource profiles differ -- SVM needs no GPU and MERT wants a longer wall clock.
+#
+# GENERATE THE CORPUS FIRST with scc/noise_generate.qsub. Every model must read the SAME
+# generated files or the predictions are not paired, and the paired bootstrap and cluster sign
+# test in noise_stats.py require pairing. This is not a formality: the audit's NOISE-001 found
+# saved PANNs results scored against a different realized corpus than SVM/MERT/AST, which
+# silently invalidated every cross-model comparison involving PANNs.
+set -uo pipefail
+
+noise_repo="${RISE_REPO:-$SGE_O_WORKDIR}"
+model="${RISE_MODEL:?set -v RISE_MODEL=cnn|crnn|ast|panns}"
+
+# Which venv each model needs. AST and PANNs want unpinned transformers plus panns-inference;
+# CNN and CRNN need only torch, which the core venv has. Override RISE_VENV to force one.
+case "$model" in
+    cnn|crnn)   default_venv="$noise_repo/.venv" ;;
+    ast|panns)  default_venv="$(dirname "$noise_repo")/venv_pretrained" ;;
+    *) echo "RISE_MODEL must be cnn, crnn, ast or panns (svm and mert have their own scripts); got '$model'" >&2
+       exit 1 ;;
+esac
+noise_venv="${RISE_VENV:-$default_venv}"
+
+# A venv built from the python3 module is NOT self-contained; without this the job dies instantly
+# with 'libpython3.9.so.1.0: cannot open shared object file'.
+if [ -n "${RISE_MODULES-python3/3.9.9}" ]; then
+    module load ${RISE_MODULES:-python3/3.9.9}
+fi
+source "$noise_venv/bin/activate"
+cd "$noise_repo"
+
+export RISE_DATA_ROOT="${RISE_DATA_ROOT:?Submit with -v RISE_DATA_ROOT=/projectnb/...}"
+export PYTHONPATH="$noise_repo/src${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONUNBUFFERED=1
+export TMPDIR="/scratch/$USER.$JOB_ID"; mkdir -p "$TMPDIR"
+export NUMBA_CACHE_DIR="$TMPDIR/numba"; mkdir -p "$NUMBA_CACHE_DIR"
+export HF_HOME="${HF_HOME:-$(dirname "$noise_repo")/hf_cache}"
+for var in OMP MKL OPENBLAS NUMEXPR NUMBA; do export ${var}_NUM_THREADS="${NSLOTS:-1}"; done
+
+echo "=== noise_eval_$model on $(hostname) slots=${NSLOTS:-?} start $(date) ==="
+echo "    venv: $noise_venv"
+echo "    data: $RISE_DATA_ROOT"
+
+# PANNs' adapter takes no --device; the others default to cuda when it is available.
+if [ "$model" = panns ]; then
+    python -m "instrument_robustness.noise_eval_$model"
+else
+    python -m "instrument_robustness.noise_eval_$model" --device "${RISE_DEVICE:-cuda}"
+fi
+rc=$?
+echo "RISE_NOISE_EXIT=$rc model=$model end $(date)"
+exit $rc

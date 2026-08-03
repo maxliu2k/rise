@@ -32,9 +32,9 @@ mistake, because a data root prepared for AST looks complete and is not:
 | stage reached | who can run |
 |---|---|
 | `--to step5_normalize` | AST, MERT, PANNs — they carry their own extractors and read window audio |
-| all nine stages | **SVM, CNN, CRNN** — they read the Step-7 feature arrays |
+| all ten stages | **SVM, CNN, CRNN** — they read the Step-7 feature arrays |
 
-So: run all nine unless you have a reason not to. `scc/cnn_train.qsub` checks for
+So: run all ten unless you have a reason not to. `scc/cnn_train.qsub` checks for
 `features/cnn/{train,val}.npz` specifically rather than `windows.csv`, for exactly this reason.
 
 ---
@@ -49,7 +49,7 @@ Reads `features/svm/{train,val}.npz`. No CLI arguments.
 
 ```bash
 python -m instrument_robustness.train_svm       # RBF grid over C, gamma; selects on validation
-python -m instrument_robustness.finalize_svm    # refits train+val, spends the ONE test evaluation
+python -m instrument_robustness.finalize_svm    # fits TRAIN only (e4e455d), spends the ONE test eval
 ```
 
 **Status: RETRAINED 2026-08-02 on sealed build `97b1cdd2`. Clean test macro-F1 **0.9770** (n=1255).
@@ -177,9 +177,10 @@ internally consistent. See `docs/AUDIT_CHECKLIST.md` #10.
 > noise result derived from it. Those numbers are not wrong, but they answer a different selection
 > question from the other five and must not be tabled beside them until AST is retrained.
 >
-> `summarize_results` will NOT flag this for you. Its staleness branch only runs when a result has
-> no explicit `macro_f1`, and AST's does — so AST still prints `canonical`. Treat the AST row as
-> stale by hand until that gate is widened.
+> `summarize_results` flags this correctly now. Its gate used to run only when a result had no
+> explicit `macro_f1`, so AST skipped it; `clean_row` now checks `selection_metric` on every row
+> and falls back to the sibling `validation_summary.json`. A balanced-accuracy-selected result
+> reports `STALE (selected on validation_balanced_accuracy); retrain`.
 
 **GPU: `gpu_c=6.0` in `scc/cnn_train.qsub` admits P100s, and a `torch 2.8.0+cu128` venv ships no
 kernels for them** — `no kernel image is available for execution on the device`. **Raise it to

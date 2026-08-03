@@ -200,15 +200,20 @@ either after `noise_sweep --generate` would invalidate the shared noisy corpus.
   `finalize_cnn` refuses a summary whose `selection_metric` is not `validation_macro_f1` (gate 3),
   and `summarize_results` marks such a row `STALE (selected on ..., not macro-F1; retrain)`
   instead of printing a balanced-accuracy number under a macro-F1 heading.
-- **That second gate does not cover AST, and the hole is open.** `summarize_results.clean_row`
-  reads `test.macro_f1` first and only consults `selection_metric` when that field is *absent*.
-  It is absent for the CNN/CRNN 5-seed summaries, which is the case it was written for; AST's
-  `metrics.json` records `test.macro_f1` explicitly, so the branch never runs and a
-  balanced-accuracy-selected AST result still prints `canonical`. Widening the check to run
-  unconditionally would be correct for AST but would also fail PANNs, which selects on validation
-  macro-F1 (`train_panns` early-stops on it) yet records no `selection_metric` field at all. The
-  honest fix is to emit `selection_metric` from `train_panns` and then make the check
-  unconditional; until then, read the AST row as stale by hand.
+- **That gate now covers every model. FIXED.** It previously ran only when a result had no
+  explicit `macro_f1`, so any summary carrying one skipped it entirely — an AST checkpoint
+  selected on balanced accuracy printed `canonical` purely because its summary also recorded a
+  macro-F1 number. `clean_row` now checks `selection_metric` for every row, falling back to the
+  sibling `validation_summary.json` when the test summary lacks it (`finalize_svm` and
+  `finalize_mert` only began propagating the field after their one permitted test evaluation was
+  already spent, so their existing summaries cannot carry it and cannot be regenerated).
+  Regression-tested by `test_summarize_gates_on_selection_metric_even_when_macro_f1_is_present`.
+- **Retraction.** An earlier revision of this item claimed `train_panns` "records no
+  `selection_metric` field at all", and used that to argue the gate could not be widened without
+  false-positiving on PANNs. That was wrong: `train_panns.py:342` writes
+  `"selection_metric": "validation_macro_f1"`. The claim was made from a grep taken before
+  `75d81b2` was pulled and then repeated without rechecking. All six models record the field, in
+  the test summary or the validation summary beside it.
 - **The underlying tension is a decision, not a resolution.** `step4_window.py` and CLAUDE.md argue
   balanced accuracy and MCC are the *right* metrics under imbalance — macro-F1 pays a collapsed
   classifier more as imbalance grows (0.3333 at a 0.50 prior, 0.4737 at 0.90). Macro-F1 was chosen
