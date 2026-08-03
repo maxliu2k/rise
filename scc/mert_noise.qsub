@@ -18,14 +18,15 @@ noise_data_root="${RISE_DATA_ROOT:?Submit with -v RISE_DATA_ROOT=/projectnb/...}
 # /projectnb/rise-grid/venvs/$USER/mert, is NOT group-writable -- it is owned by one
 # user, and creating it fails with 'Permission denied' for everyone else.
 # MERT needs its own pinned-transformers venv, as built by scc/build_venvs.qsub
-noise_venv="${NOISE_VENV:-$(dirname "$noise_repo")/venv_mert}"
+noise_venv="${RISE_VENV:-${NOISE_VENV:-$(dirname "$noise_repo")/venv_mert}}"
 
 # A venv built from the python3 module is NOT self-contained; without this the job dies
 # instantly with 'libpython3.9.so.1.0: cannot open shared object file'.
 if [ -n "${RISE_MODULES-python3/3.9.9}" ]; then
     module load ${RISE_MODULES:-python3/3.9.9}
 fi
-source "$noise_venv/bin/activate"
+. "$noise_repo/scc/activate_venv.sh"
+rise_activate "$noise_venv"
 cd "$noise_repo"
 
 export PYTHONPATH="$noise_repo/src${PYTHONPATH:+:$PYTHONPATH}"

@@ -31,8 +31,11 @@ model="${RISE_MODEL:?set -v RISE_MODEL=cnn|crnn|ast|panns}"
 
 # Which venv each model needs. AST and PANNs want unpinned transformers plus panns-inference;
 # CNN and CRNN need only torch, which the core venv has. Override RISE_VENV to force one.
+# All three venvs are SIBLINGS of the repo, not inside it. `$noise_repo/.venv` has never
+# existed; defaulting cnn|crnn to it on 2026-08-03 did not stop those jobs, it silently ran
+# them under the system python until `import torch` failed. See scc/activate_venv.sh.
 case "$model" in
-    cnn|crnn)   default_venv="$noise_repo/.venv" ;;
+    cnn|crnn)   default_venv="$(dirname "$noise_repo")/venv" ;;
     ast|panns)  default_venv="$(dirname "$noise_repo")/venv_pretrained" ;;
     *) echo "RISE_MODEL must be cnn, crnn, ast or panns (svm and mert have their own scripts); got '$model'" >&2
        exit 1 ;;
@@ -44,7 +47,8 @@ noise_venv="${RISE_VENV:-$default_venv}"
 if [ -n "${RISE_MODULES-python3/3.9.9}" ]; then
     module load ${RISE_MODULES:-python3/3.9.9}
 fi
-source "$noise_venv/bin/activate"
+. "$noise_repo/scc/activate_venv.sh"
+rise_activate "$noise_venv"
 cd "$noise_repo"
 
 export RISE_DATA_ROOT="${RISE_DATA_ROOT:?Submit with -v RISE_DATA_ROOT=/projectnb/...}"

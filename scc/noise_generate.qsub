@@ -15,15 +15,18 @@ noise_source_root="${RISE_NOISE_ROOT:?Submit with -v RISE_NOISE_ROOT=/projectnb/
 # Default to a venv this account can actually write. The old default,
 # /projectnb/rise-grid/venvs/$USER/mert, is NOT group-writable -- it is owned by one
 # user, and creating it fails with 'Permission denied' for everyone else.
-# core deps only (librosa/numpy/soundfile); the generator does not load a model
-noise_venv="${NOISE_VENV:-$noise_repo/.venv}"
+# core deps only (librosa/numpy/soundfile); the generator does not load a model.
+# The venvs are SIBLINGS of the repo, not inside it -- `$noise_repo/.venv` has never existed
+# and defaulting to it killed this job on 2026-08-03. See scc/activate_venv.sh.
+noise_venv="${RISE_VENV:-${NOISE_VENV:-$(dirname "$noise_repo")/venv}}"
 
 # A venv built from the python3 module is NOT self-contained; without this the job dies
 # instantly with 'libpython3.9.so.1.0: cannot open shared object file'.
 if [ -n "${RISE_MODULES-python3/3.9.9}" ]; then
     module load ${RISE_MODULES:-python3/3.9.9}
 fi
-source "$noise_venv/bin/activate"
+. "$noise_repo/scc/activate_venv.sh"
+rise_activate "$noise_venv"
 cd "$noise_repo"
 
 export PYTHONPATH="$noise_repo/src${PYTHONPATH:+:$PYTHONPATH}"

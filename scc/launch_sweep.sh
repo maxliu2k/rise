@@ -25,6 +25,7 @@ set -uo pipefail
 REPO="${RISE_REPO:-/projectnb/rise-grid/maxliu2k/instrument-robustness}"
 DATA="${RISE_DATA_ROOT:-/project/rise-grid/maxliu2k/all-samples}"
 NOISE="${RISE_NOISE_ROOT:-/projectnb/rise-grid/noise-sources}"
+VC="${VENV_CORE:-/projectnb/rise-grid/maxliu2k/venv}"
 VP="${VENV_PRETRAINED:-/projectnb/rise-grid/maxliu2k/venv_pretrained}"
 VM="${VENV_MERT:-/projectnb/rise-grid/maxliu2k/venv_mert}"
 HF="${HF_HOME:-/projectnb/rise-grid/maxliu2k/hf_cache}"
@@ -46,6 +47,15 @@ fail=0
 [ -f "$NOISE/ESC-50-master/meta/esc50.csv" ]  || { echo "no ESC-50 meta under $NOISE" >&2; fail=1; }
 avail=$(df -Pk "$DATA" | awk 'NR==2{print int($4/1048576)}')
 [ "${avail:-0}" -ge 18 ] || { echo "only ${avail}G free at $DATA; the corpus needs ~15G" >&2; fail=1; }
+
+# Every venv this launcher is about to name, checked BEFORE anything is submitted. On
+# 2026-08-03 the scripts defaulted to `$REPO/.venv`, which has never existed: nine jobs were
+# accepted, and six of them died -- two at the source line and two only later, at `import
+# torch`, after running a whole job under the system python. The scheduler will happily queue
+# a graph that cannot possibly run; this is the check that says so in one second instead.
+for v in "$VC" "$VP" "$VM"; do
+    [ -f "$v/bin/activate" ] || { echo "no venv at $v (expected bin/activate)" >&2; fail=1; }
+done
 [ "$fail" -eq 0 ] || { echo "PREFLIGHT FAILED - nothing submitted" >&2; exit 1; }
 
 say "=== sweep launched $(date) ==="
@@ -61,16 +71,19 @@ COMMON="RISE_REPO=$REPO,RISE_DATA_ROOT=$DATA"
 # PANNs scored against a different corpus than the others, silently invalidating every
 # comparison involving it.
 gen=$(qsub -terse "${mailopt[@]}" -N noise_generate \
-      -v "$COMMON,RISE_NOISE_ROOT=$NOISE" \
+      -v "$COMMON,RISE_NOISE_ROOT=$NOISE,RISE_VENV=$VC" \
       -o "$REPO/noise_generate.log" scc/noise_generate.qsub)
 say "  noise_generate  $gen"
 
 # ---- 2. one evaluation per model, all held on the corpus -------------------------------------
 evals=""
-for spec in "svm:scc/svm_noise.qsub:" \
-            "mert:scc/mert_noise.qsub:NOISE_VENV=$VM,HF_HOME=$HF" \
-            "cnn:scc/rise_noise_eval.qsub:RISE_MODEL=cnn" \
-            "crnn:scc/rise_noise_eval.qsub:RISE_MODEL=crnn" \
+# Every entry names its venv EXPLICITLY. Relying on each script's internal default is what
+# broke the 2026-08-03 run: the default was wrong in four scripts and right in two, so the
+# two that happened to be passed a venv by this launcher were the only two that activated.
+for spec in "svm:scc/svm_noise.qsub:RISE_VENV=$VC" \
+            "mert:scc/mert_noise.qsub:RISE_VENV=$VM,HF_HOME=$HF" \
+            "cnn:scc/rise_noise_eval.qsub:RISE_MODEL=cnn,RISE_VENV=$VC" \
+            "crnn:scc/rise_noise_eval.qsub:RISE_MODEL=crnn,RISE_VENV=$VC" \
             "ast:scc/rise_noise_eval.qsub:RISE_MODEL=ast,RISE_VENV=$VP,HF_HOME=$HF" \
             "panns:scc/rise_noise_eval.qsub:RISE_MODEL=panns,RISE_VENV=$VP"; do
     m="${spec%%:*}"; rest="${spec#*:}"; script="${rest%%:*}"; extra="${rest#*:}"
@@ -83,7 +96,7 @@ done
 
 # ---- 3. one report, held on all six ----------------------------------------------------------
 rep=$(qsub -terse "${mailopt[@]}" -N sweep_report -hold_jid "$evals" \
-      -v "$COMMON" -o "$REPO/sweep_report.log" scc/sweep_report.qsub)
+      -v "$COMMON,RISE_VENV=$VC" -o "$REPO/sweep_report.log" scc/sweep_report.qsub)
 say "  sweep_report    $rep"
 say ""
 say "Watch:   qstat -u \$USER"
