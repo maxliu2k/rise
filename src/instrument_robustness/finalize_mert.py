@@ -273,6 +273,10 @@ def main() -> None:
         summary = {
             "created_at_utc": datetime.now(timezone.utc).isoformat(),
             "config_fingerprint": config_fingerprint(),
+            # Carried through from the validation summary, not hardcoded. summarize_results
+            # gates on this field; without it a test summary is indistinguishable from one
+            # written before the project standardised on macro-F1.
+            "selection_metric": validation_summary.get("selection_metric"),
             "protocol": (
                 "probe hyperparameters and epoch selected on validation; final probe "
                 "fit on train only; test embeddings extracted and evaluated once"
