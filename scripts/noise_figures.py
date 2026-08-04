@@ -85,7 +85,10 @@ def robustness_auc(snrs: np.ndarray, values: np.ndarray) -> float:
     x, y = snrs[order], values[order]
     if x.size < 2:
         return float("nan")
-    return float(np.trapz(y, x) / (x[-1] - x[0]))
+    # numpy 2 renamed trapz -> trapezoid and deprecated the old name loudly enough to bury the
+    # script's actual output. Prefer the new name where it exists.
+    integrate = getattr(np, "trapezoid", None) or np.trapz
+    return float(integrate(y, x) / (x[-1] - x[0]))
 
 
 def setup_matplotlib():
