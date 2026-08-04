@@ -189,7 +189,17 @@ TARGET_RMS = 0.1      # per-window RMS target; peak-guarded to avoid clipping
 # the final grid because -5 lies between 0 and the measured floor, while -15 added no meaningful
 # change beyond -10. Freeze this list after generation.
 SNRS = [60, 50, 40, 30, 20, 10, 0, -10]
-NOISE_TYPES = ["white", "natural", "mechanical"]
+
+# The three conditions this study is actually about:
+#   white     generated Gaussian -- synthetic control, worst-case broadband corruption
+#   audience  ESC-50 20-29 -- breathing, clapping, coughing, footsteps: people around a performance
+#   studio    DEMAND -- continuous room tone from 18 real recording environments
+#
+# `natural` (animals) and `mechanical` (domestic/urban machinery) were the previous grid. They
+# remain defined in noise_sweep.ESC50_TARGETS so the 2026-08-03 sweep stays reproducible, but they
+# are not conditions anyone asked about: birds and chainsaws are not what degrades a concert or
+# studio capture.
+NOISE_TYPES = ["white", "audience", "studio"]
 
 # How many independent noise realizations per (window, noise type). Each replicate is a fresh draw
 # -- a different ESC-50 clip and crop, or a different Gaussian sample -- and is then scaled across
