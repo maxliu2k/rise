@@ -349,11 +349,16 @@ class SnrPilotSccScriptTests(unittest.TestCase):
             (output / "best_probe.pt").touch()
             (output / "validation_summary.json").write_text("{}", encoding="utf-8")
 
+            # The stub python must live INSIDE the fake venv, and `activate` must put it first on
+            # PATH. scc/activate_venv.sh deliberately refuses a venv whose `python` resolves
+            # elsewhere -- that is the entire point of the guard, and the old fixture (stub in a
+            # separate fake-bin, empty activate) is exactly the shape it is built to reject.
             venv_bin = root / "venv" / "bin"
             venv_bin.mkdir(parents=True)
-            (venv_bin / "activate").write_text("", encoding="utf-8")
-            fake_bin = root / "fake-bin"
-            fake_bin.mkdir()
+            (venv_bin / "activate").write_text(
+                f'export PATH="{venv_bin}:$PATH"\n', encoding="utf-8"
+            )
+            fake_bin = venv_bin
             capture = root / "python-arguments.txt"
             fake_python = fake_bin / "python"
             fake_python.write_text(
@@ -366,6 +371,9 @@ class SnrPilotSccScriptTests(unittest.TestCase):
             environment.update(
                 {
                     "PATH": f"{fake_bin}:{environment['PATH']}",
+                    # `module` is an SCC shell function that does not survive into this
+                    # subprocess. The scripts already treat an empty RISE_MODULES as "skip it".
+                    "RISE_MODULES": "",
                     "CAPTURE_LOG": str(capture),
                     "MERT_REPO": str(repo),
                     "MERT_VENV": str(root / "venv"),
