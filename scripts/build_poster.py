@@ -360,8 +360,7 @@ def model_table(c: canvas.Canvas, st: dict, x: float, y: float, w: float,
 
 
 # ---- content ---------------------------------------------------------------------------------
-TITLE = ("Characterizing the Robustness of Musical Instrument Classification<br/>"
-         "Under Acoustic Perturbations")
+TITLE = "Evaluation of Noise-Robustness in Classical Instrument Classification"
 SUP = '<super><font size="17">{}</font></super>'
 AUTHORS = (f"Max Liu{SUP.format('1,5')}, Allan Yu{SUP.format('2,5')}, "
            f"Gavin Hu{SUP.format('3,5')}, Tariq Hossain{SUP.format('4,5')}, "
@@ -597,8 +596,7 @@ def build() -> None:
     register_fonts()
     st = styles()
     c = canvas.Canvas(str(OUT), pagesize=(PAGE_W, PAGE_H))
-    c.setTitle("Characterizing the Robustness of Musical Instrument Classification "
-               "Under Acoustic Perturbations")
+    c.setTitle("Evaluation of Noise-Robustness in Classical Instrument Classification")
 
     c.setFillColor(PAGE_BG)
     c.rect(0, 0, PAGE_W, PAGE_H, stroke=0, fill=1)
