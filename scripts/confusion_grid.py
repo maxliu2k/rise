@@ -123,12 +123,15 @@ def build(errors_only: bool, present: dict[str, np.ndarray]) -> None:
     import matplotlib.pyplot as plt
     from matplotlib.colors import PowerNorm
 
+    from matplotlib.colors import LinearSegmentedColormap
+
     names = [name for name in MODELS if name in present]
     columns = 3
     rows = int(np.ceil(len(names) / columns))
     figure, axes = plt.subplots(
-        rows, columns, figsize=(4.1 * columns, 4.0 * rows), squeeze=False
+        rows, columns, figsize=(4.3 * columns, 4.3 * rows), squeeze=False
     )
+    figure.patch.set_facecolor("white")
 
     panels = {}
     for name in names:
@@ -143,8 +146,17 @@ def build(errors_only: bool, present: dict[str, np.ndarray]) -> None:
     finite = np.concatenate([panel[np.isfinite(panel)].ravel() for panel in panels.values()])
     high = float(np.nanmax(finite)) if finite.size else 1.0
     norm = PowerNorm(gamma=0.45, vmin=0.0, vmax=high)
-    colours = plt.get_cmap("magma_r" if errors_only else "viridis").copy()
-    colours.set_bad(color="#f2f2f2")   # masked diagonal reads as absent, not as zero
+
+    # Sequential white -> deep ink. ZERO MUST BE WHITE: a cell with no confusions should read as
+    # empty paper, not as a colour. That rules out viridis and magma_r, whose low end is a
+    # saturated yellow -- the previous version drew six panels of pale yellow background, which
+    # is what made it look muddy. Single-hue also survives greyscale printing and the common
+    # colour-vision deficiencies, which a poster cannot control for.
+    ramp = ["#ffffff", "#e3ebf7", "#9db9e0", "#4a76b8", "#20447d", "#0d1f3d"]
+    if errors_only:
+        ramp = ["#ffffff", "#fbe2df", "#f0a89c", "#d95f4c", "#a32c1f", "#5e1109"]
+    colours = LinearSegmentedColormap.from_list("rise", ramp)
+    colours.set_bad(color="#ededed")   # masked diagonal reads as absent, not as zero
 
     image = None
     for position, name in enumerate(names):
@@ -153,10 +165,14 @@ def build(errors_only: bool, present: dict[str, np.ndarray]) -> None:
 
         matrix = present[name]
         errors = int(matrix.sum() - np.trace(matrix))
-        axis.set_title(
-            f"{MODELS[name]}\nmacro-F1 {macro_f1_from(matrix):.3f} · "
-            f"{errors} of {matrix.sum():,} misclassified",
-            fontsize=10,
+        axis.set_title(MODELS[name], fontsize=13, fontweight="semibold", pad=13)
+        # Stats as a lighter subtitle rather than a second title line: the model name is what a
+        # reader scans for, the counts are what they check afterwards.
+        axis.text(
+            0.5, 1.015,
+            f"macro-F1 {macro_f1_from(matrix):.3f}   ·   {errors} / {matrix.sum():,} wrong",
+            transform=axis.transAxes, ha="center", va="bottom",
+            fontsize=8.5, color="#5a5a5a",
         )
 
         axis.set_xticks(range(len(TARGET_LABELS)))
@@ -166,16 +182,24 @@ def build(errors_only: bool, present: dict[str, np.ndarray]) -> None:
         bottom_row = position // columns == rows - 1
         left_column = position % columns == 0
         axis.set_xticklabels(
-            TARGET_LABELS if bottom_row else [], rotation=90, fontsize=7
+            TARGET_LABELS if bottom_row else [], rotation=90, fontsize=7.5
         )
-        axis.set_yticklabels(TARGET_LABELS if left_column else [], fontsize=7)
+        axis.set_yticklabels(TARGET_LABELS if left_column else [], fontsize=7.5)
         if bottom_row:
-            axis.set_xlabel("predicted instrument", fontsize=9)
+            axis.set_xlabel("predicted instrument", fontsize=9.5, labelpad=6)
         if left_column:
-            axis.set_ylabel("true instrument", fontsize=9)
-        axis.tick_params(length=0)
+            axis.set_ylabel("true instrument", fontsize=9.5, labelpad=6)
+        axis.tick_params(length=0, colors="#444444")
+
+        # Hairline white gutters between cells. Without them a run of adjacent dark cells fuses
+        # into one blob and you cannot count instruments along an edge.
+        axis.set_xticks(np.arange(-0.5, len(TARGET_LABELS), 1), minor=True)
+        axis.set_yticks(np.arange(-0.5, len(TARGET_LABELS), 1), minor=True)
+        axis.grid(which="minor", color="white", linewidth=0.7)
+        axis.tick_params(which="minor", length=0)
         for spine in axis.spines.values():
-            spine.set_linewidth(0.4)
+            spine.set_edgecolor("#cccccc")
+            spine.set_linewidth(0.8)
 
     for position in range(len(names), rows * columns):
         axes[position // columns][position % columns].axis("off")
@@ -186,10 +210,15 @@ def build(errors_only: bool, present: dict[str, np.ndarray]) -> None:
         else "share of true class (diagonal = recall)"
     )
     bar = figure.colorbar(
-        image, ax=axes, fraction=0.020, pad=0.015, aspect=38
+        image, ax=axes, fraction=0.018, pad=0.018, aspect=34
     )
-    bar.set_label(label, fontsize=9)
-    bar.ax.tick_params(labelsize=8)
+    bar.set_label(label, fontsize=9.5, labelpad=10)
+    bar.ax.tick_params(labelsize=8, length=2, colors="#444444")
+    bar.outline.set_edgecolor("#cccccc")
+    bar.outline.set_linewidth(0.8)
+    # Ticks as percentages: "2%" is read instantly, "0.02" needs a translation step.
+    from matplotlib.ticker import FuncFormatter
+    bar.ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v * 100:g}%"))
 
     FIGURES.mkdir(parents=True, exist_ok=True)
     stem = "fig8_confusion_grid_errors" if errors_only else "fig8_confusion_grid"
