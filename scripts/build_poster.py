@@ -365,13 +365,13 @@ TITLE = ("Characterizing the Robustness of Musical Instrument Classification<br/
 SUP = '<super><font size="17">{}</font></super>'
 AUTHORS = (f"Max Liu{SUP.format('1,5')}, Allan Yu{SUP.format('2,5')}, "
            f"Gavin Hu{SUP.format('3,5')}, Tariq Hossain{SUP.format('4,5')}, "
-           f"Dr. Eugene Pinsky{SUP.format('5')}, Dr. Indrajit Kalita{SUP.format('6')}")
+           f"Dr. Eugene Pinsky{SUP.format('5')}, Dr. Indrajit Kalita{SUP.format('5')}")
 ASUP = '<super><font size="11">{}</font></super>'
 AFFIL = (f"{ASUP.format('1')}Clements High School, Sugar Land, TX; "
          f"{ASUP.format('2')}Fairview High School, Boulder, CO; "
          f"{ASUP.format('3')}St. Mark's School, Southborough, MA; "
          f"{ASUP.format('4')}Seven Lakes High School, Katy, TX; "
-         f"{ASUP.format('5,6')}Boston University, 1 Silber Way, Boston, MA 02215")
+         f"{ASUP.format('5')}Boston University, 1 Silber Way, Boston, MA 02215")
 
 BACKGROUND = [
     "Instruments' timbral properties are central to how music is composed, performed, and "
