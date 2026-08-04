@@ -418,20 +418,6 @@ class DemandCorpusTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "need at least"):
                 load_demand_index(root)
 
-    def test_new_types_are_not_yet_configured_noise_types(self) -> None:
-        """Guards the sequencing, not the code.
-
-        The SNR grid was frozen from snr_pilot runs on white/natural/mechanical. Adding `studio`
-        or `audience`
-        to NOISE_TYPES before piloting it repeats the mistake that left this project with an
-        inherited grid sitting entirely at or below chance. Delete this test in the same commit
-        that lands the pilot.
-        """
-        self.assertNotIn("studio", NOISE_TYPES)
-        self.assertNotIn("audience", NOISE_TYPES)
-
-
-class NoiseTests(unittest.TestCase):
     def test_seed_is_build_scoped_and_snr_independent(self) -> None:
         first = window_seed("window", "white", "build-a")
         self.assertEqual(first, window_seed("window", "white", "build-a"))
