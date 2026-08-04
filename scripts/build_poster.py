@@ -362,14 +362,16 @@ def model_table(c: canvas.Canvas, st: dict, x: float, y: float, w: float,
 # ---- content ---------------------------------------------------------------------------------
 TITLE = ("Characterizing the Robustness of Musical Instrument Classification<br/>"
          "Under Acoustic Perturbations")
-AUTHORS = ("Max Liu<super>1,5</super>, Allan Yu<super>2,5</super>, Gavin Hu<super>3,5</super>, "
-           "Tariq Hossain<super>4,5</super>, Dr. Eugene Pinsky<super>5</super>, "
-           "Dr. Indrajit Kalita<super>6</super>")
-AFFIL = ("<super>1</super>Clements High School, Sugar Land, TX; "
-         "<super>2</super>Fairview High School, Boulder, CO; "
-         "<super>3</super>St. Mark's School, Southborough, MA; "
-         "<super>4</super>Seven Lakes High School, Katy, TX; "
-         "<super>5,6</super>Boston University, 1 Silber Way, Boston, MA 02215")
+SUP = '<super><font size="17">{}</font></super>'
+AUTHORS = (f"Max Liu{SUP.format('1,5')}, Allan Yu{SUP.format('2,5')}, "
+           f"Gavin Hu{SUP.format('3,5')}, Tariq Hossain{SUP.format('4,5')}, "
+           f"Dr. Eugene Pinsky{SUP.format('5')}, Dr. Indrajit Kalita{SUP.format('6')}")
+ASUP = '<super><font size="11">{}</font></super>'
+AFFIL = (f"{ASUP.format('1')}Clements High School, Sugar Land, TX; "
+         f"{ASUP.format('2')}Fairview High School, Boulder, CO; "
+         f"{ASUP.format('3')}St. Mark's School, Southborough, MA; "
+         f"{ASUP.format('4')}Seven Lakes High School, Katy, TX; "
+         f"{ASUP.format('5,6')}Boston University, 1 Silber Way, Boston, MA 02215")
 
 BACKGROUND = [
     "Instruments' timbral properties are central to how music is composed, performed, and "
@@ -488,7 +490,8 @@ REPRO = [
     "— scan the GitHub QR below",
 ]
 GLANCE = [
-    ("10% \u2192 68%", "SVM macro-F1 retained at 20 dB, white \u2192 audience noise"),
+    ("10% vs 68%", "SVM keeps 10% of its clean score under white noise at 20 dB, but 68% "
+     "under audience noise at the same loudness"),
     ("0 errors, worst loss", "tuba: perfect on clean audio for all six models, largest recall "
      "loss under every noise type"),
     ("5 / 18", "distance\u2013confusion tests significant after Benjamini\u2013Hochberg"),
@@ -522,12 +525,12 @@ CAP_FIG9B = ("<b>Figure 9b.</b> Illustrative AST \u00d7 ESC-50 human non-speech 
              "across 66 instrument pairs")
 
 EQ_CAPTIONS = [
-    ("eq7.png", "<b>Eq.7 Macro-F1</b> Primary evaluation metric; 12-instrument average"),
-    ("eq8.png", "<b>Eq.8 Retention</b> Standardized measure of robustness; how much clean "
+    ("eq7.png", "Eq.7 Macro-F1 — primary evaluation metric; 12-instrument average"),
+    ("eq8.png", "Eq.8 Retention — standardized measure of robustness; how much clean "
      "score was retained after noise added"),
-    ("eq9.png", "<b>Eq.9 Area Under Robustness Curve</b> dB-weighted average macro-F1 under "
+    ("eq9.png", "Eq.9 Area Under Robustness Curve — dB-weighted average macro-F1 under "
      "all eight noise levels"),
-    ("eq10.png", "<b>Eq.10 Accuracy</b> Plain model correctness rate"),
+    ("eq10.png", "Eq.10 Accuracy — plain model correctness rate"),
 ]
 
 
