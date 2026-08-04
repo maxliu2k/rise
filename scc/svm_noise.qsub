@@ -6,6 +6,22 @@
 #$ -pe omp 4
 #$ -l h_rt=12:00:00
 #$ -l mem_per_core=8G
+#
+# KEEP THIS JOB OFF THE ivybridge NODES.
+#
+# noise_eval_svm has now failed four times, every one on a `pi` node -- scc-pi1 three times,
+# scc-pi3 once -- and zero times anywhere else. A six-task probe passed on E5-2650 v2,
+# E5-2680 v4 and Gold 6132. Two OpenBLAS kernel pins were tried: Haswell turned the SIGSEGV
+# into a SIGILL (Ivy Bridge has AVX but no AVX2), SANDYBRIDGE turned it back into a SIGSEGV.
+# So the kernel is not the whole story and the fault is NOT root-caused.
+#
+# Why only SVM is affected: every other evaluation requests `gpus=1`, so the scheduler never
+# places it on these nodes. SVM is the only CPU-only job in the sweep, and ivybridge is ~195
+# slots, so it keeps landing there.
+#
+# This is a WORKAROUND. The underlying fault on those nodes is unexplained and worth reporting
+# to RCS. broadwell has ~205 slots, so capacity is not a concern.
+#$ -l cpu_arch=broadwell
 
 set -euo pipefail
 
