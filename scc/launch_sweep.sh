@@ -108,10 +108,27 @@ COMMON="RISE_REPO=$REPO,RISE_DATA_ROOT=$DATA,RISE_NOISE_ROOT=$NOISE,RISE_DEMAND_
 # bootstrap and cluster sign test in noise_stats.py require pairing. The audit's NOISE-001 found
 # PANNs scored against a different corpus than the others, silently invalidating every
 # comparison involving it.
-gen=$(qsub -terse "${mailfail[@]}" -N noise_generate \
-      -v "$COMMON,RISE_VENV=$VC" \
-      -o "$REPO/noise_generate.log" scc/noise_generate.qsub)
-say "  noise_generate  $gen"
+# RISE_SKIP_GENERATE=1 reuses the corpus already on disk and submits only the evaluations.
+#
+# For when generation SUCCEEDED and the evaluations did not -- which is exactly what happened on
+# 2026-08-04, when all six aborted on FileExistsError against stale results while the 60,240-file
+# corpus sat there complete and validated. Regenerating in that situation burns 86 minutes to
+# reproduce bytes that already exist, which CLAUDE.md calls out by name: do not spend compute to
+# paper over a tool that cannot express "just the evals".
+#
+# The evals still verify the manifest themselves, so a corpus that is NOT complete cannot be
+# silently scored just because this flag was set.
+if [ "${RISE_SKIP_GENERATE:-0}" = "1" ]; then
+    [ -f "$DATA/work/windows_noisy/noise_manifest.json" ] || {
+        echo "RISE_SKIP_GENERATE=1 but there is no noise manifest at $DATA" >&2; exit 1; }
+    gen=""
+    say "  noise_generate  SKIPPED (reusing corpus at $DATA/work/windows_noisy)"
+else
+    gen=$(qsub -terse "${mailfail[@]}" -N noise_generate \
+          -v "$COMMON,RISE_VENV=$VC" \
+          -o "$REPO/noise_generate.log" scc/noise_generate.qsub)
+    say "  noise_generate  $gen"
+fi
 
 # ---- 2. one evaluation per model, all held on the corpus -------------------------------------
 evals=""
@@ -126,7 +143,8 @@ for spec in "svm:scc/svm_noise.qsub:RISE_VENV=$VC" \
             "panns:scc/rise_noise_eval.qsub:RISE_MODEL=panns,RISE_VENV=$VP"; do
     m="${spec%%:*}"; rest="${spec#*:}"; script="${rest%%:*}"; extra="${rest#*:}"
     vars="$COMMON"; [ -n "$extra" ] && vars="$vars,$extra"
-    jid=$(qsub -terse "${mailfail[@]}" -N "${m}_noise" -hold_jid "$gen" \
+    hold=(); [ -n "$gen" ] && hold=(-hold_jid "$gen")
+    jid=$(qsub -terse "${mailfail[@]}" -N "${m}_noise" "${hold[@]}" \
           -v "$vars" -o "$REPO/${m}_noise.log" "$script")
     evals="${evals:+$evals,}$jid"
     say "  ${m}_noise      $jid"
