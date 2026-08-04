@@ -65,14 +65,30 @@ fail=0
 # the launching shell but never passed to the jobs, and the preflight only knew about ESC-50, so
 # nothing checked the path the jobs would actually resolve. Asking config which corpora the grid
 # requires means the check cannot drift out of step with the taxonomy again.
-needs=$(cd "$REPO" && PYTHONPATH="$REPO/src" "$VC/bin/python" - <<'PY' 2>/dev/null
+probe=$(mktemp); probe_err="${probe}.err"
+cat > "$probe" <<'PROBE_PY'
 from instrument_robustness.config import NOISE_TYPES
 from instrument_robustness.noise_sweep import ESC50_TARGETS, DEMAND_TARGETS
 print("esc50" if any(t in ESC50_TARGETS for t in NOISE_TYPES) else "")
 print("demand" if any(t in DEMAND_TARGETS for t in NOISE_TYPES) else "")
-PY
-)
-[ -n "$needs" ] || { echo "could not ask config which noise corpora are required" >&2; fail=1; }
+PROBE_PY
+# `module load` FIRST. The core venv is built from the python3 module and is not self-contained,
+# so invoking its interpreter from a plain login shell dies with
+# 'libpython3.9.so.1.0: cannot open shared object file' -- the same failure that has now bitten
+# every script here that forgot it. Loading it makes the probe run the same interpreter, the
+# same way, as the jobs will.
+needs=$(cd "$REPO" && PYTHONPATH="$REPO/src" bash -lc \
+        "module load ${RISE_MODULES:-python3/3.9.9} >/dev/null 2>&1; exec '$VC/bin/python' '$probe'" \
+        2>"$probe_err")
+if [ -z "$needs" ]; then
+    # Do NOT swallow this. The first version sent stderr to /dev/null and printed only "could not
+    # ask config", which named the symptom, hid the cause, and cost a debugging round-trip on a
+    # one-line error that would have said exactly what was wrong.
+    echo "could not ask config which noise corpora are required:" >&2
+    sed 's/^/    /' "$probe_err" >&2
+    fail=1
+fi
+rm -f "$probe" "$probe_err"
 
 if grep -qx esc50 <<<"$needs"; then
     [ -d "$NOISE/ESC-50-master/audio" ]           || { echo "no ESC-50 audio under $NOISE" >&2; fail=1; }
