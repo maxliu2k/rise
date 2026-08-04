@@ -33,6 +33,19 @@ export RISE_DATA_ROOT="$noise_data_root"
 export OMP_NUM_THREADS="${NSLOTS:-4}"
 export MKL_NUM_THREADS="${NSLOTS:-4}"
 export OPENBLAS_NUM_THREADS=1
+
+# Force a conservative OpenBLAS kernel instead of letting DYNAMIC_ARCH pick one at runtime.
+#
+# noise_eval_svm segfaulted (SIGSEGV, 609 MB peak, so not memory) inside run_noise_evaluation on
+# scc-pi1 on 2026-08-03 and reproduced on scc-pi3. A six-node probe passed on three other Intel
+# generations, so the failure tracks the `pi` node family, and the crash is in native code under
+# libsvm/OpenBLAS rather than anywhere in our Python.
+#
+# UNTESTED AGAINST THE CRASH -- the scheduler would not let me pin a probe to a pi node. It is
+# included because it is close to free: worst case it costs a little BLAS throughput on nodes
+# that would have chosen a wider kernel, and SVM can be re-run into the finished corpus at any
+# time if this turns out not to be the cause.
+export OPENBLAS_CORETYPE="${OPENBLAS_CORETYPE:-Haswell}"
 export NUMEXPR_NUM_THREADS=1
 export NUMBA_NUM_THREADS=1
 export PYTHONUNBUFFERED=1
