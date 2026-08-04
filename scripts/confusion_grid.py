@@ -120,6 +120,7 @@ def row_normalised(matrix: np.ndarray) -> np.ndarray:
 def build(errors_only: bool, present: dict[str, np.ndarray]) -> None:
     import matplotlib
     matplotlib.use("Agg")
+    import poster_style; poster_style.apply()
     import matplotlib.pyplot as plt
     from matplotlib.colors import PowerNorm
 

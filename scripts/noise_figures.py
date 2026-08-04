@@ -96,6 +96,7 @@ def setup_matplotlib():
     import matplotlib
 
     matplotlib.use("Agg")
+    import poster_style; poster_style.apply()
     import matplotlib.pyplot as plt
 
     plt.rcParams.update({
