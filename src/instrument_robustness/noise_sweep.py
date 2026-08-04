@@ -97,9 +97,22 @@ MAX_REALIZATION_COSINE_DEVIATION = 1e-3
 # generated files no longer implement the recorded protocol.
 MAX_DC_POWER_SHARE = 0.01
 
-# ESC-50 target blocks: 0-19 animals/natural, 20-29 human non-speech (excluded),
-# 30-49 domestic/urban.
-ESC50_TARGETS = {"natural": range(0, 20), "mechanical": range(30, 50)}
+# ESC-50 target blocks: 0-19 animals, 20-29 human non-speech, 30-49 domestic/urban.
+#
+# `audience` (20-29) is the block this study actually cares about: breathing, brushing_teeth,
+# clapping, coughing, crying_baby, drinking_sipping, footsteps, laughing, sneezing, snoring.
+# That is the sound of a room full of people around a performance -- the realistic corruption
+# for a concert recording.
+#
+# `natural` and `mechanical` are kept because the 2026-08-03 sweep was generated with them and
+# its results must stay reproducible from this file. They are NOT in config.NOISE_TYPES: birds
+# and chainsaws are not what degrades a concert or studio capture, so they answer a question
+# nobody asked.
+ESC50_TARGETS = {
+    "audience": range(20, 30),
+    "natural": range(0, 20),
+    "mechanical": range(30, 50),
+}
 
 # --- DEMAND ------------------------------------------------------------------------------------
 # 18 environments, each a 16-microphone array recording ONE scene for 300 s at 48 kHz.
@@ -112,7 +125,7 @@ DEMAND_ROOT = Path(
 # geometry, not sixteen independent samples of the environment. Indexing all sixteen would
 # multiply the apparent corpus by 16 while adding almost no acoustic diversity -- the same
 # mistake as splitting this dataset's windows randomly instead of by pitch group, and it would
-# inflate the ambient condition's effective sample size in exactly the way that is hardest to
+# inflate the studio condition's effective sample size in exactly the way that is hardest to
 # notice afterwards.
 DEMAND_CHANNEL = "ch01"
 
@@ -134,11 +147,12 @@ DEMAND_ENVIRONMENTS: dict[str, str] = {
 # Which project noise type each DEMAND environment feeds. Kept as a dict of the same shape as
 # ESC50_TARGETS so a reader can see both corpus mappings in one place.
 #
+# `studio` is DEMAND room tone -- the continuous background of a real recording space.
 # NOT YET IN config.NOISE_TYPES. The SNR grid was frozen from `snr_pilot` measurements taken on
 # white/natural/mechanical only, and an unpiloted grid is how this project ended up with an
-# inherited grid that sat entirely at or below chance. Run the pilot on `ambient` before adding
+# inherited grid that sat entirely at or below chance. Run the pilot on `studio` AND `audience` before adding
 # it to NOISE_TYPES.
-DEMAND_TARGETS = {"ambient": tuple(DEMAND_ENVIRONMENTS)}
+DEMAND_TARGETS = {"studio": tuple(DEMAND_ENVIRONMENTS)}
 
 
 def diagnostic_protocol() -> dict[str, object]:
@@ -283,7 +297,7 @@ class DemandRecording(NamedTuple):
     """One DEMAND environment recording, and the metadata describing it.
 
     `environment` and `grouping` are carried for the same reason Esc50Clip carries `category`:
-    collapsing 18 environments into "ambient" is only auditable if the original environment
+    collapsing 18 environments into "studio" is only auditable if the original environment
     survives into per-mixture provenance. `frames` is the source length, cached at index time so
     a draw can pick a crop offset without opening the file twice.
     """
@@ -310,7 +324,7 @@ def load_demand_index(demand_root: Path | None = None) -> dict[str, list[DemandR
     root = Path(demand_root) if demand_root is not None else DEMAND_ROOT
     if not root.exists():
         raise FileNotFoundError(
-            f"DEMAND not found at {root}. Set RISE_DEMAND_ROOT, or drop `ambient` from the "
+            f"DEMAND not found at {root}. Set RISE_DEMAND_ROOT, or drop `studio` from the "
             "noise types."
         )
 
@@ -528,7 +542,7 @@ def draw_noise(
     """Draw one centered, non-silent realization and return its source provenance.
 
     Preconditions: `demand_index` is required for any noise type in DEMAND_TARGETS and ignored
-    otherwise, so a caller that never asks for `ambient` needs no DEMAND download.
+    otherwise, so a caller that never asks for `studio` needs no DEMAND download.
     Postcondition: the returned provenance dict always carries `noise_target`, `noise_category`,
     `noise_fold`, `noise_environment` and `noise_channel`. Fields that do not apply to the corpus
     behind a given type are None rather than absent -- generated white noise has no clip, and

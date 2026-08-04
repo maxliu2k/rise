@@ -353,7 +353,7 @@ class Esc50ProvenanceTests(unittest.TestCase):
 
 
 class DemandCorpusTests(unittest.TestCase):
-    """DEMAND indexing and drawing. `ambient` is wired but NOT in config.NOISE_TYPES yet."""
+    """DEMAND indexing and drawing. `studio` is wired but NOT in config.NOISE_TYPES yet."""
 
     def build(self, root: Path, *, seconds: float = 8.0, channels: int = 16) -> None:
         rng = np.random.default_rng(0)
@@ -368,7 +368,7 @@ class DemandCorpusTests(unittest.TestCase):
         """The 16 channels are one array on one scene; indexing all of them fakes 16x diversity.
 
         If this fires, someone has started treating ch01..ch16 as independent samples. That
-        multiplies the apparent ambient corpus by 16 while adding almost no acoustic diversity,
+        multiplies the apparent studio corpus by 16 while adding almost no acoustic diversity,
         and nothing downstream would reveal it.
         """
         with tempfile.TemporaryDirectory() as temporary_dir:
@@ -376,13 +376,13 @@ class DemandCorpusTests(unittest.TestCase):
             self.build(root)
             index = load_demand_index(root)
 
-            self.assertEqual(set(index), {"ambient"})
-            self.assertEqual(len(index["ambient"]), len(DEMAND_ENVIRONMENTS))
-            self.assertEqual(len(index["ambient"]), 18)
-            self.assertEqual({r.channel for r in index["ambient"]}, {DEMAND_CHANNEL})
+            self.assertEqual(set(index), {"studio"})
+            self.assertEqual(len(index["studio"]), len(DEMAND_ENVIRONMENTS))
+            self.assertEqual(len(index["studio"]), 18)
+            self.assertEqual({r.channel for r in index["studio"]}, {DEMAND_CHANNEL})
             # ordered by environment name, because a seeded draw indexes into this list
             self.assertEqual(
-                [r.environment for r in index["ambient"]], sorted(DEMAND_ENVIRONMENTS)
+                [r.environment for r in index["studio"]], sorted(DEMAND_ENVIRONMENTS)
             )
 
     def test_draw_is_seed_reproducible_and_carries_environment_provenance(self) -> None:
@@ -392,9 +392,9 @@ class DemandCorpusTests(unittest.TestCase):
             index = load_demand_index(root)
 
             first, provenance = draw_noise(
-                "ambient", np.random.default_rng(7), {}, demand_index=index
+                "studio", np.random.default_rng(7), {}, demand_index=index
             )
-            again, _ = draw_noise("ambient", np.random.default_rng(7), {}, demand_index=index)
+            again, _ = draw_noise("studio", np.random.default_rng(7), {}, demand_index=index)
 
             self.assertEqual(first.shape, (CLIP_LEN,))
             self.assertEqual(first.dtype, np.float32)
@@ -407,9 +407,9 @@ class DemandCorpusTests(unittest.TestCase):
             self.assertIsNone(provenance["noise_target"])
             self.assertIsNone(provenance["noise_fold"])
 
-    def test_ambient_without_a_demand_index_is_a_clear_error(self) -> None:
+    def test_studio_without_a_demand_index_is_a_clear_error(self) -> None:
         with self.assertRaisesRegex(ValueError, "needs a DEMAND index"):
-            draw_noise("ambient", np.random.default_rng(0), {})
+            draw_noise("studio", np.random.default_rng(0), {})
 
     def test_a_recording_too_short_for_one_window_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
@@ -418,15 +418,17 @@ class DemandCorpusTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "need at least"):
                 load_demand_index(root)
 
-    def test_ambient_is_not_yet_a_configured_noise_type(self) -> None:
+    def test_new_types_are_not_yet_configured_noise_types(self) -> None:
         """Guards the sequencing, not the code.
 
-        The SNR grid was frozen from snr_pilot runs on white/natural/mechanical. Adding `ambient`
+        The SNR grid was frozen from snr_pilot runs on white/natural/mechanical. Adding `studio`
+        or `audience`
         to NOISE_TYPES before piloting it repeats the mistake that left this project with an
         inherited grid sitting entirely at or below chance. Delete this test in the same commit
         that lands the pilot.
         """
-        self.assertNotIn("ambient", NOISE_TYPES)
+        self.assertNotIn("studio", NOISE_TYPES)
+        self.assertNotIn("audience", NOISE_TYPES)
 
 
 class NoiseTests(unittest.TestCase):
