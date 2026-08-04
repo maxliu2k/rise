@@ -55,8 +55,19 @@ def scaled_to_snr(clean: np.ndarray, noise: np.ndarray, snr_db: float) -> np.nda
 
 class FrozenNoiseProtocolTests(unittest.TestCase):
     def test_evidence_backed_grid_and_replicates_are_frozen(self) -> None:
-        """Changing either value after generation would invalidate the shared noisy corpus."""
-        self.assertEqual(SNRS, [60, 50, 40, 30, 20, 10, 0, -10])
+        """Changing either value after generation would invalidate the shared noisy corpus.
+
+        Regridded 2026-08-03 with the white/audience/studio taxonomy. Two independent
+        `snr_pilot` runs -- SVM and MERT, each over both new noise types -- returned the SAME
+        recommendation: drop 60, add -5. 60 dB measured nothing (MERT/studio retention 1.004,
+        above the clean baseline), while 0 -> -10 stepped over the collapse region.
+
+        This assertion is the thing that makes a grid change deliberate. If it fires, either
+        someone edited SNRS without a pilot behind it, or a pilot was run and this line was not
+        updated with it. Both are worth stopping for: a grid change means regenerating 60,240
+        files, and a silent one means the corpus and the config disagree.
+        """
+        self.assertEqual(SNRS, [50, 40, 30, 20, 10, 0, -5, -10])
         self.assertEqual(N_REPLICATES, 2)
         self.assertEqual(
             1 + len(NOISE_TYPES) * len(SNRS) * N_REPLICATES,
