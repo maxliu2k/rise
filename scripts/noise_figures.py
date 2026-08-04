@@ -237,14 +237,25 @@ def main() -> int:
               file=sys.stderr)
         return 1
 
+    # Tables do not need matplotlib, so a missing plotting library must not cost you the numbers.
+    # matplotlib is not declared as a dependency of this package and was absent from the SCC core
+    # venv on 2026-08-04, which killed this script before it printed anything useful.
+    figures_failed = None
     if not args.no_figures:
-        plt = setup_matplotlib()
-        figure_curves(plt, frames)
-        figure_auc(plt, frames)
-        print(f"wrote {FIGURES}/fig6_robustness_curves.{{png,pdf}}")
-        print(f"wrote {FIGURES}/fig7_robustness_auc.{{png,pdf}}")
+        try:
+            plt = setup_matplotlib()
+            figure_curves(plt, frames)
+            figure_auc(plt, frames)
+            print(f"wrote {FIGURES}/fig6_robustness_curves.{{png,pdf}}")
+            print(f"wrote {FIGURES}/fig7_robustness_auc.{{png,pdf}}")
+        except ImportError as error:
+            figures_failed = f"{error} -- install it, then re-run for the figures"
+            print(f"! FIGURES SKIPPED: {figures_failed}", file=sys.stderr)
 
     markdown_tables(frames, missing)
+    if figures_failed:
+        print(f"\n> **Figures were not written:** {figures_failed}\n")
+        return 1
     return 0
 
 
