@@ -1,0 +1,232 @@
+"""One confusion-matrix panel per model, in a single readable grid.
+
+    python scripts/confusion_grid.py                  # 2x3 grid, row-normalised
+    python scripts/confusion_grid.py --errors-only    # mask the diagonal: show ONLY confusions
+    python scripts/confusion_grid.py --require-all    # refuse unless all six models are present
+
+Reads artifacts/<model>/noise/<model>_test_clean.csv -- the CLEAN condition of the noise sweep,
+which is the same 1,255-window test split every model reproduces before any noisy condition is
+scored. Writes docs/figures/fig8_confusion_grid.{png,pdf}. Read-only with respect to results.
+
+WHY ROW-NORMALISED AND NOT COUNTS. Every model here is between 97% and 99% accurate; AST
+misclassifies 11 windows out of 1,255. On a raw-count colour scale that is six panels of
+identical-looking diagonal, and the off-diagonal structure -- the only part a reader cannot get
+from the macro-F1 number already in the caption -- is invisible. Dividing each row by its class
+support makes the diagonal recall and the off-diagonal the share of that instrument sent
+elsewhere, which is comparable across models and across classes of different size.
+
+WHY A POWER NORM. Even row-normalised, a 99%-accurate model puts ~0.99 on the diagonal and
+~0.01 off it. A linear colour ramp spends its whole range on the diagonal. gamma < 1 expands the
+low end so a 2% confusion is distinguishable from a 0.2% one, which is the comparison the figure
+exists to support.
+
+WHY --errors-only EXISTS. With the diagonal masked, the colour scale is set by the largest
+CONFUSION rather than by recall, so the panels stop being six diagonals and start being six
+error patterns. For a poster that is usually the more informative rendering; the diagonal
+carries no information the per-panel macro-F1 does not already state.
+"""
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "src"))
+
+from instrument_robustness.config import TARGET_LABELS  # noqa: E402
+
+ARTIFACTS = ROOT / "artifacts"
+FIGURES = ROOT / "docs" / "figures"
+
+# Display order: weakest/classical first, audio-pretrained last, matching noise_figures.MODELS.
+MODELS: dict[str, str] = {
+    "svm": "SVM",
+    "cnn": "CNN",
+    "crnn": "CRNN",
+    "mert": "MERT",
+    "panns": "PANNs",
+    "ast": "AST",
+}
+
+
+def clean_predictions(name: str) -> pd.DataFrame | None:
+    """Return one model's CLEAN-condition predictions, or None if it has not been evaluated.
+
+    Preconditions: none.
+    Postcondition: frame with `true_label` and `predicted_label`, or None.
+    Raises: ValueError if the file exists but lacks the label columns, because a silently empty
+    panel is exactly the failure this repo keeps producing.
+    """
+    path = ARTIFACTS / name / "noise" / f"{name}_test_clean.csv"
+    if not path.is_file():
+        return None
+    frame = pd.read_csv(path)
+    missing = {"true_label", "predicted_label"} - set(frame.columns)
+    if missing:
+        raise ValueError(f"{path} is missing {sorted(missing)}")
+    return frame
+
+
+def confusion(frame: pd.DataFrame) -> np.ndarray:
+    """Counts, rows = true class, columns = predicted class, in TARGET_LABELS order.
+
+    Postcondition: shape (12, 12), integer, sums to len(frame).
+    Raises: ValueError on a label outside TARGET_LABELS -- an unknown class means the file was
+    written against a different class set and must not be plotted beside the others.
+    """
+    index = {label: position for position, label in enumerate(TARGET_LABELS)}
+    matrix = np.zeros((len(TARGET_LABELS), len(TARGET_LABELS)), dtype=int)
+    for true_label, predicted_label in zip(frame["true_label"], frame["predicted_label"]):
+        if true_label not in index or predicted_label not in index:
+            raise ValueError(f"label outside TARGET_LABELS: {true_label!r}/{predicted_label!r}")
+        matrix[index[true_label], index[predicted_label]] += 1
+    return matrix
+
+
+def macro_f1_from(matrix: np.ndarray) -> float:
+    """Macro-F1 straight from the confusion matrix, so the caption cannot drift from the picture."""
+    scores = []
+    for position in range(matrix.shape[0]):
+        true_positive = matrix[position, position]
+        predicted = matrix[:, position].sum()
+        actual = matrix[position, :].sum()
+        precision = true_positive / predicted if predicted else 0.0
+        recall = true_positive / actual if actual else 0.0
+        scores.append(
+            2 * precision * recall / (precision + recall) if precision + recall else 0.0
+        )
+    return float(np.mean(scores))
+
+
+def row_normalised(matrix: np.ndarray) -> np.ndarray:
+    """Each row divided by its support, so cells are the share of that TRUE class."""
+    support = matrix.sum(axis=1, keepdims=True)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        shares = np.where(support > 0, matrix / support, 0.0)
+    return shares
+
+
+def build(errors_only: bool, present: dict[str, np.ndarray]) -> None:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import PowerNorm
+
+    names = [name for name in MODELS if name in present]
+    columns = 3
+    rows = int(np.ceil(len(names) / columns))
+    figure, axes = plt.subplots(
+        rows, columns, figsize=(4.1 * columns, 4.0 * rows), squeeze=False
+    )
+
+    panels = {}
+    for name in names:
+        shares = row_normalised(present[name])
+        if errors_only:
+            shares = shares.copy()
+            np.fill_diagonal(shares, np.nan)
+        panels[name] = shares
+
+    # One colour scale across every panel, or the panels are not comparable. With the diagonal
+    # masked the scale is set by the worst confusion, which is what we want to compare.
+    finite = np.concatenate([panel[np.isfinite(panel)].ravel() for panel in panels.values()])
+    high = float(np.nanmax(finite)) if finite.size else 1.0
+    norm = PowerNorm(gamma=0.45, vmin=0.0, vmax=high)
+    colours = plt.get_cmap("magma_r" if errors_only else "viridis").copy()
+    colours.set_bad(color="#f2f2f2")   # masked diagonal reads as absent, not as zero
+
+    image = None
+    for position, name in enumerate(names):
+        axis = axes[position // columns][position % columns]
+        image = axis.imshow(panels[name], cmap=colours, norm=norm, aspect="equal")
+
+        matrix = present[name]
+        errors = int(matrix.sum() - np.trace(matrix))
+        axis.set_title(
+            f"{MODELS[name]}\nmacro-F1 {macro_f1_from(matrix):.3f} · "
+            f"{errors} of {matrix.sum():,} misclassified",
+            fontsize=10,
+        )
+
+        axis.set_xticks(range(len(TARGET_LABELS)))
+        axis.set_yticks(range(len(TARGET_LABELS)))
+        # Tick LABELS only on the outer edges. Repeating twelve instrument names six times is
+        # what makes a grid of confusion matrices unreadable.
+        bottom_row = position // columns == rows - 1
+        left_column = position % columns == 0
+        axis.set_xticklabels(
+            TARGET_LABELS if bottom_row else [], rotation=90, fontsize=7
+        )
+        axis.set_yticklabels(TARGET_LABELS if left_column else [], fontsize=7)
+        if bottom_row:
+            axis.set_xlabel("predicted instrument", fontsize=9)
+        if left_column:
+            axis.set_ylabel("true instrument", fontsize=9)
+        axis.tick_params(length=0)
+        for spine in axis.spines.values():
+            spine.set_linewidth(0.4)
+
+    for position in range(len(names), rows * columns):
+        axes[position // columns][position % columns].axis("off")
+
+    label = (
+        "share of true class sent to the wrong instrument"
+        if errors_only
+        else "share of true class (diagonal = recall)"
+    )
+    bar = figure.colorbar(
+        image, ax=axes, fraction=0.020, pad=0.015, aspect=38
+    )
+    bar.set_label(label, fontsize=9)
+    bar.ax.tick_params(labelsize=8)
+
+    FIGURES.mkdir(parents=True, exist_ok=True)
+    stem = "fig8_confusion_grid_errors" if errors_only else "fig8_confusion_grid"
+    for suffix in ("png", "pdf"):
+        figure.savefig(FIGURES / f"{stem}.{suffix}", dpi=200, bbox_inches="tight")
+    plt.close(figure)
+    print(f"wrote {FIGURES}/{stem}.{{png,pdf}}")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--errors-only",
+        action="store_true",
+        help="mask the diagonal and scale colour by the worst confusion",
+    )
+    parser.add_argument(
+        "--require-all",
+        action="store_true",
+        help="exit non-zero unless all six models have clean predictions",
+    )
+    arguments = parser.parse_args()
+
+    present: dict[str, np.ndarray] = {}
+    missing: list[str] = []
+    for name in MODELS:
+        frame = clean_predictions(name)
+        if frame is None:
+            missing.append(name)
+            continue
+        present[name] = confusion(frame)
+
+    print("models with clean predictions:", ", ".join(present) or "(none)")
+    print("models MISSING                :", ", ".join(missing) or "(none)")
+    if missing and arguments.require_all:
+        print("refusing to render an incomplete grid (--require-all)", file=sys.stderr)
+        return 1
+    if not present:
+        print("nothing to plot", file=sys.stderr)
+        return 1
+
+    build(arguments.errors_only, present)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
