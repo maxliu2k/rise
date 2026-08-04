@@ -188,7 +188,25 @@ TARGET_RMS = 0.1      # per-window RMS target; peak-guarded to avoid clipping
 # does not imply equal masking. The validation pilot measured -5 and -15 too; they were omitted from
 # the final grid because -5 lies between 0 and the measured floor, while -15 added no meaningful
 # change beyond -10. Freeze this list after generation.
-SNRS = [60, 50, 40, 30, 20, 10, 0, -10]
+# REGRIDDED 2026-08-03 for the white/audience/studio taxonomy. Both pilots, run independently,
+# returned the SAME suggestion -- swap 60 for -5:
+#
+#   model  type      60      50      40      30      20      10       0      -5     -10
+#   SVM    white   .982    .856    .521    .256    .092    .050    .031    .022    .013
+#   SVM    audience   -    .994    .974    .861    .675    .505    .347    .204    .130
+#   SVM    studio  1.000    .992    .956    .798    .542    .350    .196    .054    .013
+#   MERT   audience 1.000   .982    .977    .934    .838    .626    .344    .234    .149
+#   MERT   studio  1.004    .996    .973    .903    .706    .386    .230    .155    .100
+#
+# (retention = noisy macro-F1 / clean macro-F1)
+#
+# 60 dB is dead weight for the new types: MERT/studio reads 1.004, i.e. ABOVE the clean baseline,
+# which is measurement noise rather than an effect. Dropping it costs nothing -- white still has
+# its upper shoulder at 50 (SVM .856, comfortably inside the usable band).
+#
+# -5 earns its place: it is where audience and studio are mid-collapse (SVM studio falls .196 ->
+# .054 across 0 to -5), and the old grid stepped straight over it from 0 to -10.
+SNRS = [50, 40, 30, 20, 10, 0, -5, -10]
 
 # The three conditions this study is actually about:
 #   white     generated Gaussian -- synthetic control, worst-case broadband corruption
