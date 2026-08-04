@@ -469,6 +469,24 @@ FUTURE = [
     "More noise realizations to increase robustness against random draw",
     "Noise-aware training to further noise robustness",
 ]
+NOISE_SOURCES = [
+    ("white", "generated Gaussian noise — synthetic broadband control"),
+    ("audience", "ESC-50 human non-speech (targets 20–29): 400 clips, 10 classes — "
+     "clapping, coughing, laughing, footsteps …"),
+    ("studio", "DEMAND: 18 real environments (domestic, nature, office, public, street, "
+     "transport), one microphone per array"),
+]
+SEED_NOTE = ("Every mixture is seeded by sha256(dataset fingerprint | window | noise type | "
+             "replicate), so the 60,240-file corpus is bit-reproducible and identical for "
+             "every model.")
+REPRO = [
+    "All per-window predictions, per-condition metrics, and the failure analysis are "
+    "<b>committed to the repository</b>",
+    "Every figure and table on this poster regenerates from <b>one script each</b> "
+    "(scripts/*.py) against those files",
+    "The noise corpus rebuilds <b>bit-identically</b> from the sealed dataset fingerprint "
+    "— scan the GitHub QR below",
+]
 GLANCE = [
     ("10% \u2192 68%", "SVM macro-F1 retained at 20 dB, white \u2192 audience noise"),
     ("0 errors, worst loss", "tuba: perfect on clean audio for all six models, largest recall "
@@ -631,7 +649,13 @@ def build() -> None:
 
     y = draw_para(c, "Noise Construction", st["subhead"], x, y, w) + 10
     y = bullets(c, NOISE_CONSTRUCTION, st["bullet"], x, y, w) + 12
-    y = draw_image(c, ASSETS / "eq_block.png", x, y, w * 0.96, center_in=w)
+    y = draw_image(c, ASSETS / "eq_block.png", x, y, w * 0.96, center_in=w) + 16
+    tag = ParagraphStyle("tag", parent=st["bullet"], fontSize=17, leading=21.5)
+    for name, desc in NOISE_SOURCES:
+        y = draw_para(c, f'●&nbsp;&nbsp;<b><font color="#CC0000">{name}</font></b> '
+                         f'— {desc}', tag, x, y, w) + 7
+    y = draw_para(c, SEED_NOTE, ParagraphStyle("seed", parent=st["caption_l"], fontSize=14.5,
+                                               leading=18), x, y + 5, w)
     left_end = y
 
     # ================= MIDDLE =================
@@ -686,7 +710,10 @@ def build() -> None:
         yy = draw_para(c, cap, ParagraphStyle("eqcap", parent=st["caption_l"], fontSize=13.5,
                                               leading=16.5, alignment=1), ex, yy, eq_w) + 14
         col_ys[col] = yy
-    right_flow_end = max(col_ys)
+    y = max(col_ys) + 24
+    y = draw_para(c, "Reproducibility", st["subhead"], x, y, w) + 10
+    y = bullets(c, REPRO, bullet_r, x, y, w)
+    right_flow_end = y
 
     # References and Acknowledgments anchor to the BOTTOM of the column, so leftover space
     # becomes breathing room in the middle rather than a ragged hole at the foot of the board.
@@ -694,7 +721,7 @@ def build() -> None:
     ack_p = Paragraph(ACK, ack_style)
     _, ack_h = ack_p.wrapOn(c, w, PAGE_H)
     bottom_limit = top + col_h - pad
-    qr_w = 165.0
+    qr_w = 215.0
     ref_block = 58 + 16 + qr_w + 34 + 26
     ack_block = 58 + 14 + ack_h
     y = bottom_limit - ack_block - ref_block - 14
