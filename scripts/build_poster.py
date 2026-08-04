@@ -247,11 +247,11 @@ PIPELINE = [
      "Normalize loudness\n\u2192 8,374 retained recordings"),
     ("Grouped Split",
      "Stratified by instrument,\nsplit by pitch 70/15/15\n"
-     "Train 5,861 \u00b7 Val 1,258 \u00b7 Test 1,255"),
+     "Train 5,861 \u00b7 Val 1,258\nTest 1,255"),
     ("Evaluate / Score Models",
      "Identical noisy mixtures\nper model\nMacro-F1 retention across SNR"),
     ("Construct Noisy Test Set",
-     "White (Gaussian), Audience (ESC-50),\nStudio (DEMAND)\n8 SNRs \u00d7 2 independent draws"),
+     "White (Gaussian)\nAudience (ESC-50)\nStudio (DEMAND)\n8 SNRs \u00d7 2 independent draws"),
     ("Train Models",
      "Trained: SVM \u00b7 CNN \u00b7 CRNN\nFine-tuned: MERT \u00b7 AST \u00b7 PANNs"),
 ]
@@ -259,35 +259,57 @@ PIPELINE = [
 
 def pipeline_chart(c: canvas.Canvas, x: float, y: float, w: float) -> float:
     """Native redraw of the Fig.2 flowchart: top row left-to-right, down, bottom row
-    right-to-left -- the same S-shape as the original."""
+    right-to-left -- the same S-shape as the original, with numbered step badges so the
+    serpentine reading order is explicit.
+
+    Text is measured and vertically CENTRED in each box. The first version top-anchored it,
+    which left three-line boxes with a slab of dead space at the foot and made the whole
+    chart read as slumped.
+    """
+    import math
     gap = 20.0
     box_w = (w - 2 * gap) / 3
-    box_h = 128.0
-    row_gap = 34.0
+    box_h = 142.0
+    row_gap = 42.0
+    # step number by process order, not grid order: the bottom row runs right-to-left
+    step_of = {0: 1, 1: 2, 2: 3, 3: 6, 4: 5, 5: 4}
 
-    def box(col: int, row: int, title: str, body: str) -> None:
+    def box(i: int, title: str, body: str) -> None:
+        col, row = i % 3, i // 3
         bx = x + col * (box_w + gap)
         by = y + row * (box_h + row_gap)
         c.setFillColor(BOX_BLUE)
         c.setStrokeColor(BOX_EDGE)
-        c.setLineWidth(1.2)
-        c.roundRect(bx, PAGE_H - by - box_h, box_w, box_h, 10, stroke=1, fill=1)
+        c.setLineWidth(1.4)
+        c.roundRect(bx, PAGE_H - by - box_h, box_w, box_h, 12, stroke=1, fill=1)
+        # step badge
+        c.setFillColor(BU_RED)
+        c.circle(bx + 22, PAGE_H - by - 22, 13, stroke=0, fill=1)
+        c.setFillColor(white)
+        c.setFont("TNR-Bold", 15)
+        c.drawCentredString(bx + 22, PAGE_H - by - 27, str(step_of[i]))
+        # measured, centred text block
+        lines = body.split("\n")
+        title_h, line_h, gap_th = 20.0, 15.5, 8.0
+        block_h = title_h + gap_th + len(lines) * line_h
+        # never let a centred title slide up under the corner badge
+        ty = max(by + (box_h - block_h) / 2 + 15, by + 50)
         c.setFillColor(NAVY)
-        c.setFont("TNR-Bold", 16.5)
-        c.drawCentredString(bx + box_w / 2, PAGE_H - by - 24, title)
-        c.setFont("TNR", 12.5)
+        c.setFont("TNR-Bold", 16)
+        c.drawCentredString(bx + box_w / 2, PAGE_H - ty, title)
+        c.setFont("TNR", 12)
         c.setFillColor(INK)
-        for k, line in enumerate(body.split("\n")):
-            c.drawCentredString(bx + box_w / 2, PAGE_H - by - 44 - k * 16, line)
+        for k, line in enumerate(lines):
+            c.drawCentredString(bx + box_w / 2,
+                                PAGE_H - (ty + gap_th + title_h - 4 + k * line_h), line)
 
     for i, (title, body) in enumerate(PIPELINE):
-        box(i % 3, i // 3, title, body)
+        box(i, title, body)
 
     c.setStrokeColor(NAVY)
     c.setLineWidth(2.5)
 
     def arrow(x1, y1, x2, y2):
-        import math
         c.line(x1, PAGE_H - y1, x2, PAGE_H - y2)
         angle = math.atan2(y2 - y1, x2 - x1)
         for side in (-0.5, 0.5):
@@ -296,12 +318,12 @@ def pipeline_chart(c: canvas.Canvas, x: float, y: float, w: float) -> float:
 
     mid_y1 = y + box_h / 2
     mid_y2 = y + box_h + row_gap + box_h / 2
-    arrow(x + box_w, mid_y1, x + box_w + gap, mid_y1)                      # 1 -> 2
-    arrow(x + 2 * box_w + gap, mid_y1, x + 2 * box_w + 2 * gap, mid_y1)    # 2 -> 3
+    arrow(x + box_w + 3, mid_y1, x + box_w + gap - 3, mid_y1)
+    arrow(x + 2 * box_w + gap + 3, mid_y1, x + 2 * box_w + 2 * gap - 3, mid_y1)
     cx3 = x + 2 * box_w + 2 * gap + box_w / 2
-    arrow(cx3, y + box_h, cx3, y + box_h + row_gap)                        # 3 down to 6
-    arrow(x + 2 * box_w + 2 * gap, mid_y2, x + 2 * box_w + gap, mid_y2)    # 6 -> 5
-    arrow(x + box_w + gap, mid_y2, x + box_w, mid_y2)                      # 5 -> 4
+    arrow(cx3, y + box_h + 3, cx3, y + box_h + row_gap - 3)
+    arrow(x + 2 * box_w + 2 * gap - 3, mid_y2, x + 2 * box_w + gap + 3, mid_y2)
+    arrow(x + box_w + gap - 3, mid_y2, x + box_w + 3, mid_y2)
     return y + 2 * box_h + row_gap
 
 
@@ -562,7 +584,7 @@ def dataset_box(c: canvas.Canvas, st: dict, x: float, y: float, w: float) -> flo
     c.roundRect(x, PAGE_H - y - box_h, w, box_h, 12, stroke=1, fill=1)
     c.setFillColor(NAVY)
     c.setFont("TNR-Bold", 22)
-    c.drawString(x + inner, PAGE_H - y - inner - 20, "Dataset & split")
+    c.drawCentredString(x + w / 2, PAGE_H - y - inner - 20, "Dataset & Split")
     grid.drawOn(c, x + inner, PAGE_H - (y + inner + head_h) - gh)
     note.drawOn(c, x + inner, PAGE_H - (y + inner + head_h + gh + 10) - nh)
     return y + box_h
