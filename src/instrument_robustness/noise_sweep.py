@@ -147,11 +147,11 @@ DEMAND_ENVIRONMENTS: dict[str, str] = {
 # Which project noise type each DEMAND environment feeds. Kept as a dict of the same shape as
 # ESC50_TARGETS so a reader can see both corpus mappings in one place.
 #
-# `studio` is DEMAND room tone -- the continuous background of a real recording space.
-# NOT YET IN config.NOISE_TYPES. The SNR grid was frozen from `snr_pilot` measurements taken on
-# white/natural/mechanical only, and an unpiloted grid is how this project ended up with an
-# inherited grid that sat entirely at or below chance. Run the pilot on `studio` AND `audience` before adding
-# it to NOISE_TYPES.
+# `studio` is DEMAND room tone -- the continuous background of a real recording space. It is in
+# config.NOISE_TYPES as of 2026-08-03, after snr_pilot was run on it and on `audience` with both
+# SVM and MERT; the grid was regridded to [50..-10] on that evidence. Anything added here in
+# future needs the same treatment before it is enabled, because an unpiloted grid is how this
+# project once ended up with one sitting entirely at or below chance.
 DEMAND_TARGETS = {"studio": tuple(DEMAND_ENVIRONMENTS)}
 
 
@@ -788,7 +788,18 @@ def _ensure_generation_target_is_empty(noisy_dir: Path) -> None:
 
 def validate(n_samples: int = 5) -> None:
     windows = test_windows()
-    esc_index = load_esc50_index()
+    # Only load a corpus the grid actually asks for: a white-only sweep must not require an
+    # ESC-50 or DEMAND download.
+    esc_index = (
+        load_esc50_index()
+        if any(noise_type in ESC50_TARGETS for noise_type in NOISE_TYPES)
+        else {}
+    )
+    demand_index = (
+        load_demand_index()
+        if any(noise_type in DEMAND_TARGETS for noise_type in NOISE_TYPES)
+        else {}
+    )
     identity = dataset_build_identity()
     fingerprint = dataset_fingerprint(identity)
     print(f"data root: {ROOT}")
@@ -816,6 +827,7 @@ def validate(n_samples: int = 5) -> None:
                 noise_type,
                 np.random.default_rng(seed),
                 esc_index,
+                demand_index=demand_index,
             )
             added_components = []
             for snr in SNRS:
@@ -885,6 +897,7 @@ def validate(n_samples: int = 5) -> None:
             noise_type,
             np.random.default_rng(seed),
             esc_index,
+            demand_index=demand_index,
         )
         sample_noisy, _, _ = mix_at_snr(sample_clean, noise, 0)
         _write_wav_atomic(
@@ -930,6 +943,11 @@ def generate(
         if any(noise_type in ESC50_TARGETS for noise_type in NOISE_TYPES)
         else {}
     )
+    demand_index: dict[str, list[DemandRecording]] = (
+        load_demand_index()
+        if any(noise_type in DEMAND_TARGETS for noise_type in NOISE_TYPES)
+        else {}
+    )
     identity = dataset_build_identity(
         manifest_csv=manifest_csv,
         manifest_fingerprint=manifest_fingerprint,
@@ -967,6 +985,7 @@ def generate(
                     noise_type,
                     np.random.default_rng(seed),
                     esc_index,
+                    demand_index=demand_index,
                 )
                 source_path_value = source.get("noise_source_path")
                 source_sha256 = None
