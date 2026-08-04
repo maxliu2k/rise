@@ -25,6 +25,7 @@ set -uo pipefail
 REPO="${RISE_REPO:-/projectnb/rise-grid/maxliu2k/instrument-robustness}"
 DATA="${RISE_DATA_ROOT:-/project/rise-grid/maxliu2k/all-samples}"
 NOISE="${RISE_NOISE_ROOT:-/projectnb/rise-grid/noise-sources}"
+DEMAND="${RISE_DEMAND_ROOT:-/project/rise-grid/maxliu2k/noise-sources/DEMAND}"
 VC="${VENV_CORE:-/projectnb/rise-grid/maxliu2k/venv}"
 VP="${VENV_PRETRAINED:-/projectnb/rise-grid/maxliu2k/venv_pretrained}"
 VM="${VENV_MERT:-/projectnb/rise-grid/maxliu2k/venv_mert}"
@@ -57,8 +58,31 @@ say() { printf '%s\n' "$*" | tee -a "$STATUS"; }
 fail=0
 [ -d "$DATA/pipeline" ]                       || { echo "no pipeline/ under $DATA" >&2; fail=1; }
 [ -f "$DATA/pipeline/dataset_freeze.json" ]   || { echo "dataset is not sealed: run pipeline_rebuild.qsub" >&2; fail=1; }
-[ -d "$NOISE/ESC-50-master/audio" ]           || { echo "no ESC-50 audio under $NOISE" >&2; fail=1; }
-[ -f "$NOISE/ESC-50-master/meta/esc50.csv" ]  || { echo "no ESC-50 meta under $NOISE" >&2; fail=1; }
+
+# WHICH CORPORA ARE ACTUALLY NEEDED comes from config, not from this file's assumptions.
+#
+# On 2026-08-04 this preflight passed and generation died anyway: RISE_DEMAND_ROOT was set in
+# the launching shell but never passed to the jobs, and the preflight only knew about ESC-50, so
+# nothing checked the path the jobs would actually resolve. Asking config which corpora the grid
+# requires means the check cannot drift out of step with the taxonomy again.
+needs=$(cd "$REPO" && PYTHONPATH="$REPO/src" python - <<'PY' 2>/dev/null
+from instrument_robustness.config import NOISE_TYPES
+from instrument_robustness.noise_sweep import ESC50_TARGETS, DEMAND_TARGETS
+print("esc50" if any(t in ESC50_TARGETS for t in NOISE_TYPES) else "")
+print("demand" if any(t in DEMAND_TARGETS for t in NOISE_TYPES) else "")
+PY
+)
+[ -n "$needs" ] || { echo "could not ask config which noise corpora are required" >&2; fail=1; }
+
+if grep -qx esc50 <<<"$needs"; then
+    [ -d "$NOISE/ESC-50-master/audio" ]           || { echo "no ESC-50 audio under $NOISE" >&2; fail=1; }
+    [ -f "$NOISE/ESC-50-master/meta/esc50.csv" ]  || { echo "no ESC-50 meta under $NOISE" >&2; fail=1; }
+fi
+if grep -qx demand <<<"$needs"; then
+    # Check the exact path the JOBS will resolve, which is the one this script exports below.
+    [ -d "$DEMAND" ] || { echo "no DEMAND corpus at $DEMAND (set RISE_DEMAND_ROOT)" >&2; fail=1; }
+    [ -f "$DEMAND/DKITCHEN/ch01.wav" ] || { echo "DEMAND at $DEMAND has no DKITCHEN/ch01.wav" >&2; fail=1; }
+fi
 avail=$(df -Pk "$DATA" | awk 'NR==2{print int($4/1048576)}')
 [ "${avail:-0}" -ge 18 ] || { echo "only ${avail}G free at $DATA; the corpus needs ~15G" >&2; fail=1; }
 
@@ -77,7 +101,7 @@ say "    repo $REPO"
 say "    data $DATA   (${avail}G free)"
 
 cd "$REPO" || exit 1
-COMMON="RISE_REPO=$REPO,RISE_DATA_ROOT=$DATA"
+COMMON="RISE_REPO=$REPO,RISE_DATA_ROOT=$DATA,RISE_NOISE_ROOT=$NOISE,RISE_DEMAND_ROOT=$DEMAND"
 
 # ---- 1. generate the corpus ONCE -------------------------------------------------------------
 # Every model must read the same realized files or predictions are not paired, and the paired
@@ -85,7 +109,7 @@ COMMON="RISE_REPO=$REPO,RISE_DATA_ROOT=$DATA"
 # PANNs scored against a different corpus than the others, silently invalidating every
 # comparison involving it.
 gen=$(qsub -terse "${mailfail[@]}" -N noise_generate \
-      -v "$COMMON,RISE_NOISE_ROOT=$NOISE,RISE_VENV=$VC" \
+      -v "$COMMON,RISE_VENV=$VC" \
       -o "$REPO/noise_generate.log" scc/noise_generate.qsub)
 say "  noise_generate  $gen"
 
