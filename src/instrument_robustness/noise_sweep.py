@@ -269,7 +269,10 @@ def window_seed(
 
     Preconditions: `replicate` is a non-negative integer.
     """
-    if noise_type not in NOISE_TYPES:
+    # Gate on what draw_noise can produce, not on config.NOISE_TYPES. Seeding a type is a
+    # prerequisite for PILOTING it, and a type must be piloted before it is configured -- gating
+    # here on the configured set locked every new type out of its own pilot.
+    if noise_type not in {"white", *ESC50_TARGETS, *DEMAND_TARGETS}:
         raise ValueError(f"Unknown noise type: {noise_type}")
     if int(replicate) != replicate or replicate < 0:
         raise ValueError(f"replicate must be a non-negative integer, got {replicate!r}")
@@ -415,7 +418,7 @@ def _read_source_segment(
 def load_esc50_index() -> dict[str, list[Esc50Clip]]:
     """Select the ESC-50 clips for each project noise category, with their corpus metadata.
 
-    Postcondition: returns {noise_type: [Esc50Clip, ...]} ordered by filename, 800 per category.
+    Postcondition: returns {noise_type: [Esc50Clip, ...]} ordered by filename, 40 per ESC-50 class.
     The filename ordering is load-bearing: `draw_noise` indexes into this list with a seeded RNG,
     so any change to the order changes which clip a given seed selects.
     Raises: FileNotFoundError if audio or metadata is absent; ValueError on a missing column or an
@@ -457,9 +460,15 @@ def load_esc50_index() -> dict[str, list[Esc50Clip]]:
             raise FileNotFoundError(
                 f"{len(missing_paths)} ESC-50 files are missing; first: {missing_paths[0]}"
             )
-        if len(clips) != 800:
+        # 40 clips per ESC-50 class, so the expected count follows the BLOCK WIDTH. This was
+        # hardcoded to 800, which silently assumed every category spans 20 classes -- true for
+        # natural and mechanical, false for audience (10 classes, 400 clips), which was then
+        # reported as "ESC-50 unavailable" and skipped.
+        expected = 40 * len(list(targets))
+        if len(clips) != expected:
             raise ValueError(
-                f"Expected 800 ESC-50 {noise_type} clips, found {len(clips)}"
+                f"Expected {expected} ESC-50 {noise_type} clips "
+                f"({len(list(targets))} classes x 40), found {len(clips)}"
             )
         index[noise_type] = clips
     return index
