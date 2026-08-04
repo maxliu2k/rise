@@ -324,7 +324,7 @@ PRETRAINED_ROWS = [
 
 def model_table(c: canvas.Canvas, st: dict, x: float, y: float, w: float,
                 title: str, subtitle: str, rows: list[tuple]) -> float:
-    y = draw_para(c, f'<para alignment="center"><b>{title}</b></para>',
+    y = draw_para(c, f'<para alignment="center">{title}</para>',
                   ParagraphStyle("mt", parent=st["body"], fontName="TNR-Bold", fontSize=20,
                                  textColor=NAVY), x, y, w) + 2
     y = draw_para(c, f'<para alignment="center">{subtitle}</para>',
@@ -373,21 +373,21 @@ AFFIL = ("<super>1</super>Clements High School, Sugar Land, TX; "
 
 BACKGROUND = [
     "Instruments' timbral properties are central to how music is composed, performed, and "
-    "perceived. As a result, <b>instrument classification is an active research area</b> "
+    "perceived. As a result, instrument classification is an active research area "
     "(musicology, style analysis, audio editing and retrieval) [1, 2].",
     "Since 2015, convolutional neural networks have pushed clean-audio classification accuracy "
-    "from <b>~90% to as high as ~99%</b> [7].",
+    "from ~90% to as high as ~99% [7].",
     "<b>The Gap:</b> model performance is usually measured on clean, isolated audio. It remains "
     "unclear which models fail when real-world noise is introduced, under what noise, and which "
     "instruments break down first.",
 ]
 OBJECTIVES = [
-    "We run a controlled, head-to-head <b>robustness comparison of six model families</b>: "
+    "We run a controlled, head-to-head robustness comparison of six model families: "
     "handcrafted SVM; custom CNN and CRNN; and fine-tuned, pretrained MERT, AST, and PANNs.",
-    "Trained on the same <b>12-instrument dataset</b>, we hold the split and noise corpus "
-    "<b>identical across all models</b> and add white (synthetic), audience (human sounds \u2014 "
+    "Trained on the same 12-instrument dataset, we hold the split and noise corpus "
+    "identical across all models and add white (synthetic), audience (human sounds \u2014 "
     "ESC-50), and studio (real-world ambience from all 18 DEMAND environments) noise across an "
-    "8-level SNR sweep, <b>measuring the change in classification performance</b>.",
+    "8-level SNR sweep, measuring the change in classification performance.",
     "<b>Research Question:</b> How do instrument classification systems differ in their ability "
     "to retain classification performance under white, audience, and studio additive noise "
     "across a range of signal-to-noise ratios?",
@@ -409,12 +409,12 @@ NOISE_CONSTRUCTION = [
     "noise. High SNR \u2192 faint noise; 0 dB SNR \u2192 noise is as loud as instrument",
 ]
 STATS = [
-    "Model differences were evaluated on <b>identical test recordings</b>; same clip with the "
+    "Model differences were evaluated on identical test recordings; same clip with the "
     "same noise realizations",
     "Confidence intervals were estimated by resampling complete instrument-pitch groups",
-    "Acoustic distance and noise-induced confusion were related using <b>Spearman "
-    "correlation</b>. Significance assessed using <b>100,000 random instrument-label "
-    "permutation tests</b>, corrected using Benjamini\u2013Hochberg correction to account for "
+    "Acoustic distance and noise-induced confusion were related using Spearman "
+    "correlation. Significance assessed using 100,000 random instrument-label "
+    "permutation tests, corrected using Benjamini\u2013Hochberg correction to account for "
     "pure chance",
 ]
 MID_STATS = [
@@ -445,22 +445,22 @@ CONCLUSION = [
     "<b>Universal benchmark</b> for instrument classification models, tested on six frontier "
     "architectures",
     "<b>Evaluating robustness necessary</b>; clean accuracy alone is insufficient",
-    "Noise type <b>equally important</b> as noise strength (SNR ratio)",
+    "Noise type equally important as noise strength (SNR ratio)",
     "<b>Failures are structured.</b> Degradation concentrates in tuba, oboe, and trumpet. "
     "Confusion is predicted by acoustic distance in 5 of 18 model/noise tests, most strongly "
     "for AST.",
     "<b>Shared, seed-reproducible noise</b> makes model comparison possible.",
 ]
 LIMITATIONS = [
-    "Only <b>one dataset</b> (Philharmonia), restricting timbre to one instrument, player, "
+    "Only one dataset (Philharmonia), restricting timbre to one instrument, player, "
     "and/or recording setup",
-    "Recordings are <b>isolated notes</b>, not polyphonic music where several instruments play "
+    "Recordings are isolated notes, not polyphonic music where several instruments play "
     "at once",
-    "Most audio clips were <b>tiled</b> to fill the 3-second standard, which confounds content "
+    "Most audio clips were tiled to fill the 3-second standard, which confounds content "
     "with repetition",
-    "Nominal SNR and different frequencies of noise may cause instruments to be <b>masked "
-    "unequally</b>",
-    "SVM, AST, MERT and PANNs are <b>single-seed runs</b>, while CNN and CRNN are multi-seed "
+    "Nominal SNR and different frequencies of noise may cause instruments to be masked "
+    "unequally",
+    "SVM, AST, MERT and PANNs are single-seed runs, while CNN and CRNN are multi-seed "
     "spread, so small differences are not treated as effects",
 ]
 FUTURE = [
@@ -481,10 +481,10 @@ SEED_NOTE = ("Every mixture is seeded by sha256(dataset fingerprint | window | n
              "every model.")
 REPRO = [
     "All per-window predictions, per-condition metrics, and the failure analysis are "
-    "<b>committed to the repository</b>",
-    "Every figure and table on this poster regenerates from <b>one script each</b> "
+    "committed to the repository",
+    "Every figure and table on this poster regenerates from one script each "
     "(scripts/*.py) against those files",
-    "The noise corpus rebuilds <b>bit-identically</b> from the sealed dataset fingerprint "
+    "The noise corpus rebuilds bit-identically from the sealed dataset fingerprint "
     "— scan the GitHub QR below",
 ]
 GLANCE = [
@@ -685,6 +685,28 @@ def build() -> None:
     y = top + pad
     bullet_r = ParagraphStyle("bullet_r", parent=st["bullet"], fontSize=20.5, leading=26.5)
     y = section_bar(c, "Discussion", x, y, w) + 18
+    # Evaluation metrics BEFORE the statistics that use them (reordered on request 2026-08-04).
+    # All four equations share ONE scale factor: they were rendered at the same font size, so
+    # equal pixels-per-point everywhere means equal glyph size everywhere. Placing each by
+    # column width instead made wide formulas shrink their maths relative to short ones.
+    y = draw_para(c, "Evaluation Metrics", st["subhead"], x, y, w) + 12
+    eq_w = (w - 26) / 2
+    dims = {}
+    for fname, _cap in EQ_CAPTIONS:
+        with PILImage.open(ASSETS / fname) as im:
+            dims[fname] = im.size
+    k = min((eq_w * 0.92) / iw for iw, _ih in dims.values())
+    col_ys = [y, y]
+    for i, (fname, cap) in enumerate(EQ_CAPTIONS):
+        col = i % 2
+        ex = x + col * (eq_w + 26)
+        yy = col_ys[col]
+        iw, _ih = dims[fname]
+        yy = draw_image(c, ASSETS / fname, ex, yy, iw * k, center_in=eq_w) + 6
+        yy = draw_para(c, cap, ParagraphStyle("eqcap", parent=st["caption_l"], fontSize=13.5,
+                                              leading=16.5, alignment=1), ex, yy, eq_w) + 14
+        col_ys[col] = yy
+    y = max(col_ys) + 24
     y = draw_para(c, "Statistical Analysis", st["subhead"], x, y, w) + 10
     small = ParagraphStyle("stat", parent=st["bullet"], fontSize=18.5, leading=24)
     y = bullets(c, STATS + MID_STATS, small, x, y, w) + 26
@@ -696,21 +718,6 @@ def build() -> None:
     y = bullets(c, LIMITATIONS, bullet_r, x, y, w) + 26
     y = draw_para(c, "Future Work", st["subhead"], x, y, w) + 10
     y = bullets(c, FUTURE, bullet_r, x, y, w) + 26
-    # Eq.7-10 live here rather than under Noise Construction: they are the EVALUATION metrics
-    # the Results and Statistical Analysis sections lean on, not part of noise synthesis, and
-    # the move balances a left column that overflowed against a right column with slack.
-    y = draw_para(c, "Evaluation Metrics", st["subhead"], x, y, w) + 12
-    eq_w = (w - 26) / 2
-    col_ys = [y, y]
-    for i, (fname, cap) in enumerate(EQ_CAPTIONS):
-        col = i % 2
-        ex = x + col * (eq_w + 26)
-        yy = col_ys[col]
-        yy = draw_image(c, ASSETS / fname, ex, yy, eq_w * 0.92, center_in=eq_w) + 6
-        yy = draw_para(c, cap, ParagraphStyle("eqcap", parent=st["caption_l"], fontSize=13.5,
-                                              leading=16.5, alignment=1), ex, yy, eq_w) + 14
-        col_ys[col] = yy
-    y = max(col_ys) + 24
     y = draw_para(c, "Reproducibility", st["subhead"], x, y, w) + 10
     y = bullets(c, REPRO, bullet_r, x, y, w)
     right_flow_end = y
