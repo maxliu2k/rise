@@ -8,16 +8,17 @@ rendered in a seventh, DejaVu Sans. Four families on one board is the single mos
 inconsistency on it, and it is invisible to whoever made each piece because each piece looks
 fine alone.
 
-Arial is the target because it is already the poster's title face, it is a sans (legible at
-poster viewing distance in a way Times is not), and it is present on the machines that build
-these figures. Nothing here changes any DATA; it changes typeface, sizes and frame weights only.
+Times New Roman is the target: it is the poster's title face, the team standardised the whole
+board on it (2026-08-04), and registering the real Windows TTF means figures and body text are
+literally the same face rather than two lookalikes. Nothing here changes any DATA; it changes
+typeface, sizes and frame weights only.
 
 Font sizes are set for a 36 x 48 in board viewed from about a metre: a figure placed at roughly
 one third of the column width needs ~9 pt type in the source to stay readable.
 """
 from __future__ import annotations
 
-FAMILY = "Arial"
+FAMILY = "Times New Roman"
 
 # Frame and rule colours. Lighter than matplotlib's default black so the data, not the box,
 # carries the contrast.
