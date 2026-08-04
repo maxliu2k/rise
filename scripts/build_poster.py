@@ -290,18 +290,21 @@ def pipeline_chart(c: canvas.Canvas, x: float, y: float, w: float) -> float:
         c.drawCentredString(bx + 22, PAGE_H - by - 27, str(step_of[i]))
         # measured, centred text block
         lines = body.split("\n")
-        title_h, line_h, gap_th = 20.0, 15.5, 8.0
-        block_h = title_h + gap_th + len(lines) * line_h
-        # never let a centred title slide up under the corner badge
-        ty = max(by + (box_h - block_h) / 2 + 15, by + 50)
+        line_h = 15.5
+        # ONE title height for every box: per-box vertical centring made titles land at
+        # different heights depending on how many body lines followed, and the row read as
+        # misaligned. Title is fixed; the body block centres in the space beneath it.
+        ty = by + 52
         c.setFillColor(NAVY)
         c.setFont("TNR-Bold", 16)
         c.drawCentredString(bx + box_w / 2, PAGE_H - ty, title)
+        region_top, region_bottom = ty + 10, by + box_h - 10
+        body_h = len(lines) * line_h
+        y0 = region_top + (region_bottom - region_top - body_h) / 2 + 11
         c.setFont("TNR", 12)
         c.setFillColor(INK)
         for k, line in enumerate(lines):
-            c.drawCentredString(bx + box_w / 2,
-                                PAGE_H - (ty + gap_th + title_h - 4 + k * line_h), line)
+            c.drawCentredString(bx + box_w / 2, PAGE_H - (y0 + k * line_h), line)
 
     for i, (title, body) in enumerate(PIPELINE):
         box(i, title, body)
@@ -626,13 +629,13 @@ def build() -> None:
     # ---- header ----
     margin = 45.0
     draw_image(c, ASSETS / "bu_logo.jpeg", margin + 6, 52, 300)
-    y = draw_para(c, TITLE, st["title"], margin + 310, 52, PAGE_W - 2 * (margin + 310)) + 14
-    y = draw_para(c, AUTHORS, st["authors"], margin, y, PAGE_W - 2 * margin) + 10
-    y = draw_para(c, AFFIL, st["affil"], margin, y, PAGE_W - 2 * margin) + 18
+    y = draw_para(c, TITLE, st["title"], margin + 310, 64, PAGE_W - 2 * (margin + 310)) + 20
+    y = draw_para(c, AUTHORS, st["authors"], margin, y, PAGE_W - 2 * margin) + 12
+    y = draw_para(c, AFFIL, st["affil"], margin, y, PAGE_W - 2 * margin) + 22
     c.setStrokeColor(BU_RED)
     c.setLineWidth(5)
     c.line(margin, PAGE_H - y, PAGE_W - margin, PAGE_H - y)
-    top = y + 26
+    top = y + 40
 
     # ---- columns ----
     gutter = 40.0
