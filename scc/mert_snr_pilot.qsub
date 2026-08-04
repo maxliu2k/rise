@@ -25,7 +25,14 @@ if [[ -n "${MERT_PILOT_SNRS:-}" ]]; then
     pilot_snr_args=(--snrs "${pilot_snrs[@]}")
 fi
 
-source "$pilot_venv/bin/activate"
+# A venv built from the python3 module is NOT self-contained; without this the job dies instantly
+# with 'libpython3.9.so.1.0: cannot open shared object file'. Seven scripts were patched for this
+# on 2026-08-02 and this one was missed, so it failed the same way on 2026-08-03.
+if [ -n "${RISE_MODULES-python3/3.9.9}" ]; then
+    module load ${RISE_MODULES:-python3/3.9.9}
+fi
+. "$pilot_repo/scc/activate_venv.sh"
+rise_activate "$pilot_venv"
 cd "$pilot_repo"
 
 export PYTHONPATH="$pilot_repo/src${PYTHONPATH:+:$PYTHONPATH}"
