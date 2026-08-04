@@ -71,6 +71,7 @@ def main() -> int:
 
     import matplotlib
     matplotlib.use("Agg")
+    import poster_style; poster_style.apply()
     import matplotlib.pyplot as plt
 
     noise_types = [t for t in ("audience", "studio", "white") if t in losses.columns]
@@ -80,6 +81,17 @@ def main() -> int:
     figure, axis = plt.subplots(figsize=(7.6, 5.6))
     figure.patch.set_facecolor("white")
 
+    # A CONNECTOR PER INSTRUMENT. x is the clean error count, which does not depend on noise
+    # type, so an instrument's three points sit in a vertical line. Drawing that line is what
+    # makes one label per instrument legible: without it the labels appear to belong to the red
+    # series specifically, when they name the whole triplet.
+    for label in losses.index:
+        values = [losses.loc[label, noise] for noise in noise_types]
+        axis.plot(
+            [errors[label]] * 2, [min(values), max(values)],
+            color="#c9c9c9", linewidth=1.0, zorder=1, solid_capstyle="round",
+        )
+
     for noise in noise_types:
         x = [errors[label] for label in losses.index]
         y = losses[noise].to_numpy()
@@ -88,17 +100,19 @@ def main() -> int:
             alpha=0.85, edgecolor="white", linewidth=0.8, label=noise, zorder=3,
         )
 
-    # Label each instrument once, at its audience point, so twelve names appear rather than 36.
+    # One label per instrument, placed ABOVE the topmost point of its triplet -- not on any one
+    # series. Anchoring it to the audience point made the labels read as belonging to the red
+    # markers rather than to the instrument.
     anchor = "audience" if "audience" in noise_types else noise_types[0]
-    # Manual nudges where two instruments land on nearly the same point. trombone (9, 0.204) and
-    # viola (11, 0.205) overlapped exactly; left as-is one name was unreadable.
-    nudge = {"viola": (7, 6), "trombone": (7, -11), "clarinet": (7, 4)}
+    nudge = {"clarinet": (-20, 7), "double-bass": (20, -2), "trombone": (22, -4),
+             "viola": (0, 7), "flute": (0, 7)}
     for label in losses.index:
+        top = max(losses.loc[label, noise] for noise in noise_types)
         axis.annotate(
             label,
-            (errors[label], losses.loc[label, anchor]),
-            textcoords="offset points", xytext=nudge.get(label, (7, -3)),
-            fontsize=8.5, color="#333333", zorder=4,
+            (errors[label], top),
+            textcoords="offset points", xytext=nudge.get(label, (0, 7)),
+            ha="center", fontsize=8.5, color="#333333", zorder=4,
         )
 
     # Spearman across instruments: does clean error count predict noise recall loss at all?
