@@ -403,20 +403,31 @@ def run_pilot(
 ) -> dict[str, object]:
     """Measure clean and noisy validation performance across the candidate grid."""
     from instrument_robustness.noise_sweep import (
-        NOISE_TYPES as SWEEP_NOISE_TYPES,
+        DEMAND_TARGETS,
+        ESC50_TARGETS,
         dataset_build_identity,
         dataset_fingerprint,
         draw_noise,
         load_clean,
+        load_demand_index,
         load_esc50_index,
         mix_at_snr,
         window_id_of,
         window_seed,
     )
 
-    unknown = sorted(set(noise_types) - set(SWEEP_NOISE_TYPES))
+    # Gate on what can be DRAWN, not on what is currently CONFIGURED.
+    #
+    # This used to check against config.NOISE_TYPES, which made the tool unusable for the one job
+    # it exists to do: you cannot pilot a noise type until it is in NOISE_TYPES, and you must not
+    # put it in NOISE_TYPES until it has been piloted. Every new type was locked out of its own
+    # pilot. The right gate is whether draw_noise can produce it.
+    drawable = {"white", *ESC50_TARGETS, *DEMAND_TARGETS}
+    unknown = sorted(set(noise_types) - drawable)
     if unknown:
-        raise SystemExit(f"Unknown noise type(s): {unknown}; expected {SWEEP_NOISE_TYPES}")
+        raise SystemExit(
+            f"Unknown noise type(s): {unknown}; draw_noise can produce {sorted(drawable)}"
+        )
 
     frame = validation_windows(limit, seed)
     y_true = np.asarray(
@@ -427,17 +438,28 @@ def run_pilot(
     predict = build_scorer(model, model_path, stats_path, device)
 
     esc_index: dict[str, list] = {}
-    if any(t != "white" for t in noise_types):
+    if any(t in ESC50_TARGETS for t in noise_types):
         try:
             esc_index = load_esc50_index()
         except (FileNotFoundError, ValueError) as error:
-            skipped = [t for t in noise_types if t != "white"]
+            skipped = [t for t in noise_types if t in ESC50_TARGETS]
             print(f"! ESC-50 unavailable ({error}); skipping {skipped}")
-            noise_types = [t for t in noise_types if t == "white"]
-            if not noise_types:
-                raise SystemExit(
-                    "No noise types left to pilot. Set RISE_NOISE_ROOT, or pass --noise white."
-                ) from error
+            noise_types = [t for t in noise_types if t not in ESC50_TARGETS]
+
+    demand_index: dict[str, list] = {}
+    if any(t in DEMAND_TARGETS for t in noise_types):
+        try:
+            demand_index = load_demand_index()
+        except (FileNotFoundError, ValueError) as error:
+            skipped = [t for t in noise_types if t in DEMAND_TARGETS]
+            print(f"! DEMAND unavailable ({error}); skipping {skipped}")
+            noise_types = [t for t in noise_types if t not in DEMAND_TARGETS]
+
+    if not noise_types:
+        raise SystemExit(
+            "No noise types left to pilot. Set RISE_NOISE_ROOT / RISE_DEMAND_ROOT, "
+            "or pass --noise white."
+        )
 
     clean = [load_clean(str(p)) for p in frame["window_path"]]
     window_ids = [window_id_of(str(p)) for p in frame["window_path"]]
@@ -460,7 +482,12 @@ def run_pilot(
         # One realization per window, reused across every level -- the same property the real
         # sweep relies on, so a difference between levels is intensity and not a fresh draw.
         realizations = [
-            draw_noise(noise_type, np.random.default_rng(window_seed(wid, noise_type, fingerprint)), esc_index)[0]
+            draw_noise(
+                noise_type,
+                np.random.default_rng(window_seed(wid, noise_type, fingerprint)),
+                esc_index,
+                demand_index=demand_index,
+            )[0]
             for wid in window_ids
         ]
         print(f"\n{noise_type}")
