@@ -65,7 +65,7 @@ fail=0
 # the launching shell but never passed to the jobs, and the preflight only knew about ESC-50, so
 # nothing checked the path the jobs would actually resolve. Asking config which corpora the grid
 # requires means the check cannot drift out of step with the taxonomy again.
-needs=$(cd "$REPO" && PYTHONPATH="$REPO/src" python - <<'PY' 2>/dev/null
+needs=$(cd "$REPO" && PYTHONPATH="$REPO/src" "$VC/bin/python" - <<'PY' 2>/dev/null
 from instrument_robustness.config import NOISE_TYPES
 from instrument_robustness.noise_sweep import ESC50_TARGETS, DEMAND_TARGETS
 print("esc50" if any(t in ESC50_TARGETS for t in NOISE_TYPES) else "")
@@ -84,7 +84,12 @@ if grep -qx demand <<<"$needs"; then
     [ -f "$DEMAND/DKITCHEN/ch01.wav" ] || { echo "DEMAND at $DEMAND has no DKITCHEN/ch01.wav" >&2; fail=1; }
 fi
 avail=$(df -Pk "$DATA" | awk 'NR==2{print int($4/1048576)}')
-[ "${avail:-0}" -ge 18 ] || { echo "only ${avail}G free at $DATA; the corpus needs ~15G" >&2; fail=1; }
+# Only when we are about to WRITE a corpus. With RISE_SKIP_GENERATE=1 the corpus is already on
+# disk and is itself occupying the ~16G this check would demand be free -- so the check fires
+# precisely when it should not.
+if [ "${RISE_SKIP_GENERATE:-0}" != "1" ]; then
+    [ "${avail:-0}" -ge 18 ] || { echo "only ${avail}G free at $DATA; the corpus needs ~15G" >&2; fail=1; }
+fi
 
 # Every venv this launcher is about to name, checked BEFORE anything is submitted. On
 # 2026-08-03 the scripts defaulted to `$REPO/.venv`, which has never existed: nine jobs were
