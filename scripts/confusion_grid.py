@@ -61,10 +61,17 @@ def clean_predictions(name: str) -> pd.DataFrame | None:
     Raises: ValueError if the file exists but lacks the label columns, because a silently empty
     panel is exactly the failure this repo keeps producing.
     """
-    path = ARTIFACTS / name / "noise" / f"{name}_test_clean.csv"
-    if not path.is_file():
+    # GLOB, do not reconstruct the prefix. Each adapter chooses its own `file_prefix`, and they
+    # are not all `<model>_test_`: PANNs writes `panns_ft_test_clean.csv` because the reported
+    # result is the fine-tune rather than the linear probe. Guessing the name silently dropped
+    # PANNs from the grid, which is the "five curves where the reader believes six" failure.
+    directory = ARTIFACTS / name / "noise"
+    matches = sorted(directory.glob("*_test_clean.csv")) if directory.is_dir() else []
+    if not matches:
         return None
-    frame = pd.read_csv(path)
+    if len(matches) > 1:
+        raise ValueError(f"{directory} has several clean prediction files: {matches}")
+    frame = pd.read_csv(matches[0])
     missing = {"true_label", "predicted_label"} - set(frame.columns)
     if missing:
         raise ValueError(f"{path} is missing {sorted(missing)}")
