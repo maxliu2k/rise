@@ -34,18 +34,22 @@ export OMP_NUM_THREADS="${NSLOTS:-4}"
 export MKL_NUM_THREADS="${NSLOTS:-4}"
 export OPENBLAS_NUM_THREADS=1
 
-# Force a conservative OpenBLAS kernel instead of letting DYNAMIC_ARCH pick one at runtime.
+# Force a pre-AVX2 OpenBLAS kernel instead of letting DYNAMIC_ARCH pick one at runtime.
 #
-# noise_eval_svm segfaulted (SIGSEGV, 609 MB peak, so not memory) inside run_noise_evaluation on
-# scc-pi1 on 2026-08-03 and reproduced on scc-pi3. A six-node probe passed on three other Intel
-# generations, so the failure tracks the `pi` node family, and the crash is in native code under
-# libsvm/OpenBLAS rather than anywhere in our Python.
+# noise_eval_svm has failed twice on the `pi` nodes and nowhere else:
+#   2026-08-03  SIGSEGV inside run_noise_evaluation on scc-pi1, reproduced on scc-pi3
+#   2026-08-04  SIGILL in the unit tests on scc-pi1, WITH OPENBLAS_CORETYPE=Haswell set
 #
-# UNTESTED AGAINST THE CRASH -- the scheduler would not let me pin a probe to a pi node. It is
-# included because it is close to free: worst case it costs a little BLAS throughput on nodes
-# that would have chosen a wider kernel, and SVM can be re-run into the finished corpus at any
-# time if this turns out not to be the cause.
-export OPENBLAS_CORETYPE="${OPENBLAS_CORETYPE:-Haswell}"
+# The pi nodes are `hf:cpu_arch=ivybridge` (Xeon E5-2650 v2). Ivy Bridge has AVX but NOT AVX2 --
+# AVX2 arrives with Haswell -- so the Haswell pin made it worse: the previous crash was a bad
+# runtime kernel choice, and pinning Haswell guaranteed illegal AVX2 instructions instead.
+# A six-node probe passed on E5-2650 v2 (login-side), E5-2680 v4 and Gold 6132, which is why
+# the shallow probe never reproduced it.
+#
+# SANDYBRIDGE is the newest kernel Ivy Bridge fully supports (AVX, no AVX2) and is valid on every
+# newer node too, so this is correct everywhere rather than a node-specific workaround. The BLAS
+# cost is irrelevant here: this evaluation is dominated by reading 60,240 files, not by GEMM.
+export OPENBLAS_CORETYPE="${OPENBLAS_CORETYPE:-SANDYBRIDGE}"
 export NUMEXPR_NUM_THREADS=1
 export NUMBA_NUM_THREADS=1
 export PYTHONUNBUFFERED=1
