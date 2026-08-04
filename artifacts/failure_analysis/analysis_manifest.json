@@ -1,0 +1,462 @@
+{
+  "state": "complete",
+  "analysis_version": 1,
+  "config_fingerprint": {
+    "fingerprint_version": 2,
+    "archive_base": "https://archive.org/download/philharmonicorchestrasamples",
+    "sr": 22050,
+    "waveform_subtype": "PCM_16",
+    "window_s": 3.0,
+    "hop_s": 3.0,
+    "short_window_policy": "tile",
+    "trim_top_db": 30,
+    "min_trim_s": 0.1,
+    "split_group_fields": [
+      "label",
+      "note"
+    ],
+    "split_policy": "label_note_pitch_group",
+    "split_fracs": [
+      0.7,
+      0.15,
+      0.15
+    ],
+    "split_seed": 0,
+    "min_window_content_s": 0.5,
+    "max_windows_per_source": 1,
+    "stft_pad_mode": "reflect",
+    "logmel_top_db": null,
+    "target_rms": 0.1,
+    "articulations": {
+      "bassoon": [
+        "normal"
+      ],
+      "cello": [
+        "arco-normal"
+      ],
+      "clarinet": [
+        "normal"
+      ],
+      "double-bass": [
+        "arco-normal"
+      ],
+      "flute": [
+        "normal"
+      ],
+      "french-horn": [
+        "normal"
+      ],
+      "oboe": [
+        "normal"
+      ],
+      "trombone": [
+        "normal"
+      ],
+      "trumpet": [
+        "normal"
+      ],
+      "tuba": [
+        "normal"
+      ],
+      "viola": [
+        "arco-normal"
+      ],
+      "violin": [
+        "arco-normal"
+      ]
+    },
+    "excluded_conflicting_label_paths": [
+      "cello/Ds5/cello_Ds5_05_forte_arco-normal.mp3",
+      "french-horn/E2/french-horn_E2_1_fortissimo_normal.mp3",
+      "oboe/E6/oboe_E6_15_mezzo-forte_normal.mp3",
+      "viola/G6/viola_G6_05_fortissimo_arco-normal.mp3"
+    ],
+    "n_mels": 128,
+    "n_fft": 2048,
+    "hop_length": 512,
+    "n_frames": 130,
+    "n_mfcc": 20,
+    "svm_standardization": "per_feature_train",
+    "logmel_standardization": "per_mel_bin_train",
+    "labels": [
+      "bassoon",
+      "cello",
+      "clarinet",
+      "double-bass",
+      "flute",
+      "french-horn",
+      "oboe",
+      "trombone",
+      "trumpet",
+      "tuba",
+      "viola",
+      "violin"
+    ]
+  },
+  "dataset": {
+    "config_fingerprint": {
+      "fingerprint_version": 2,
+      "archive_base": "https://archive.org/download/philharmonicorchestrasamples",
+      "sr": 22050,
+      "waveform_subtype": "PCM_16",
+      "window_s": 3.0,
+      "hop_s": 3.0,
+      "short_window_policy": "tile",
+      "trim_top_db": 30,
+      "min_trim_s": 0.1,
+      "split_group_fields": [
+        "label",
+        "note"
+      ],
+      "split_policy": "label_note_pitch_group",
+      "split_fracs": [
+        0.7,
+        0.15,
+        0.15
+      ],
+      "split_seed": 0,
+      "min_window_content_s": 0.5,
+      "max_windows_per_source": 1,
+      "stft_pad_mode": "reflect",
+      "logmel_top_db": null,
+      "target_rms": 0.1,
+      "articulations": {
+        "bassoon": [
+          "normal"
+        ],
+        "cello": [
+          "arco-normal"
+        ],
+        "clarinet": [
+          "normal"
+        ],
+        "double-bass": [
+          "arco-normal"
+        ],
+        "flute": [
+          "normal"
+        ],
+        "french-horn": [
+          "normal"
+        ],
+        "oboe": [
+          "normal"
+        ],
+        "trombone": [
+          "normal"
+        ],
+        "trumpet": [
+          "normal"
+        ],
+        "tuba": [
+          "normal"
+        ],
+        "viola": [
+          "arco-normal"
+        ],
+        "violin": [
+          "arco-normal"
+        ]
+      },
+      "excluded_conflicting_label_paths": [
+        "cello/Ds5/cello_Ds5_05_forte_arco-normal.mp3",
+        "french-horn/E2/french-horn_E2_1_fortissimo_normal.mp3",
+        "oboe/E6/oboe_E6_15_mezzo-forte_normal.mp3",
+        "viola/G6/viola_G6_05_fortissimo_arco-normal.mp3"
+      ],
+      "n_mels": 128,
+      "n_fft": 2048,
+      "hop_length": 512,
+      "n_frames": 130,
+      "n_mfcc": 20,
+      "svm_standardization": "per_feature_train",
+      "logmel_standardization": "per_mel_bin_train",
+      "labels": [
+        "bassoon",
+        "cello",
+        "clarinet",
+        "double-bass",
+        "flute",
+        "french-horn",
+        "oboe",
+        "trombone",
+        "trumpet",
+        "tuba",
+        "viola",
+        "violin"
+      ]
+    },
+    "manifest_sha256": "83b0025c250f1c295a835e4c37e3e3deb0cc07a93020c0723202a374308a08b5",
+    "windows_csv_sha256": "7574909e419c753b3c38add9c61958660163bbf1c08b2dd1fa067a498e0ecfb1",
+    "windows_audio_inventory_sha256": "105707181137f7a6124af67eaca0658f8b26e192910909524a8c9f7148cb3b2a",
+    "dataset_fingerprint": "97b1cdd2936b81c8c4d8728ef5243f174267b7df800b7e5d01568d45ef9ce3cf"
+  },
+  "noise_manifest_sha256": "26f4aa41a84f30524c91eb4017ca88ff6d84989338e1594fc25b65593f90893d",
+  "models": {
+    "svm": {
+      "model_sha256": "998ac22da343771a39e668573feeb9f9346f331f3be96fa3217c8d66cecfd7fe",
+      "predictions_sha256": "55657d1cddff865b91320abcc72f4bb28ad3fc16dd00e4725019fa54003099d6",
+      "metrics_sha256": "eb5365e51c18cfd2a6ddefc2104d2fb4825cc82ff61aa57734ece1b9e6da6156",
+      "summary_sha256": "28158547bb8994e597a61edda6eb58e76613979e9ef295eedd596d10d8201979"
+    },
+    "cnn": {
+      "model_sha256": "1c2a157b562482a21a23ac9bda8d7d5eb1c0faa1c1deb697f8c462fb8326dfe2,34d9f1e55fdd340e9baf17453c38599a91adac9ee91d7ad57567531d4424b4ef,8ecb5359a53ef7103f2677fc704987ab95390e17695246b3cfdea87cb64a842e,7ccb4a86f213b59910f28d1936f60f99e6dc63b5bd307209742ea59ab8c4b2ca,d275a5d2a5b1878a2be1e60208c3137578fcdf7ca2e2fe266f061e0882dc7b08",
+      "predictions_sha256": "7904fbc233ab5dfca853821bfce174d2756b6f69f052512b619c77378395747a",
+      "metrics_sha256": "62346c0a3116d39f066d95a579a4e384500d7698d8a8e75ff8927b1006eb1742",
+      "summary_sha256": "a2a10176dadac452977cd22b3bcfac183c7ac95c814dc78f1e246f95759653b6"
+    },
+    "crnn": {
+      "model_sha256": "05e80e27d0e52b5221dfc48bce6c99564019d7e87d9dcb1f7ae6ade7f3b4348d,ecc15d441c909169fab26caa4798cf33d252d91d7ec7004cbe0a040d34cf5c24,6c12023e947fe5b0bc41dd0b0c80d0d5c26f4bdaf25edf5bf9c2f56fac32871b,7a6918946ce14b380bff1d78a95cf624fe41e93c4e9a9005c4dd338abf1a28c5,3a1b35110bc5fc64d33cb58f4f7f6b77270c8608385f6a892042af394d34bf89",
+      "predictions_sha256": "e1221621cd16e1ab06f45e3b2a5010e345dc851d708e842dcc73f0d9aaed59c0",
+      "metrics_sha256": "d8bd8f034d5abca66317709f6ca6aa18e2cdd74698da1aec2e8fb90351ad347e",
+      "summary_sha256": "9b25dadf016fb398edaf4aa1f3155cccb42e881496f3324172dfc2116d376ba0"
+    },
+    "mert": {
+      "model_sha256": "252d329579aac867c06e8ed8a555e51e0b43a37d249a751355ba9a9ced5d0d31",
+      "predictions_sha256": "80b2341b3cd6825438acd6834279254cf5324b8954fb12f5791a871c828aa761",
+      "metrics_sha256": "8ff043db89a4389b4d907312f849d9227356a1dc12ba6db78ca3151c36ef7837",
+      "summary_sha256": "c8cfbd6a9eb013dd7b720dc289150be6c1cb8545798ebed93a287fd66946a41b"
+    },
+    "ast": {
+      "model_sha256": "a37bd70d51356ae32b24fd09b57e22572847c94c920a0db1ac7c3b369f1cc6b1",
+      "predictions_sha256": "c36e5eaed841a63f24a1476ca7688708a9cf5d8b6eba34a9bd320cdd7d046535",
+      "metrics_sha256": "1e30a4fe43dd16135f34d0e9fbd8866e2e4d4427bcb61587a3eb61c3f271c388",
+      "summary_sha256": "d6634caaacddaf4541b8cf47fd104296c0597691097ac376b998e4f42f952499"
+    },
+    "panns": {
+      "model_sha256": "5b102c8aaa91071391ff257f2ce978b624910019780c6fc91a3e51159d702143",
+      "predictions_sha256": "7b8a275038c88151613cd1d268cba60b5b6770e53be813f20be26e604ce81dd8",
+      "metrics_sha256": "73c587a89e237c1dce666155daf264baf91aa3cc3e22db2bb255687c0d946ee3",
+      "summary_sha256": "26f34372295a6f6d48bdc55211ee1117b8c92188884a44fa74c421d248a55c63"
+    }
+  },
+  "training_inputs": {
+    "features": "/project/rise-grid/maxliu2k/all-samples/features/svm/train.npz",
+    "features_sha256": "928c8edf1f9157f4b987dd7875cc8422601b5b20256f71939e42ff0b01ec2a9d",
+    "statistics": "/project/rise-grid/maxliu2k/all-samples/pipeline/norm_stats.npz",
+    "statistics_sha256": "b8bc20cc503f511617b093da4615bc5b903ede670ceb5513823a3eae6984c40a"
+  },
+  "protocol": {
+    "analysis_1_status": "exploratory",
+    "instrument_failure_metric": "recall loss relative to clean",
+    "curve_summary": "trapezoidal integral over dB divided by measured SNR span",
+    "analysis_1_predictors": [
+      "spectral_centroid_hz",
+      "spectral_bandwidth_hz",
+      "spectral_rolloff_hz",
+      "spectral_contrast_db",
+      "mfcc_profile_distance"
+    ],
+    "analysis_1_p_values": "two-sided identity permutation; exploratory and uncorrected",
+    "analysis_2_status": "primary failure-mechanism analysis",
+    "acoustic_distance": "Euclidean distance between train-only standardized 88D class centroids",
+    "pair_confusion": "mean of the two row-normalized directional confusion rates",
+    "clean_subtraction": true,
+    "replicate_test_value": "mean of replicate-specific confusion-increase AUCs",
+    "matrix_permutation": "complete instrument row/column identity permutation",
+    "alternative": "two-sided",
+    "multiple_testing": {
+      "family": "6 models x 3 noise categories: acoustic distance vs confusion AUC",
+      "method": "benjamini_hochberg_fdr",
+      "alpha": 0.05,
+      "n_comparisons": 18,
+      "n_rejected": 5,
+      "results": [
+        {
+          "label": "ast:audience",
+          "p_value": 9.99990000099999e-06,
+          "rank": 1,
+          "critical_value": 0.002777777777777778,
+          "q_value": 0.00017999820001799984,
+          "rejected": true
+        },
+        {
+          "label": "ast:studio",
+          "p_value": 0.0003999960000399996,
+          "rank": 2,
+          "critical_value": 0.005555555555555556,
+          "q_value": 0.0035999640003599965,
+          "rejected": true
+        },
+        {
+          "label": "panns:audience",
+          "p_value": 0.004789952100478995,
+          "rank": 3,
+          "critical_value": 0.008333333333333335,
+          "q_value": 0.02873971260287397,
+          "rejected": true
+        },
+        {
+          "label": "svm:studio",
+          "p_value": 0.011779882201177988,
+          "rank": 4,
+          "critical_value": 0.011111111111111112,
+          "q_value": 0.04604353956460436,
+          "rejected": true
+        },
+        {
+          "label": "svm:audience",
+          "p_value": 0.012789872101278988,
+          "rank": 5,
+          "critical_value": 0.013888888888888888,
+          "q_value": 0.04604353956460436,
+          "rejected": true
+        },
+        {
+          "label": "mert:audience",
+          "p_value": 0.016879831201687984,
+          "rank": 6,
+          "critical_value": 0.01666666666666667,
+          "q_value": 0.05063949360506395,
+          "rejected": false
+        },
+        {
+          "label": "ast:white",
+          "p_value": 0.03465965340346597,
+          "rank": 7,
+          "critical_value": 0.019444444444444445,
+          "q_value": 0.08912482303748392,
+          "rejected": false
+        },
+        {
+          "label": "crnn:audience",
+          "p_value": 0.04104958950410496,
+          "rank": 8,
+          "critical_value": 0.022222222222222223,
+          "q_value": 0.09236157638423616,
+          "rejected": false
+        },
+        {
+          "label": "panns:studio",
+          "p_value": 0.04624953750462495,
+          "rank": 9,
+          "critical_value": 0.025,
+          "q_value": 0.0924990750092499,
+          "rejected": false
+        },
+        {
+          "label": "cnn:white",
+          "p_value": 0.07890921090789092,
+          "rank": 10,
+          "critical_value": 0.027777777777777776,
+          "q_value": 0.14203657963420366,
+          "rejected": false
+        },
+        {
+          "label": "panns:white",
+          "p_value": 0.09508904910950891,
+          "rank": 11,
+          "critical_value": 0.030555555555555558,
+          "q_value": 0.1556002621791964,
+          "rejected": false
+        },
+        {
+          "label": "crnn:white",
+          "p_value": 0.17975820241797583,
+          "rank": 12,
+          "critical_value": 0.03333333333333334,
+          "q_value": 0.26314352241092975,
+          "rejected": false
+        },
+        {
+          "label": "cnn:audience",
+          "p_value": 0.1900480995190048,
+          "rank": 13,
+          "critical_value": 0.036111111111111115,
+          "q_value": 0.26314352241092975,
+          "rejected": false
+        },
+        {
+          "label": "crnn:studio",
+          "p_value": 0.26007739922600775,
+          "rank": 14,
+          "critical_value": 0.03888888888888889,
+          "q_value": 0.3343852275762957,
+          "rejected": false
+        },
+        {
+          "label": "cnn:studio",
+          "p_value": 0.31656683433165667,
+          "rank": 15,
+          "critical_value": 0.041666666666666664,
+          "q_value": 0.379880201197988,
+          "rejected": false
+        },
+        {
+          "label": "mert:studio",
+          "p_value": 0.45897541024589755,
+          "rank": 16,
+          "critical_value": 0.044444444444444446,
+          "q_value": 0.5163473365266348,
+          "rejected": false
+        },
+        {
+          "label": "mert:white",
+          "p_value": 0.6734032659673403,
+          "rank": 17,
+          "critical_value": 0.04722222222222223,
+          "q_value": 0.7130152227889486,
+          "rejected": false
+        },
+        {
+          "label": "svm:white",
+          "p_value": 0.982220177798222,
+          "rank": 18,
+          "critical_value": 0.05,
+          "q_value": 0.982220177798222,
+          "rejected": false
+        }
+      ]
+    },
+    "n_permutations": 100000,
+    "permutation_seed": 0,
+    "snrs_db": [
+      50,
+      40,
+      30,
+      20,
+      10,
+      0,
+      -5,
+      -10
+    ],
+    "noise_types": [
+      "white",
+      "audience",
+      "studio"
+    ],
+    "n_replicates": 2,
+    "fixed_label_order": [
+      "bassoon",
+      "cello",
+      "clarinet",
+      "double-bass",
+      "flute",
+      "french-horn",
+      "oboe",
+      "trombone",
+      "trumpet",
+      "tuba",
+      "viola",
+      "violin"
+    ]
+  },
+  "software": {
+    "numpy": "2.0.2",
+    "pandas": "2.3.3",
+    "scipy": "1.13.1"
+  },
+  "outputs": {
+    "training_feature_centroids.csv": "0e42a80139fb9adbb3a0d09da1aad1c01bb5324a14ce21774d790df44628b37f",
+    "training_acoustic_profiles.csv": "b1916fd5de82c17df261fb2cac1ec1d779e9f687f168f0389a1f962a3975d05e",
+    "acoustic_distances.csv": "bc1413eddd5402f362adc30769716b47cddf0db4ebbb0438ac97dea49dd1ec96",
+    "instrument_recall_loss_by_condition.csv": "77b3ea15f3982089188e6ec2579fc89e3e90b68326c34e52753c09ef4c8420c7",
+    "instrument_recall_loss_auc_by_replicate.csv": "d3bf1cb559c6d977f7be5dbae2529a984772a4dc39a0fff3696e83fa83e123a3",
+    "instrument_recall_loss_summary.csv": "a9b133e3b71448cfc32ea30f75f4d9b162ec752ce1d65306fa2effcc9102877c",
+    "instrument_acoustic_associations_exploratory.csv": "81627e8885f9f4c4393827fc0fb337104a18869653fb38b1a7eb456bb715b241",
+    "pair_confusion_by_condition.csv": "fe8dbd21e3d311e623588b309dd529b7ce877cebe6a81253078d10c1b9a0bc9f",
+    "pair_confusion_auc_by_replicate.csv": "5801a290289cfb993e24b41170d1ac89e6f62c1bbc8874d272c1dc6368e7b812",
+    "pair_confusion_summary.csv": "eab636296a1166ea1d8a736a2db4c72c72819dfc39a2b0dd8ef4dd2da0ab3903",
+    "distance_confusion_tests.csv": "23bcbcc8445f26c286c58d60d422b9da2bd9ba88189770eb4eb4ab0a111b1097"
+  }
+}

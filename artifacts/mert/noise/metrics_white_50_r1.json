@@ -1,0 +1,463 @@
+{
+  "condition": "white_50_r1",
+  "noise_type": "white",
+  "snr_db": 50,
+  "replicate": 1,
+  "n": 1255,
+  "accuracy": 0.8557768924302789,
+  "macro_f1": 0.8506490841161355,
+  "config_fingerprint": {
+    "fingerprint_version": 2,
+    "archive_base": "https://archive.org/download/philharmonicorchestrasamples",
+    "sr": 22050,
+    "waveform_subtype": "PCM_16",
+    "window_s": 3.0,
+    "hop_s": 3.0,
+    "short_window_policy": "tile",
+    "trim_top_db": 30,
+    "min_trim_s": 0.1,
+    "split_group_fields": [
+      "label",
+      "note"
+    ],
+    "split_policy": "label_note_pitch_group",
+    "split_fracs": [
+      0.7,
+      0.15,
+      0.15
+    ],
+    "split_seed": 0,
+    "min_window_content_s": 0.5,
+    "max_windows_per_source": 1,
+    "stft_pad_mode": "reflect",
+    "logmel_top_db": null,
+    "target_rms": 0.1,
+    "articulations": {
+      "bassoon": [
+        "normal"
+      ],
+      "cello": [
+        "arco-normal"
+      ],
+      "clarinet": [
+        "normal"
+      ],
+      "double-bass": [
+        "arco-normal"
+      ],
+      "flute": [
+        "normal"
+      ],
+      "french-horn": [
+        "normal"
+      ],
+      "oboe": [
+        "normal"
+      ],
+      "trombone": [
+        "normal"
+      ],
+      "trumpet": [
+        "normal"
+      ],
+      "tuba": [
+        "normal"
+      ],
+      "viola": [
+        "arco-normal"
+      ],
+      "violin": [
+        "arco-normal"
+      ]
+    },
+    "excluded_conflicting_label_paths": [
+      "cello/Ds5/cello_Ds5_05_forte_arco-normal.mp3",
+      "french-horn/E2/french-horn_E2_1_fortissimo_normal.mp3",
+      "oboe/E6/oboe_E6_15_mezzo-forte_normal.mp3",
+      "viola/G6/viola_G6_05_fortissimo_arco-normal.mp3"
+    ],
+    "n_mels": 128,
+    "n_fft": 2048,
+    "hop_length": 512,
+    "n_frames": 130,
+    "n_mfcc": 20,
+    "svm_standardization": "per_feature_train",
+    "logmel_standardization": "per_mel_bin_train",
+    "labels": [
+      "bassoon",
+      "cello",
+      "clarinet",
+      "double-bass",
+      "flute",
+      "french-horn",
+      "oboe",
+      "trombone",
+      "trumpet",
+      "tuba",
+      "viola",
+      "violin"
+    ]
+  },
+  "dataset": {
+    "config_fingerprint": {
+      "fingerprint_version": 2,
+      "archive_base": "https://archive.org/download/philharmonicorchestrasamples",
+      "sr": 22050,
+      "waveform_subtype": "PCM_16",
+      "window_s": 3.0,
+      "hop_s": 3.0,
+      "short_window_policy": "tile",
+      "trim_top_db": 30,
+      "min_trim_s": 0.1,
+      "split_group_fields": [
+        "label",
+        "note"
+      ],
+      "split_policy": "label_note_pitch_group",
+      "split_fracs": [
+        0.7,
+        0.15,
+        0.15
+      ],
+      "split_seed": 0,
+      "min_window_content_s": 0.5,
+      "max_windows_per_source": 1,
+      "stft_pad_mode": "reflect",
+      "logmel_top_db": null,
+      "target_rms": 0.1,
+      "articulations": {
+        "bassoon": [
+          "normal"
+        ],
+        "cello": [
+          "arco-normal"
+        ],
+        "clarinet": [
+          "normal"
+        ],
+        "double-bass": [
+          "arco-normal"
+        ],
+        "flute": [
+          "normal"
+        ],
+        "french-horn": [
+          "normal"
+        ],
+        "oboe": [
+          "normal"
+        ],
+        "trombone": [
+          "normal"
+        ],
+        "trumpet": [
+          "normal"
+        ],
+        "tuba": [
+          "normal"
+        ],
+        "viola": [
+          "arco-normal"
+        ],
+        "violin": [
+          "arco-normal"
+        ]
+      },
+      "excluded_conflicting_label_paths": [
+        "cello/Ds5/cello_Ds5_05_forte_arco-normal.mp3",
+        "french-horn/E2/french-horn_E2_1_fortissimo_normal.mp3",
+        "oboe/E6/oboe_E6_15_mezzo-forte_normal.mp3",
+        "viola/G6/viola_G6_05_fortissimo_arco-normal.mp3"
+      ],
+      "n_mels": 128,
+      "n_fft": 2048,
+      "hop_length": 512,
+      "n_frames": 130,
+      "n_mfcc": 20,
+      "svm_standardization": "per_feature_train",
+      "logmel_standardization": "per_mel_bin_train",
+      "labels": [
+        "bassoon",
+        "cello",
+        "clarinet",
+        "double-bass",
+        "flute",
+        "french-horn",
+        "oboe",
+        "trombone",
+        "trumpet",
+        "tuba",
+        "viola",
+        "violin"
+      ]
+    },
+    "manifest_sha256": "83b0025c250f1c295a835e4c37e3e3deb0cc07a93020c0723202a374308a08b5",
+    "windows_csv_sha256": "7574909e419c753b3c38add9c61958660163bbf1c08b2dd1fa067a498e0ecfb1",
+    "windows_audio_inventory_sha256": "105707181137f7a6124af67eaca0658f8b26e192910909524a8c9f7148cb3b2a",
+    "dataset_fingerprint": "97b1cdd2936b81c8c4d8728ef5243f174267b7df800b7e5d01568d45ef9ce3cf"
+  },
+  "noise_manifest": {
+    "path": "/project/rise-grid/maxliu2k/all-samples/work/windows_noisy/noise_manifest.json",
+    "sha256": "26f4aa41a84f30524c91eb4017ca88ff6d84989338e1594fc25b65593f90893d"
+  },
+  "model_sha256": "252d329579aac867c06e8ed8a555e51e0b43a37d249a751355ba9a9ced5d0d31",
+  "score_type": "score",
+  "noise_source_distinct_fraction": 0.000797,
+  "classification_report": {
+    "bassoon": {
+      "precision": 1.0,
+      "recall": 0.7319587628865979,
+      "f1-score": 0.8452380952380952,
+      "support": 97.0
+    },
+    "cello": {
+      "precision": 0.8854166666666666,
+      "recall": 0.7391304347826086,
+      "f1-score": 0.8056872037914692,
+      "support": 115.0
+    },
+    "clarinet": {
+      "precision": 0.7272727272727273,
+      "recall": 0.9369369369369369,
+      "f1-score": 0.8188976377952756,
+      "support": 111.0
+    },
+    "double-bass": {
+      "precision": 0.9821428571428571,
+      "recall": 0.9565217391304348,
+      "f1-score": 0.9691629955947136,
+      "support": 115.0
+    },
+    "flute": {
+      "precision": 0.8761061946902655,
+      "recall": 0.8461538461538461,
+      "f1-score": 0.8608695652173913,
+      "support": 117.0
+    },
+    "french-horn": {
+      "precision": 0.797752808988764,
+      "recall": 0.8554216867469879,
+      "f1-score": 0.8255813953488372,
+      "support": 83.0
+    },
+    "oboe": {
+      "precision": 0.9642857142857143,
+      "recall": 0.6835443037974683,
+      "f1-score": 0.8,
+      "support": 79.0
+    },
+    "trombone": {
+      "precision": 0.8014184397163121,
+      "recall": 0.9912280701754386,
+      "f1-score": 0.8862745098039215,
+      "support": 114.0
+    },
+    "trumpet": {
+      "precision": 0.6629213483146067,
+      "recall": 0.9076923076923077,
+      "f1-score": 0.7662337662337663,
+      "support": 65.0
+    },
+    "tuba": {
+      "precision": 1.0,
+      "recall": 0.75,
+      "f1-score": 0.8571428571428571,
+      "support": 124.0
+    },
+    "viola": {
+      "precision": 0.8869565217391304,
+      "recall": 0.9622641509433962,
+      "f1-score": 0.9230769230769231,
+      "support": 106.0
+    },
+    "violin": {
+      "precision": 0.8248175182481752,
+      "recall": 0.875968992248062,
+      "f1-score": 0.849624060150376,
+      "support": 129.0
+    },
+    "accuracy": 0.8557768924302789,
+    "macro avg": {
+      "precision": 0.8674242330887681,
+      "recall": 0.8530684359578404,
+      "f1-score": 0.8506490841161355,
+      "support": 1255.0
+    },
+    "weighted avg": {
+      "precision": 0.8735167635420233,
+      "recall": 0.8557768924302789,
+      "f1-score": 0.8557867424073932,
+      "support": 1255.0
+    }
+  },
+  "confusion_matrix": [
+    [
+      71,
+      1,
+      1,
+      0,
+      4,
+      13,
+      1,
+      4,
+      2,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      85,
+      3,
+      1,
+      2,
+      0,
+      0,
+      2,
+      0,
+      0,
+      2,
+      20
+    ],
+    [
+      0,
+      0,
+      104,
+      0,
+      0,
+      0,
+      0,
+      0,
+      7,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      110,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      4,
+      0
+    ],
+    [
+      0,
+      2,
+      6,
+      0,
+      99,
+      0,
+      0,
+      0,
+      3,
+      0,
+      6,
+      1
+    ],
+    [
+      0,
+      5,
+      0,
+      0,
+      3,
+      71,
+      0,
+      2,
+      1,
+      0,
+      0,
+      1
+    ],
+    [
+      0,
+      1,
+      8,
+      0,
+      1,
+      0,
+      54,
+      0,
+      15,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      113,
+      1,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      1,
+      3,
+      0,
+      1,
+      0,
+      0,
+      0,
+      59,
+      0,
+      0,
+      1
+    ],
+    [
+      0,
+      0,
+      10,
+      0,
+      1,
+      5,
+      0,
+      15,
+      0,
+      93,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      1,
+      1,
+      0,
+      1,
+      0,
+      0,
+      0,
+      102,
+      1
+    ],
+    [
+      0,
+      1,
+      8,
+      0,
+      0,
+      0,
+      0,
+      5,
+      1,
+      0,
+      1,
+      113
+    ]
+  ]
+}
