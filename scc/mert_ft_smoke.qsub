@@ -1,0 +1,32 @@
+#!/bin/bash -l
+
+#$ -P rise-grid
+#$ -N mert_ft_smoke
+#$ -j y
+#$ -pe omp 4
+#$ -l gpus=1
+#$ -l gpu_c=7.0
+#$ -l gpu_memory=16G
+#$ -l h_rt=0:30:00
+#$ -l mem_per_core=8G
+
+# Go/no-go for MERT fine-tuning. Reads no project data and writes no artifacts, so it is safe
+# to run at any time and cannot disturb the sealed results. Same venv and module as
+# mert_noise.qsub, because the pinned transformers version is exactly what is under test.
+
+set -euo pipefail
+
+smoke_repo="${NOISE_REPO:-$SGE_O_WORKDIR}"
+smoke_venv="${RISE_VENV:-${NOISE_VENV:-$(dirname "$smoke_repo")/venv_mert}}"
+
+if [ -n "${RISE_MODULES-python3/3.9.9}" ]; then
+    module load ${RISE_MODULES:-python3/3.9.9}
+fi
+. "$smoke_repo/scc/activate_venv.sh"
+rise_activate "$smoke_venv"
+cd "$smoke_repo"
+
+nvidia-smi --query-gpu=name,memory.total --format=csv,noheader || true
+echo
+
+python scc/mert_ft_smoke.py --batches "${RISE_SMOKE_BATCHES:-4,8,16,32}"
