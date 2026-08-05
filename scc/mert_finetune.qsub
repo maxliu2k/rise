@@ -1,0 +1,44 @@
+#!/bin/bash -l
+
+#$ -P rise-grid
+#$ -N mert_ft
+#$ -j y
+#$ -pe omp 4
+#$ -l gpus=1
+#$ -l gpu_c=7.0
+#$ -l gpu_memory=16G
+#$ -l h_rt=8:00:00
+#$ -l mem_per_core=8G
+
+# Fine-tune MERT on train, select on validation. Never reads test -- finalization is separate.
+#
+# Output goes to /project (backed up, 8 GB free), NOT /projectnb (97% of quota). The checkpoint
+# is ~380 MB and /projectnb has ~1.2 GB headroom shared with three teammates.
+
+set -euo pipefail
+
+ft_repo="${NOISE_REPO:-$SGE_O_WORKDIR}"
+ft_venv="${RISE_VENV:-${NOISE_VENV:-$(dirname "$ft_repo")/venv_mert}}"
+ft_out="${RISE_FT_OUT:-/project/rise-grid/$USER/mert_ft}"
+
+if [ -n "${RISE_MODULES-python3/3.9.9}" ]; then
+    module load ${RISE_MODULES:-python3/3.9.9}
+fi
+. "$ft_repo/scc/activate_venv.sh"
+rise_activate "$ft_venv"
+cd "$ft_repo"
+
+nvidia-smi --query-gpu=name,memory.total --format=csv,noheader | head -1 || true
+echo "output dir: $ft_out"
+echo
+
+# Fail before spending a GPU hour if the environment cannot backprop through MERT at all.
+python scc/mert_ft_smoke.py --batches "${RISE_FT_BATCH:-16}"
+
+python -m instrument_robustness.train_mert_ft \
+    --output-dir "$ft_out" \
+    --batch-size "${RISE_FT_BATCH:-16}" \
+    --backbone-lr "${RISE_FT_BACKBONE_LR:-1e-5}" \
+    --head-lr "${RISE_FT_HEAD_LR:-1e-3}" \
+    --max-epochs "${RISE_FT_EPOCHS:-12}" \
+    --seed "${RISE_FT_SEED:-42}"
