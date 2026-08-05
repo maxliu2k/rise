@@ -108,7 +108,7 @@ def main() -> int:
     import transformers
     print(f"transformers {transformers.__version__}")
     print(f"model {MERT_MODEL} @ {MERT_REVISION[:12]}")
-    print(f"input {CLIP_SECONDS}s @ {MERT_SR} Hz\n")
+    print(f"input {WINDOW_S}s @ {MERT_SR} Hz\n")
 
     backbone = build_mert_model(MERT_MODEL, MERT_REVISION)
     # NOT frozen -- this is the entire difference from extract_mert.py.
