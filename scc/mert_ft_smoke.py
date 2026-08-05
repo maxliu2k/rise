@@ -25,11 +25,11 @@ from torch import nn
 sys.path.insert(0, "src")
 
 from instrument_robustness.config import (  # noqa: E402
-    CLIP_SECONDS,
     MERT_MODEL,
     MERT_REVISION,
     MERT_SR,
     TARGET_LABELS,
+    WINDOW_S,
 )
 from instrument_robustness.mert_data import MERT_HIDDEN_SIZE, MERT_NUM_LAYERS  # noqa: E402
 from instrument_robustness.pretrained_extractors import build_mert_model  # noqa: E402
@@ -66,7 +66,7 @@ def try_batch(backbone, head, batch: int, device: torch.device) -> tuple[bool, s
         backbone.zero_grad(set_to_none=True)
         head.zero_grad(set_to_none=True)
 
-        samples = int(MERT_SR * CLIP_SECONDS)
+        samples = int(MERT_SR * WINDOW_S)
         audio = torch.randn(batch, samples, device=device)
         targets = torch.randint(0, len(TARGET_LABELS), (batch,), device=device)
 
