@@ -20,6 +20,10 @@ set -euo pipefail
 ft_repo="${NOISE_REPO:-$SGE_O_WORKDIR}"
 ft_venv="${RISE_VENV:-${NOISE_VENV:-$(dirname "$ft_repo")/venv_mert}}"
 ft_out="${RISE_FT_OUT:-/project/rise-grid/$USER/mert_ft}"
+# all-samples lives OUTSIDE the repo on this cluster, and config.DATA_ROOT silently falls back
+# to <repo>/all-samples when this is unset -- which resolves, then reports all 5,861 windows
+# missing after the model has already loaded. Demand it up front.
+ft_data_root="${RISE_DATA_ROOT:?Submit with -v RISE_DATA_ROOT=/projectnb/rise-grid/\$USER/all-samples}"
 
 if [ -n "${RISE_MODULES-python3/3.9.9}" ]; then
     module load ${RISE_MODULES:-python3/3.9.9}
@@ -27,12 +31,21 @@ fi
 . "$ft_repo/scc/activate_venv.sh"
 rise_activate "$ft_venv"
 cd "$ft_repo"
+export RISE_DATA_ROOT="$ft_data_root"
 
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader | head -1 || true
+echo "data root : $RISE_DATA_ROOT"
 echo "output dir: $ft_out"
 echo
 
-# Fail before spending a GPU hour if the environment cannot backprop through MERT at all.
+# CHEAP CHECKS FIRST. The previous ordering loaded a 95M backbone and ran the gradient probe
+# before touching the filesystem, so a missing data root cost a GPU minute to discover.
+test -f "$RISE_DATA_ROOT/pipeline/windows.csv" \
+    || { echo "FATAL: no windows.csv under $RISE_DATA_ROOT/pipeline" >&2; exit 1; }
+test -d "$RISE_DATA_ROOT/work/windows" \
+    || { echo "FATAL: no work/windows under $RISE_DATA_ROOT" >&2; exit 1; }
+
+# Then the expensive one: can this environment backprop through MERT at all?
 python scc/mert_ft_smoke.py --batches "${RISE_FT_BATCH:-16}"
 
 python -m instrument_robustness.train_mert_ft \
