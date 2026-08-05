@@ -54,4 +54,5 @@ python -m instrument_robustness.train_mert_ft \
     --backbone-lr "${RISE_FT_BACKBONE_LR:-1e-5}" \
     --head-lr "${RISE_FT_HEAD_LR:-1e-3}" \
     --max-epochs "${RISE_FT_EPOCHS:-12}" \
+    --patience "${RISE_FT_PATIENCE:-3}" \
     --seed "${RISE_FT_SEED:-42}"
