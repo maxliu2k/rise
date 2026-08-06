@@ -1,0 +1,46 @@
+#!/bin/bash -l
+
+#$ -P rise-grid
+#$ -N mert_ft_final
+#$ -j y
+#$ -pe omp 4
+#$ -l gpus=1
+#$ -l gpu_c=7.0
+#$ -l gpu_memory=16G
+#$ -l h_rt=2:00:00
+#$ -l mem_per_core=8G
+
+# Score every fine-tuned seed checkpoint on the sealed test split, once each.
+#
+# THIS OPENS THE TEST SPLIT. Selection was frozen on validation across the ten runs recorded in
+# artifacts/mert_ft/; nothing here chooses a configuration. All three seeds are scored because
+# this repo requires mean +/- std over >=3 seeds before a number is quotable, and reporting the
+# best of three would be selection on test by another name.
+
+set -euo pipefail
+
+fin_repo="${NOISE_REPO:-$SGE_O_WORKDIR}"
+fin_venv="${RISE_VENV:-${NOISE_VENV:-$(dirname "$fin_repo")/venv_mert}}"
+fin_data_root="${RISE_DATA_ROOT:?Submit with -v RISE_DATA_ROOT=/projectnb/rise-grid/\$USER/all-samples}"
+fin_ckpt_root="${RISE_FT_CKPT_ROOT:-/project/rise-grid/$USER}"
+
+if [ -n "${RISE_MODULES-python3/3.9.9}" ]; then
+    module load ${RISE_MODULES:-python3/3.9.9}
+fi
+. "$fin_repo/scc/activate_venv.sh"
+rise_activate "$fin_venv"
+cd "$fin_repo"
+export RISE_DATA_ROOT="$fin_data_root"
+
+test -f "$RISE_DATA_ROOT/pipeline/windows.csv" \
+    || { echo "FATAL: no windows.csv under $RISE_DATA_ROOT/pipeline" >&2; exit 1; }
+
+for seed in 42 43 44; do
+    ckpt="$fin_ckpt_root/mert_ft_s$seed/best_finetune.pt"
+    test -f "$ckpt" || { echo "FATAL: missing $ckpt" >&2; exit 1; }
+    echo "=== seed $seed ==="
+    python -m instrument_robustness.finalize_mert_ft \
+        --checkpoint "$ckpt" \
+        --output-dir "artifacts/mert_ft/mert_ft_s$seed" \
+        ${RISE_FT_OVERWRITE:+--overwrite}
+done
