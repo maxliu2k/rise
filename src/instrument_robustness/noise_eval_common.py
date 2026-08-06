@@ -34,6 +34,7 @@ from instrument_robustness.noise_sweep import (
     NOISE_TYPES,
     NOISY_DIR,
     SNRS,
+    dataset_build_identity,
     out_path,
     sha256_file,
     test_windows,
@@ -275,8 +276,23 @@ def run_noise_evaluation(
     noisy_dir: str | Path = NOISY_DIR,
     manifest_csv: str | Path = MANIFEST_IN,
     manifest_fingerprint: str | Path = MANIFEST_FINGERPRINT,
+    ensure_condition: Callable[[NoiseCondition], None] | None = None,
+    release_condition: Callable[[NoiseCondition], None] | None = None,
+    require_complete_manifest: bool = True,
 ) -> pd.DataFrame:
-    """Evaluate clean first, enforce parity, then evaluate every frozen noise condition."""
+    """Evaluate clean first, enforce parity, then evaluate every frozen noise condition.
+
+    STREAMING. `ensure_condition` is called immediately before a condition is scored and
+    `release_condition` immediately after, which lets a caller materialize one chunk of the
+    corpus, score it, and delete it. The full corpus is ~15 GB and cannot be held on the project
+    quota; without these hooks the only way to score a seventh model would be to not score it.
+
+    `require_complete_manifest=False` goes with them, because a streamed sweep has no completed
+    manifest by construction -- generate() refuses to write one for a partial run. The dataset
+    build identity is still verified directly, which is the property the manifest check exists to
+    establish; what is given up is the file-count check, and the per-condition existence check
+    below covers that for every condition actually scored.
+    """
     output_dir = (
         ARTIFACTS / model_name / "noise"
         if output_dir is None
@@ -289,13 +305,28 @@ def run_noise_evaluation(
             + ", ".join(str(path) for path in existing[:5])
         )
 
-    manifest = validate_noise_manifest(
-        noisy_dir=noisy_dir,
-        data_root=data_root,
-        windows_csv=windows_csv,
-        manifest_csv=manifest_csv,
-        manifest_fingerprint=manifest_fingerprint,
-    )
+    if require_complete_manifest:
+        manifest = validate_noise_manifest(
+            noisy_dir=noisy_dir,
+            data_root=data_root,
+            windows_csv=windows_csv,
+            manifest_csv=manifest_csv,
+            manifest_fingerprint=manifest_fingerprint,
+        )
+    else:
+        if ensure_condition is None:
+            raise ValueError(
+                "require_complete_manifest=False without ensure_condition would score whatever "
+                "happens to be on disk. Pass the hook that materializes each condition."
+            )
+        manifest = {
+            "state": "streamed",
+            "dataset": dataset_build_identity(
+                manifest_csv=manifest_csv,
+                manifest_fingerprint=manifest_fingerprint,
+                windows_csv=windows_csv,
+            ),
+        }
     frame = load_test_frame(
         windows_csv=windows_csv,
         manifest_labeled=manifest_labeled,
@@ -309,6 +340,8 @@ def run_noise_evaluation(
     clean_macro_f1: float | None = None
 
     for condition in noise_conditions():
+        if ensure_condition is not None:
+            ensure_condition(condition)
         paths = condition_paths(
             frame,
             condition,
@@ -439,6 +472,8 @@ def run_noise_evaluation(
             f"macro-F1={macro_f1:.4f}",
             flush=True,
         )
+        if release_condition is not None:
+            release_condition(condition)
 
     summary = pd.DataFrame(summary_rows)
     if clean_macro_f1 is None:
