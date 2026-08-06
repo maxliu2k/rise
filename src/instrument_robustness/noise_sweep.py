@@ -771,6 +771,24 @@ def _write_text_atomic(path: Path, value: str) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def _recorded_output_path(output_path: Path, root: Path) -> str:
+    """How a generated mixture is named in provenance: relative to the data root if inside it.
+
+    Postcondition: returns a repo-relative path for the canonical sweep, an absolute one
+    otherwise. Raises nothing.
+
+    A STREAMED chunk is written to scratch on a DIFFERENT filesystem from the data root -- the
+    corpus is ~15 GB and does not fit beside the dataset -- so `relative_to` raises there. It
+    raised in exactly that way on the first streamed run. Recording the absolute path is the
+    honest fallback: provenance has to say where the file actually was, and a partial sweep's
+    provenance is never read as canonical anyway.
+    """
+    try:
+        return str(output_path.relative_to(root))
+    except ValueError:
+        return str(output_path)
+
+
 def _ensure_generation_target_is_empty(
     noisy_dir: Path,
     *,
@@ -1076,7 +1094,7 @@ def generate(
                             "realized_snr_db": achieved,
                             "peak": float(np.abs(reloaded).max()),
                             **diagnostics,
-                            "output_path": str(output_path.relative_to(root)),
+                            "output_path": _recorded_output_path(output_path, root),
                             "output_sha256": sha256_file(output_path),
                         }
                     )
