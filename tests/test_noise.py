@@ -42,6 +42,7 @@ from instrument_robustness.noise_sweep import (
     dataset_build_identity,
     diagnostic_protocol,
     draw_noise,
+    generate,
     DEMAND_CHANNEL,
     DEMAND_ENVIRONMENTS,
     DemandRecording,
@@ -735,3 +736,134 @@ class DemandCorpusTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ChunkedGenerationMatchesMonolithic(unittest.TestCase):
+    """A sweep generated in (noise_type, replicate) chunks must be byte-identical to one pass.
+
+    This is the property the streaming evaluator rests on: the noise corpus is ~16 GB and cannot
+    be materialized whole under the project quota, so it is generated a chunk at a time, scored,
+    and deleted. If a chunked file differed from a monolithic one by even a rounding step, the
+    fine-tuned MERT would be scored on audio the other six models never saw -- the same class of
+    failure REPOSITORY_AUDIT.md records for PANNs, arriving as a plausible number rather than a
+    crash.
+
+    White noise is used because it needs no external corpus, so this runs anywhere the suite
+    runs. The mechanism under test -- one draw per (window, type, replicate), rescaled across
+    every SNR -- is identical for the ESC-50 and DEMAND paths.
+    """
+
+    def _write_clean_windows(self, root: Path, paths: dict[str, Path]) -> None:
+        rng = np.random.default_rng(0)
+        for window in pd.read_csv(paths["windows_csv"]).itertuples(index=False):
+            clean_path = root / window.window_path
+            clean_path.parent.mkdir(parents=True, exist_ok=True)
+            audio = rng.standard_normal(CLIP_LEN).astype(np.float32) * 0.1
+            sf.write(clean_path, audio, SR, subtype="FLOAT")
+
+    def _hash_wavs(self, noisy_dir: Path) -> dict[str, str]:
+        """Hash the decoded SAMPLES, never the file.
+
+        A float WAV written by libsndfile carries a PEAK chunk whose timeStamp field holds the
+        Unix time of the write, so two files with identical audio written a second apart differ
+        at exactly one byte (offset 60). Hashing the container would make this test fail for a
+        reason that has nothing to do with the audio -- and, more importantly, it is why the
+        `output_sha256` column in the noise provenance cannot be used to verify a REGENERATED
+        corpus against an older run. Compare predictions for that, not hashes.
+        """
+        import hashlib
+
+        digests = {}
+        for path in sorted(noisy_dir.rglob("*.wav")):
+            samples, sample_rate = sf.read(path, dtype="float32")
+            self.assertEqual(sample_rate, SR)
+            digests[str(path.relative_to(noisy_dir))] = hashlib.sha256(
+                samples.tobytes()
+            ).hexdigest()
+        return digests
+
+    def _generate(self, root, paths, noisy_dir, replicates):
+        return generate(
+            data_root=root,
+            windows_csv=paths["windows_csv"],
+            manifest_csv=paths["manifest_csv"],
+            manifest_fingerprint=paths["manifest_fingerprint"],
+            noisy_dir=noisy_dir,
+            only_noise_types=("white",),
+            only_replicates=replicates,
+            write_completion=False,
+        )
+
+    def test_chunked_output_is_byte_identical(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir)
+            paths = write_dataset_files(root)
+            self._write_clean_windows(root, paths)
+
+            whole_dir = root / "whole"
+            self._generate(root, paths, whole_dir, tuple(range(N_REPLICATES)))
+            whole = self._hash_wavs(whole_dir)
+            self.assertEqual(len(whole), len(SNRS) * N_REPLICATES)
+
+            chunked_dir = root / "chunked"
+            chunked: dict[str, str] = {}
+            for replicate in range(N_REPLICATES):
+                self._generate(root, paths, chunked_dir, (replicate,))
+                chunked.update(self._hash_wavs(chunked_dir))
+                # Delete between chunks, exactly as the streaming evaluator does -- and prove
+                # the next chunk is not silently reusing what the previous one left behind.
+                for path in chunked_dir.rglob("*.wav"):
+                    path.unlink()
+
+            self.assertEqual(whole, chunked)
+
+    def test_partial_sweep_cannot_claim_completion(self) -> None:
+        with self.assertRaisesRegex(ValueError, "completion manifest for a partial sweep"):
+            generate(only_noise_types=("white",), write_completion=True)
+
+    def test_chunk_provenance_does_not_overwrite_the_canonical_name(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir)
+            paths = write_dataset_files(root)
+            self._write_clean_windows(root, paths)
+            noisy_dir = root / "chunk"
+            written = self._generate(root, paths, noisy_dir, (0,))
+            self.assertNotEqual(written.name, "noise_provenance.csv")
+            self.assertFalse((noisy_dir / "noise_provenance.csv").exists())
+            self.assertFalse((noisy_dir / "noise_manifest.json").exists())
+
+    def test_wav_file_hash_is_not_reproducible_but_audio_is(self) -> None:
+        """Pin the reason chunk equality is checked on samples rather than on file bytes.
+
+        libsndfile stamps the PEAK chunk of a float WAV with the write time. If a future
+        libsndfile stops doing that, this test fails and the _hash_wavs docstring -- and the
+        claim that provenance output_sha256 cannot verify a regenerated corpus -- should be
+        revisited rather than left as folklore.
+        """
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir)
+            audio = np.linspace(-0.5, 0.5, CLIP_LEN, dtype=np.float32)
+            first, second = root / "a.wav", root / "b.wav"
+            sf.write(first, audio, SR, subtype="FLOAT")
+            sf.write(second, audio, SR, subtype="FLOAT")
+
+            same_samples = np.array_equal(
+                sf.read(first, dtype="float32")[0],
+                sf.read(second, dtype="float32")[0],
+            )
+            self.assertTrue(same_samples, "identical input produced different samples")
+
+            differing = [
+                offset
+                for offset, (x, y) in enumerate(
+                    zip(first.read_bytes(), second.read_bytes())
+                )
+                if x != y
+            ]
+            # Zero when both writes land in the same second; never more than the 4-byte stamp.
+            self.assertLessEqual(len(differing), 4)
+            if differing:
+                self.assertTrue(
+                    all(56 <= offset < 64 for offset in differing),
+                    f"container differs outside the PEAK timestamp: {differing}",
+                )
