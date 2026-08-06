@@ -1,0 +1,178 @@
+{
+  "model": "fine-tuned MERT-v1-95M, layer-weighted linear head",
+  "backbone_frozen": false,
+  "config_fingerprint": {
+    "fingerprint_version": 2,
+    "archive_base": "https://archive.org/download/philharmonicorchestrasamples",
+    "sr": 22050,
+    "waveform_subtype": "PCM_16",
+    "window_s": 3.0,
+    "hop_s": 3.0,
+    "short_window_policy": "tile",
+    "trim_top_db": 30,
+    "min_trim_s": 0.1,
+    "split_group_fields": [
+      "label",
+      "note"
+    ],
+    "split_policy": "label_note_pitch_group",
+    "split_fracs": [
+      0.7,
+      0.15,
+      0.15
+    ],
+    "split_seed": 0,
+    "min_window_content_s": 0.5,
+    "max_windows_per_source": 1,
+    "stft_pad_mode": "reflect",
+    "logmel_top_db": null,
+    "target_rms": 0.1,
+    "articulations": {
+      "bassoon": [
+        "normal"
+      ],
+      "cello": [
+        "arco-normal"
+      ],
+      "clarinet": [
+        "normal"
+      ],
+      "double-bass": [
+        "arco-normal"
+      ],
+      "flute": [
+        "normal"
+      ],
+      "french-horn": [
+        "normal"
+      ],
+      "oboe": [
+        "normal"
+      ],
+      "trombone": [
+        "normal"
+      ],
+      "trumpet": [
+        "normal"
+      ],
+      "tuba": [
+        "normal"
+      ],
+      "viola": [
+        "arco-normal"
+      ],
+      "violin": [
+        "arco-normal"
+      ]
+    },
+    "excluded_conflicting_label_paths": [
+      "cello/Ds5/cello_Ds5_05_forte_arco-normal.mp3",
+      "french-horn/E2/french-horn_E2_1_fortissimo_normal.mp3",
+      "oboe/E6/oboe_E6_15_mezzo-forte_normal.mp3",
+      "viola/G6/viola_G6_05_fortissimo_arco-normal.mp3"
+    ],
+    "n_mels": 128,
+    "n_fft": 2048,
+    "hop_length": 512,
+    "n_frames": 130,
+    "n_mfcc": 20,
+    "svm_standardization": "per_feature_train",
+    "logmel_standardization": "per_mel_bin_train",
+    "labels": [
+      "bassoon",
+      "cello",
+      "clarinet",
+      "double-bass",
+      "flute",
+      "french-horn",
+      "oboe",
+      "trombone",
+      "trumpet",
+      "tuba",
+      "viola",
+      "violin"
+    ]
+  },
+  "label_order": [
+    "bassoon",
+    "cello",
+    "clarinet",
+    "double-bass",
+    "flute",
+    "french-horn",
+    "oboe",
+    "trombone",
+    "trumpet",
+    "tuba",
+    "viola",
+    "violin"
+  ],
+  "sample_rate": 24000,
+  "best_epoch": 5,
+  "best_val_macro_f1": 0.7568985299068062,
+  "history": [
+    {
+      "accuracy": 0.6081081081081081,
+      "macro_f1": 0.5723997096456999,
+      "epoch": 1,
+      "train_loss": 1.4481428059310288
+    },
+    {
+      "accuracy": 0.5691573926868044,
+      "macro_f1": 0.5374790530344566,
+      "epoch": 2,
+      "train_loss": 0.39452867592083496
+    },
+    {
+      "accuracy": 0.6391096979332274,
+      "macro_f1": 0.6247894125388754,
+      "epoch": 3,
+      "train_loss": 0.09979098275867201
+    },
+    {
+      "accuracy": 0.690779014308426,
+      "macro_f1": 0.6740870803390107,
+      "epoch": 4,
+      "train_loss": 0.03171758851393606
+    },
+    {
+      "accuracy": 0.7551669316375199,
+      "macro_f1": 0.7568985299068062,
+      "epoch": 5,
+      "train_loss": 0.01293690477713022
+    },
+    {
+      "accuracy": 0.7400635930047694,
+      "macro_f1": 0.7339255955935343,
+      "epoch": 6,
+      "train_loss": 0.007048049349327626
+    },
+    {
+      "accuracy": 0.733704292527822,
+      "macro_f1": 0.7171087412714899,
+      "epoch": 7,
+      "train_loss": 0.0025278111789413015
+    },
+    {
+      "accuracy": 0.7090620031796503,
+      "macro_f1": 0.7003303349993392,
+      "epoch": 8,
+      "train_loss": 0.004520965308041209
+    }
+  ],
+  "hyperparameters": {
+    "backbone_lr": 3e-06,
+    "head_lr": 0.001,
+    "batch_size": 16,
+    "max_epochs": 12,
+    "patience": 3,
+    "seed": 42,
+    "grad_clip": 1.0,
+    "weight_decay": 0.01,
+    "layerdrop": 0.0
+  },
+  "checkpoint": "/project/rise-grid/maxliu2k/mert_ft_3e-6/best_finetune.pt",
+  "finished_utc": "2026-08-05T19:28:02.629438+00:00",
+  "platform": "Linux-4.18.0-553.151.1.el8_10.x86_64-x86_64-with-glibc2.28",
+  "torch": "2.8.0+cu128"
+}

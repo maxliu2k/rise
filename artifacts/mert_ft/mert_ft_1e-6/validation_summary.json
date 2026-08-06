@@ -1,0 +1,184 @@
+{
+  "model": "fine-tuned MERT-v1-95M, layer-weighted linear head",
+  "backbone_frozen": false,
+  "config_fingerprint": {
+    "fingerprint_version": 2,
+    "archive_base": "https://archive.org/download/philharmonicorchestrasamples",
+    "sr": 22050,
+    "waveform_subtype": "PCM_16",
+    "window_s": 3.0,
+    "hop_s": 3.0,
+    "short_window_policy": "tile",
+    "trim_top_db": 30,
+    "min_trim_s": 0.1,
+    "split_group_fields": [
+      "label",
+      "note"
+    ],
+    "split_policy": "label_note_pitch_group",
+    "split_fracs": [
+      0.7,
+      0.15,
+      0.15
+    ],
+    "split_seed": 0,
+    "min_window_content_s": 0.5,
+    "max_windows_per_source": 1,
+    "stft_pad_mode": "reflect",
+    "logmel_top_db": null,
+    "target_rms": 0.1,
+    "articulations": {
+      "bassoon": [
+        "normal"
+      ],
+      "cello": [
+        "arco-normal"
+      ],
+      "clarinet": [
+        "normal"
+      ],
+      "double-bass": [
+        "arco-normal"
+      ],
+      "flute": [
+        "normal"
+      ],
+      "french-horn": [
+        "normal"
+      ],
+      "oboe": [
+        "normal"
+      ],
+      "trombone": [
+        "normal"
+      ],
+      "trumpet": [
+        "normal"
+      ],
+      "tuba": [
+        "normal"
+      ],
+      "viola": [
+        "arco-normal"
+      ],
+      "violin": [
+        "arco-normal"
+      ]
+    },
+    "excluded_conflicting_label_paths": [
+      "cello/Ds5/cello_Ds5_05_forte_arco-normal.mp3",
+      "french-horn/E2/french-horn_E2_1_fortissimo_normal.mp3",
+      "oboe/E6/oboe_E6_15_mezzo-forte_normal.mp3",
+      "viola/G6/viola_G6_05_fortissimo_arco-normal.mp3"
+    ],
+    "n_mels": 128,
+    "n_fft": 2048,
+    "hop_length": 512,
+    "n_frames": 130,
+    "n_mfcc": 20,
+    "svm_standardization": "per_feature_train",
+    "logmel_standardization": "per_mel_bin_train",
+    "labels": [
+      "bassoon",
+      "cello",
+      "clarinet",
+      "double-bass",
+      "flute",
+      "french-horn",
+      "oboe",
+      "trombone",
+      "trumpet",
+      "tuba",
+      "viola",
+      "violin"
+    ]
+  },
+  "label_order": [
+    "bassoon",
+    "cello",
+    "clarinet",
+    "double-bass",
+    "flute",
+    "french-horn",
+    "oboe",
+    "trombone",
+    "trumpet",
+    "tuba",
+    "viola",
+    "violin"
+  ],
+  "sample_rate": 24000,
+  "best_epoch": 6,
+  "best_val_macro_f1": 0.7649517059301579,
+  "history": [
+    {
+      "accuracy": 0.5302066772655007,
+      "macro_f1": 0.4771218685225426,
+      "epoch": 1,
+      "train_loss": 1.6295923634510925
+    },
+    {
+      "accuracy": 0.5937996820349761,
+      "macro_f1": 0.5403716778497502,
+      "epoch": 2,
+      "train_loss": 0.6886953893409438
+    },
+    {
+      "accuracy": 0.6613672496025437,
+      "macro_f1": 0.6180123987582958,
+      "epoch": 3,
+      "train_loss": 0.3002580661499208
+    },
+    {
+      "accuracy": 0.7186009538950715,
+      "macro_f1": 0.6853089079111906,
+      "epoch": 4,
+      "train_loss": 0.12869675719364462
+    },
+    {
+      "accuracy": 0.7503974562798092,
+      "macro_f1": 0.7233070894934537,
+      "epoch": 5,
+      "train_loss": 0.05661266187792111
+    },
+    {
+      "accuracy": 0.7798092209856916,
+      "macro_f1": 0.7649517059301579,
+      "epoch": 6,
+      "train_loss": 0.02690755390487256
+    },
+    {
+      "accuracy": 0.7440381558028617,
+      "macro_f1": 0.7178715683236213,
+      "epoch": 7,
+      "train_loss": 0.015538220496753697
+    },
+    {
+      "accuracy": 0.7615262321144675,
+      "macro_f1": 0.7450237849241121,
+      "epoch": 8,
+      "train_loss": 0.009306168511181743
+    },
+    {
+      "accuracy": 0.7742448330683624,
+      "macro_f1": 0.7566539064956589,
+      "epoch": 9,
+      "train_loss": 0.0034391847143809494
+    }
+  ],
+  "hyperparameters": {
+    "backbone_lr": 1e-06,
+    "head_lr": 0.001,
+    "batch_size": 16,
+    "max_epochs": 12,
+    "patience": 3,
+    "seed": 42,
+    "grad_clip": 1.0,
+    "weight_decay": 0.01,
+    "layerdrop": 0.0
+  },
+  "checkpoint": "/project/rise-grid/maxliu2k/mert_ft_1e-6/best_finetune.pt",
+  "finished_utc": "2026-08-05T19:28:58.422347+00:00",
+  "platform": "Linux-4.18.0-553.151.1.el8_10.x86_64-x86_64-with-glibc2.28",
+  "torch": "2.8.0+cu128"
+}

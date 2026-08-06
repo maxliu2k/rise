@@ -1,0 +1,256 @@
+{
+  "model": "fine-tuned MERT-v1-95M, layer-weighted linear head",
+  "backbone_frozen": false,
+  "config_fingerprint": {
+    "fingerprint_version": 2,
+    "archive_base": "https://archive.org/download/philharmonicorchestrasamples",
+    "sr": 22050,
+    "waveform_subtype": "PCM_16",
+    "window_s": 3.0,
+    "hop_s": 3.0,
+    "short_window_policy": "tile",
+    "trim_top_db": 30,
+    "min_trim_s": 0.1,
+    "split_group_fields": [
+      "label",
+      "note"
+    ],
+    "split_policy": "label_note_pitch_group",
+    "split_fracs": [
+      0.7,
+      0.15,
+      0.15
+    ],
+    "split_seed": 0,
+    "min_window_content_s": 0.5,
+    "max_windows_per_source": 1,
+    "stft_pad_mode": "reflect",
+    "logmel_top_db": null,
+    "target_rms": 0.1,
+    "articulations": {
+      "bassoon": [
+        "normal"
+      ],
+      "cello": [
+        "arco-normal"
+      ],
+      "clarinet": [
+        "normal"
+      ],
+      "double-bass": [
+        "arco-normal"
+      ],
+      "flute": [
+        "normal"
+      ],
+      "french-horn": [
+        "normal"
+      ],
+      "oboe": [
+        "normal"
+      ],
+      "trombone": [
+        "normal"
+      ],
+      "trumpet": [
+        "normal"
+      ],
+      "tuba": [
+        "normal"
+      ],
+      "viola": [
+        "arco-normal"
+      ],
+      "violin": [
+        "arco-normal"
+      ]
+    },
+    "excluded_conflicting_label_paths": [
+      "cello/Ds5/cello_Ds5_05_forte_arco-normal.mp3",
+      "french-horn/E2/french-horn_E2_1_fortissimo_normal.mp3",
+      "oboe/E6/oboe_E6_15_mezzo-forte_normal.mp3",
+      "viola/G6/viola_G6_05_fortissimo_arco-normal.mp3"
+    ],
+    "n_mels": 128,
+    "n_fft": 2048,
+    "hop_length": 512,
+    "n_frames": 130,
+    "n_mfcc": 20,
+    "svm_standardization": "per_feature_train",
+    "logmel_standardization": "per_mel_bin_train",
+    "labels": [
+      "bassoon",
+      "cello",
+      "clarinet",
+      "double-bass",
+      "flute",
+      "french-horn",
+      "oboe",
+      "trombone",
+      "trumpet",
+      "tuba",
+      "viola",
+      "violin"
+    ]
+  },
+  "label_order": [
+    "bassoon",
+    "cello",
+    "clarinet",
+    "double-bass",
+    "flute",
+    "french-horn",
+    "oboe",
+    "trombone",
+    "trumpet",
+    "tuba",
+    "viola",
+    "violin"
+  ],
+  "sample_rate": 24000,
+  "best_epoch": 11,
+  "best_val_macro_f1": 0.9399003220390468,
+  "history": [
+    {
+      "accuracy": 0.7543720190779014,
+      "macro_f1": 0.7460661284762762,
+      "epoch": 1,
+      "train_loss": 0.8126589497221426
+    },
+    {
+      "accuracy": 0.8402225755166932,
+      "macro_f1": 0.8433785348452711,
+      "epoch": 2,
+      "train_loss": 0.3240838276364457
+    },
+    {
+      "accuracy": 0.8680445151033387,
+      "macro_f1": 0.8660894749200403,
+      "epoch": 3,
+      "train_loss": 0.18830711329203575
+    },
+    {
+      "accuracy": 0.8887122416534181,
+      "macro_f1": 0.8803738360032423,
+      "epoch": 4,
+      "train_loss": 0.13194733465841224
+    },
+    {
+      "accuracy": 0.9014308426073132,
+      "macro_f1": 0.8979402049210736,
+      "epoch": 5,
+      "train_loss": 0.10027113105042752
+    },
+    {
+      "accuracy": 0.8783783783783784,
+      "macro_f1": 0.8715707303240777,
+      "epoch": 6,
+      "train_loss": 0.097400907454739
+    },
+    {
+      "accuracy": 0.904610492845787,
+      "macro_f1": 0.9024096374015351,
+      "epoch": 7,
+      "train_loss": 0.08340154611721666
+    },
+    {
+      "accuracy": 0.9109697933227345,
+      "macro_f1": 0.9028032555710036,
+      "epoch": 8,
+      "train_loss": 0.08929428695995868
+    },
+    {
+      "accuracy": 0.9300476947535771,
+      "macro_f1": 0.9279882229392821,
+      "epoch": 9,
+      "train_loss": 0.08704220615731897
+    },
+    {
+      "accuracy": 0.904610492845787,
+      "macro_f1": 0.9014738777964789,
+      "epoch": 10,
+      "train_loss": 0.05132055088353452
+    },
+    {
+      "accuracy": 0.9427662957074722,
+      "macro_f1": 0.9399003220390468,
+      "epoch": 11,
+      "train_loss": 0.05600041513022547
+    },
+    {
+      "accuracy": 0.890302066772655,
+      "macro_f1": 0.8764078762483044,
+      "epoch": 12,
+      "train_loss": 0.06121287457930043
+    },
+    {
+      "accuracy": 0.9220985691573926,
+      "macro_f1": 0.9216355089876833,
+      "epoch": 13,
+      "train_loss": 0.053221621161758575
+    },
+    {
+      "accuracy": 0.9093799682034976,
+      "macro_f1": 0.9097665613205327,
+      "epoch": 14,
+      "train_loss": 0.050237876906973976
+    },
+    {
+      "accuracy": 0.9356120826709062,
+      "macro_f1": 0.9322537282142975,
+      "epoch": 15,
+      "train_loss": 0.04433420244196948
+    },
+    {
+      "accuracy": 0.8950715421303657,
+      "macro_f1": 0.8938343426268869,
+      "epoch": 16,
+      "train_loss": 0.058421522273027486
+    },
+    {
+      "accuracy": 0.8966613672496025,
+      "macro_f1": 0.8973187260010578,
+      "epoch": 17,
+      "train_loss": 0.06571608851184951
+    },
+    {
+      "accuracy": 0.856120826709062,
+      "macro_f1": 0.8525320898335808,
+      "epoch": 18,
+      "train_loss": 0.07976262615935356
+    },
+    {
+      "accuracy": 0.9236883942766295,
+      "macro_f1": 0.9227183191959701,
+      "epoch": 19,
+      "train_loss": 0.043357568597605194
+    },
+    {
+      "accuracy": 0.9379968203497615,
+      "macro_f1": 0.9376841834484165,
+      "epoch": 20,
+      "train_loss": 0.028096548149319733
+    },
+    {
+      "accuracy": 0.8823529411764706,
+      "macro_f1": 0.8708056173813937,
+      "epoch": 21,
+      "train_loss": 0.030978895402608106
+    }
+  ],
+  "hyperparameters": {
+    "backbone_lr": 0.0003,
+    "head_lr": 0.005,
+    "batch_size": 16,
+    "max_epochs": 45,
+    "patience": 10,
+    "seed": 42,
+    "grad_clip": 1.0,
+    "weight_decay": 0.01,
+    "layerdrop": 0.0
+  },
+  "checkpoint": "/project/rise-grid/maxliu2k/mert_ft_3e-4/best_finetune.pt",
+  "finished_utc": "2026-08-05T20:32:29.498023+00:00",
+  "platform": "Linux-4.18.0-553.151.1.el8_10.x86_64-x86_64-with-glibc2.28",
+  "torch": "2.8.0+cu128"
+}
