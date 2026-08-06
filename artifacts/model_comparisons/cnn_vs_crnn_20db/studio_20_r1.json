@@ -1,0 +1,49 @@
+{
+  "a": {
+    "condition": "studio_20_r1",
+    "directory": "artifacts/cnn/noise",
+    "prefix": "cnn_test_",
+    "macro_f1": 0.45347154194516065
+  },
+  "b": {
+    "condition": "studio_20_r1",
+    "directory": "artifacts/crnn/noise",
+    "prefix": "crnn_test_",
+    "macro_f1": 0.4791809325570631
+  },
+  "cluster_bootstrap": {
+    "delta_macro_f1": 0.025709390611902472,
+    "ci95": [
+      -0.001530617568552929,
+      0.049276389663099336
+    ],
+    "n_clusters": 94,
+    "n_windows": 1255,
+    "cluster": "pitch_group",
+    "n_boot": 2000,
+    "seed": 0,
+    "fixed_label_order": [
+      "bassoon",
+      "cello",
+      "clarinet",
+      "double-bass",
+      "flute",
+      "french-horn",
+      "oboe",
+      "trombone",
+      "trumpet",
+      "tuba",
+      "viola",
+      "violin"
+    ]
+  },
+  "cluster_sign_test": {
+    "test": "exact_cluster_sign_test",
+    "unit": "pitch_group",
+    "b_better": 38,
+    "a_better": 25,
+    "ties": 31,
+    "non_ties": 63,
+    "p_value": 0.12991792302255253
+  }
+}
