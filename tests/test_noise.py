@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import tempfile
 import unittest
 import unittest.mock
@@ -800,12 +801,17 @@ class ChunkedGenerationMatchesMonolithic(unittest.TestCase):
             paths = write_dataset_files(root)
             self._write_clean_windows(root, paths)
 
-            whole_dir = root / "whole"
+            # Scratch OUTSIDE the data root, which is how the streamed sweep really runs:
+            # the corpus does not fit on the same filesystem as the dataset. The first
+            # streamed run died here, on provenance recording a relative path.
+            outside = Path(temporary_dir).parent / f"scratch_{Path(temporary_dir).name}"
+            outside.mkdir(exist_ok=True)
+            whole_dir = outside / "whole"
             self._generate(root, paths, whole_dir, tuple(range(N_REPLICATES)))
             whole = self._hash_wavs(whole_dir)
             self.assertEqual(len(whole), len(SNRS) * N_REPLICATES)
 
-            chunked_dir = root / "chunked"
+            chunked_dir = outside / "chunked"
             chunked: dict[str, str] = {}
             for replicate in range(N_REPLICATES):
                 self._generate(root, paths, chunked_dir, (replicate,))
@@ -816,6 +822,7 @@ class ChunkedGenerationMatchesMonolithic(unittest.TestCase):
                     path.unlink()
 
             self.assertEqual(whole, chunked)
+            shutil.rmtree(outside, ignore_errors=True)
 
     def test_partial_sweep_cannot_claim_completion(self) -> None:
         with self.assertRaisesRegex(ValueError, "completion manifest for a partial sweep"):
