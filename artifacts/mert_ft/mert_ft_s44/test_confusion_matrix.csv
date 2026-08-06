@@ -1,0 +1,13 @@
+,bassoon,cello,clarinet,double-bass,flute,french-horn,oboe,trombone,trumpet,tuba,viola,violin
+bassoon,91,0,0,0,4,0,2,0,0,0,0,0
+cello,0,111,0,0,0,0,0,0,0,0,2,2
+clarinet,0,0,111,0,0,0,0,0,0,0,0,0
+double-bass,0,2,0,107,0,0,0,0,0,0,6,0
+flute,0,0,2,0,115,0,0,0,0,0,0,0
+french-horn,1,0,0,0,1,80,0,0,1,0,0,0
+oboe,0,0,0,0,0,0,79,0,0,0,0,0
+trombone,0,0,0,0,0,0,0,114,0,0,0,0
+trumpet,0,0,2,0,0,0,1,0,62,0,0,0
+tuba,0,0,0,0,0,0,0,0,0,124,0,0
+viola,0,0,0,1,0,0,0,0,0,0,105,0
+violin,0,0,0,0,0,0,0,0,0,0,3,126
