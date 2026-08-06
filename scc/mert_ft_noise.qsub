@@ -1,0 +1,64 @@
+#!/bin/bash -l
+
+#$ -P rise-grid
+#$ -N mert_ft_noise
+#$ -j y
+#$ -pe omp 4
+#$ -l gpus=1
+#$ -l gpu_c=7.0
+#$ -l gpu_memory=16G
+#$ -l h_rt=12:00:00
+#$ -l mem_per_core=8G
+
+# Noise sweep for the fine-tuned MERT, streamed one chunk at a time.
+#
+# GATE FIRST. The corpus the six reported models were scored against was deleted, so it has to be
+# rebuilt. verify_noise_regeneration regenerates one chunk, scores it with the frozen probe, and
+# compares against that probe's COMMITTED predictions. If regeneration is not faithful the sweep
+# is meaningless as a cross-model comparison, so this exits non-zero and set -e stops the job
+# before a GPU hour is spent producing numbers nobody could use.
+#
+# Scratch goes on /project: one chunk is ~2.5 GB and /projectnb/rise-grid has ~1.2 GB free.
+
+set -euo pipefail
+
+ft_repo="${NOISE_REPO:-$SGE_O_WORKDIR}"
+ft_venv="${RISE_VENV:-${NOISE_VENV:-$(dirname "$ft_repo")/venv_mert}}"
+ft_data_root="${RISE_DATA_ROOT:?Submit with -v RISE_DATA_ROOT=/projectnb/rise-grid/\$USER/all-samples}"
+ft_scratch="${RISE_NOISE_SCRATCH:-/project/rise-grid/$USER/noise_scratch}"
+ft_ckpt="${RISE_FT_CKPT:-/project/rise-grid/$USER/mert_ft_s42/best_finetune.pt}"
+ft_summary="${RISE_FT_SUMMARY:-artifacts/mert_ft/mert_ft_s42/test_summary.json}"
+
+if [ -n "${RISE_MODULES-python3/3.9.9}" ]; then
+    module load ${RISE_MODULES:-python3/3.9.9}
+fi
+. "$ft_repo/scc/activate_venv.sh"
+rise_activate "$ft_venv"
+cd "$ft_repo"
+export RISE_DATA_ROOT="$ft_data_root"
+export RISE_NOISE_ROOT="${RISE_NOISE_ROOT:-/projectnb/rise-grid/noise-sources}"
+export RISE_DEMAND_ROOT="${RISE_DEMAND_ROOT:-/projectnb/rise-grid/noise-sources/demand}"
+
+test -f "$RISE_DATA_ROOT/pipeline/windows.csv" || { echo "FATAL: no windows.csv" >&2; exit 1; }
+test -f "$ft_ckpt"     || { echo "FATAL: missing checkpoint $ft_ckpt" >&2; exit 1; }
+test -f "$ft_summary"  || { echo "FATAL: missing clean summary $ft_summary" >&2; exit 1; }
+
+echo "scratch    : $ft_scratch"
+echo "checkpoint : $ft_ckpt"
+df -h "$(dirname "$ft_scratch")" | tail -1
+echo
+
+echo "########## GATE: is a regenerated chunk faithful? ##########"
+python -m instrument_robustness.verify_noise_regeneration --scratch "$ft_scratch"
+
+echo
+echo "########## STREAMED NOISE SWEEP ##########"
+python -m instrument_robustness.stream_noise_eval \
+    --model mert_ft \
+    --checkpoint "$ft_ckpt" \
+    --clean-summary "$ft_summary" \
+    --scratch "$ft_scratch" \
+    ${RISE_FT_OVERWRITE:+--overwrite}
+
+rmdir "$ft_scratch" 2>/dev/null || true
+echo "done"
