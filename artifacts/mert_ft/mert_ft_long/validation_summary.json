@@ -1,0 +1,304 @@
+{
+  "model": "fine-tuned MERT-v1-95M, layer-weighted linear head",
+  "backbone_frozen": false,
+  "config_fingerprint": {
+    "fingerprint_version": 2,
+    "archive_base": "https://archive.org/download/philharmonicorchestrasamples",
+    "sr": 22050,
+    "waveform_subtype": "PCM_16",
+    "window_s": 3.0,
+    "hop_s": 3.0,
+    "short_window_policy": "tile",
+    "trim_top_db": 30,
+    "min_trim_s": 0.1,
+    "split_group_fields": [
+      "label",
+      "note"
+    ],
+    "split_policy": "label_note_pitch_group",
+    "split_fracs": [
+      0.7,
+      0.15,
+      0.15
+    ],
+    "split_seed": 0,
+    "min_window_content_s": 0.5,
+    "max_windows_per_source": 1,
+    "stft_pad_mode": "reflect",
+    "logmel_top_db": null,
+    "target_rms": 0.1,
+    "articulations": {
+      "bassoon": [
+        "normal"
+      ],
+      "cello": [
+        "arco-normal"
+      ],
+      "clarinet": [
+        "normal"
+      ],
+      "double-bass": [
+        "arco-normal"
+      ],
+      "flute": [
+        "normal"
+      ],
+      "french-horn": [
+        "normal"
+      ],
+      "oboe": [
+        "normal"
+      ],
+      "trombone": [
+        "normal"
+      ],
+      "trumpet": [
+        "normal"
+      ],
+      "tuba": [
+        "normal"
+      ],
+      "viola": [
+        "arco-normal"
+      ],
+      "violin": [
+        "arco-normal"
+      ]
+    },
+    "excluded_conflicting_label_paths": [
+      "cello/Ds5/cello_Ds5_05_forte_arco-normal.mp3",
+      "french-horn/E2/french-horn_E2_1_fortissimo_normal.mp3",
+      "oboe/E6/oboe_E6_15_mezzo-forte_normal.mp3",
+      "viola/G6/viola_G6_05_fortissimo_arco-normal.mp3"
+    ],
+    "n_mels": 128,
+    "n_fft": 2048,
+    "hop_length": 512,
+    "n_frames": 130,
+    "n_mfcc": 20,
+    "svm_standardization": "per_feature_train",
+    "logmel_standardization": "per_mel_bin_train",
+    "labels": [
+      "bassoon",
+      "cello",
+      "clarinet",
+      "double-bass",
+      "flute",
+      "french-horn",
+      "oboe",
+      "trombone",
+      "trumpet",
+      "tuba",
+      "viola",
+      "violin"
+    ]
+  },
+  "label_order": [
+    "bassoon",
+    "cello",
+    "clarinet",
+    "double-bass",
+    "flute",
+    "french-horn",
+    "oboe",
+    "trombone",
+    "trumpet",
+    "tuba",
+    "viola",
+    "violin"
+  ],
+  "sample_rate": 24000,
+  "best_epoch": 19,
+  "best_val_macro_f1": 0.9577391063030934,
+  "history": [
+    {
+      "accuracy": 0.7472178060413355,
+      "macro_f1": 0.7380485442054124,
+      "epoch": 1,
+      "train_loss": 0.5326064694368303
+    },
+    {
+      "accuracy": 0.7821939586645469,
+      "macro_f1": 0.7784900743718691,
+      "epoch": 2,
+      "train_loss": 0.032857396140507734
+    },
+    {
+      "accuracy": 0.8966613672496025,
+      "macro_f1": 0.8861023271322334,
+      "epoch": 3,
+      "train_loss": 0.011089036472425318
+    },
+    {
+      "accuracy": 0.8871224165341812,
+      "macro_f1": 0.8809375897265572,
+      "epoch": 4,
+      "train_loss": 0.004172292660758485
+    },
+    {
+      "accuracy": 0.9197138314785374,
+      "macro_f1": 0.9168784976919421,
+      "epoch": 5,
+      "train_loss": 0.004168345767195814
+    },
+    {
+      "accuracy": 0.884737678855326,
+      "macro_f1": 0.8748691938670575,
+      "epoch": 6,
+      "train_loss": 0.001788069200593776
+    },
+    {
+      "accuracy": 0.8887122416534181,
+      "macro_f1": 0.8793518707193587,
+      "epoch": 7,
+      "train_loss": 5.029747176896579e-05
+    },
+    {
+      "accuracy": 0.8974562798092209,
+      "macro_f1": 0.889375483335688,
+      "epoch": 8,
+      "train_loss": 0.0032631353797417206
+    },
+    {
+      "accuracy": 0.895866454689984,
+      "macro_f1": 0.8875546763879057,
+      "epoch": 9,
+      "train_loss": 0.00010999182173111203
+    },
+    {
+      "accuracy": 0.8465818759936407,
+      "macro_f1": 0.8356642659560384,
+      "epoch": 10,
+      "train_loss": 0.01125399192964408
+    },
+    {
+      "accuracy": 0.8736089030206677,
+      "macro_f1": 0.8718350810305805,
+      "epoch": 11,
+      "train_loss": 0.03177844886051914
+    },
+    {
+      "accuracy": 0.8855325914149443,
+      "macro_f1": 0.8864342949085735,
+      "epoch": 12,
+      "train_loss": 0.007527311380463391
+    },
+    {
+      "accuracy": 0.8696343402225755,
+      "macro_f1": 0.8535443580893114,
+      "epoch": 13,
+      "train_loss": 0.004985714160372985
+    },
+    {
+      "accuracy": 0.9395866454689984,
+      "macro_f1": 0.9334618581032373,
+      "epoch": 14,
+      "train_loss": 0.005941482603230698
+    },
+    {
+      "accuracy": 0.9379968203497615,
+      "macro_f1": 0.9291493913078254,
+      "epoch": 15,
+      "train_loss": 0.012787257814409429
+    },
+    {
+      "accuracy": 0.9300476947535771,
+      "macro_f1": 0.9206534746991721,
+      "epoch": 16,
+      "train_loss": 0.0011491773417847456
+    },
+    {
+      "accuracy": 0.9292527821939587,
+      "macro_f1": 0.9243023974442983,
+      "epoch": 17,
+      "train_loss": 0.012506377869135676
+    },
+    {
+      "accuracy": 0.9109697933227345,
+      "macro_f1": 0.8996587471771705,
+      "epoch": 18,
+      "train_loss": 0.024731239482910995
+    },
+    {
+      "accuracy": 0.9610492845786963,
+      "macro_f1": 0.9577391063030934,
+      "epoch": 19,
+      "train_loss": 0.001817115929496744
+    },
+    {
+      "accuracy": 0.958664546899841,
+      "macro_f1": 0.955900994594208,
+      "epoch": 20,
+      "train_loss": 1.6287089640392682e-07
+    },
+    {
+      "accuracy": 0.9268680445151033,
+      "macro_f1": 0.9226111563885615,
+      "epoch": 21,
+      "train_loss": 0.00981239512887139
+    },
+    {
+      "accuracy": 0.9578696343402225,
+      "macro_f1": 0.9565707905085773,
+      "epoch": 22,
+      "train_loss": 0.05249003943032716
+    },
+    {
+      "accuracy": 0.931637519872814,
+      "macro_f1": 0.9247870441864242,
+      "epoch": 23,
+      "train_loss": 0.013866117274698088
+    },
+    {
+      "accuracy": 0.93879173290938,
+      "macro_f1": 0.9336177769139858,
+      "epoch": 24,
+      "train_loss": 0.02132222788676822
+    },
+    {
+      "accuracy": 0.9507154213036566,
+      "macro_f1": 0.9485159870948122,
+      "epoch": 25,
+      "train_loss": 0.000251963595589608
+    },
+    {
+      "accuracy": 0.9435612082670907,
+      "macro_f1": 0.9403391489591013,
+      "epoch": 26,
+      "train_loss": 0.0013751459318227576
+    },
+    {
+      "accuracy": 0.9570747217806042,
+      "macro_f1": 0.9533844522474513,
+      "epoch": 27,
+      "train_loss": 1.2166633810740294e-06
+    },
+    {
+      "accuracy": 0.9578696343402225,
+      "macro_f1": 0.9556178285055007,
+      "epoch": 28,
+      "train_loss": 3.0013168984209403e-05
+    },
+    {
+      "accuracy": 0.9356120826709062,
+      "macro_f1": 0.930582289175038,
+      "epoch": 29,
+      "train_loss": 0.004054376831926819
+    }
+  ],
+  "hyperparameters": {
+    "backbone_lr": 1e-05,
+    "head_lr": 0.005,
+    "batch_size": 16,
+    "max_epochs": 45,
+    "patience": 10,
+    "seed": 42,
+    "grad_clip": 1.0,
+    "weight_decay": 0.01,
+    "layerdrop": 0.0
+  },
+  "checkpoint": "/project/rise-grid/maxliu2k/mert_ft_long/best_finetune.pt",
+  "finished_utc": "2026-08-05T20:08:25.122461+00:00",
+  "platform": "Linux-4.18.0-553.151.1.el8_10.x86_64-x86_64-with-glibc2.28",
+  "torch": "2.8.0+cu128"
+}
