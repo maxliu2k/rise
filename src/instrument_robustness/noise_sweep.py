@@ -771,13 +771,17 @@ def _write_text_atomic(path: Path, value: str) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def _ensure_generation_target_is_empty(noisy_dir: Path) -> None:
+def _ensure_generation_target_is_empty(
+    noisy_dir: Path,
+    *,
+    noise_types: tuple[str, ...] | None = None,
+) -> None:
     manifest = noisy_dir / NOISE_MANIFEST_NAME
     if manifest.exists():
         raise FileExistsError(
             f"{manifest} already records a complete sweep; refusing to overwrite it"
         )
-    for noise_type in NOISE_TYPES:
+    for noise_type in (NOISE_TYPES if noise_types is None else noise_types):
         directory = noisy_dir / noise_type
         if directory.exists() and next(directory.rglob("*.wav"), None) is not None:
             raise FileExistsError(
@@ -915,7 +919,10 @@ def generate(
     manifest_csv: str | Path | None = None,
     manifest_fingerprint: str | Path | None = None,
     noisy_dir: str | Path | None = None,
-) -> None:
+    only_noise_types: tuple[str, ...] | None = None,
+    only_replicates: tuple[int, ...] | None = None,
+    write_completion: bool = True,
+) -> Path:
     """Materialize the canonical noisy test set.
 
     Every path is an optional argument resolved AT CALL TIME rather than a module-level default
@@ -935,17 +942,47 @@ def generate(
         if manifest_fingerprint is None
         else Path(manifest_fingerprint)
     )
+    # SUBSET GENERATION, for streaming a sweep that will not fit on disk all at once. The chunk
+    # is a (noise_type, replicate) pair and never a single SNR: the loop below draws noise ONCE
+    # per (window, noise_type, replicate) and rescales that one draw across every SNR, so
+    # splitting on SNR would force a redraw and make bit-identity depend on RNG replay instead of
+    # on running the same code path.
+    selected_types = tuple(NOISE_TYPES) if only_noise_types is None else tuple(only_noise_types)
+    selected_replicates = (
+        tuple(range(N_REPLICATES)) if only_replicates is None else tuple(only_replicates)
+    )
+    unknown_types = sorted(set(selected_types) - set(NOISE_TYPES))
+    if unknown_types:
+        raise ValueError(f"only_noise_types not in config.NOISE_TYPES: {unknown_types}")
+    unknown_replicates = sorted(set(selected_replicates) - set(range(N_REPLICATES)))
+    if unknown_replicates:
+        raise ValueError(f"only_replicates outside range(N_REPLICATES): {unknown_replicates}")
+    is_partial = (
+        selected_types != tuple(NOISE_TYPES)
+        or selected_replicates != tuple(range(N_REPLICATES))
+    )
+    # A partial sweep must not be able to leave behind something a consumer reads as complete.
+    # validate_noise_manifest checks n_files and provenance_rows against the FULL grid, so a
+    # partial manifest would fail there -- but it would also overwrite the canonical provenance
+    # on its way to failing. Make the invalid combination unrepresentable instead.
+    if is_partial and write_completion:
+        raise ValueError(
+            "refusing to write a completion manifest for a partial sweep "
+            f"(types={selected_types}, replicates={selected_replicates}); "
+            "pass write_completion=False"
+        )
+
     windows = test_windows(windows_csv=windows_csv)
     # Only load the corpus if the grid actually asks for it: Gaussian noise needs none, so a
     # white-only sweep must not demand an ESC-50 download.
     esc_index: dict[str, list[Esc50Clip]] = (
         load_esc50_index()
-        if any(noise_type in ESC50_TARGETS for noise_type in NOISE_TYPES)
+        if any(noise_type in ESC50_TARGETS for noise_type in selected_types)
         else {}
     )
     demand_index: dict[str, list[DemandRecording]] = (
         load_demand_index()
-        if any(noise_type in DEMAND_TARGETS for noise_type in NOISE_TYPES)
+        if any(noise_type in DEMAND_TARGETS for noise_type in selected_types)
         else {}
     )
     identity = dataset_build_identity(
@@ -955,11 +992,11 @@ def generate(
     )
     fingerprint = dataset_fingerprint(identity)
     noisy_dir = Path(NOISY_DIR if noisy_dir is None else noisy_dir)
-    _ensure_generation_target_is_empty(noisy_dir)
+    _ensure_generation_target_is_empty(noisy_dir, noise_types=selected_types)
 
-    for noise_type in NOISE_TYPES:
+    for noise_type in selected_types:
         for snr in SNRS:
-            for replicate in range(N_REPLICATES):
+            for replicate in selected_replicates:
                 (noisy_dir / noise_type / f"snr{snr}" / f"r{replicate}").mkdir(
                     parents=True,
                     exist_ok=True,
@@ -967,7 +1004,7 @@ def generate(
 
     source_hashes: dict[Path, str] = {}
     provenance_rows: list[dict[str, object]] = []
-    per_window = len(NOISE_TYPES) * N_REPLICATES * len(SNRS)
+    per_window = len(selected_types) * len(selected_replicates) * len(SNRS)
     total = len(windows) * per_window
     made = 0
     for row in windows.itertuples(index=False):
@@ -976,8 +1013,8 @@ def generate(
         clean_path = root / relative_path
         clean = read_audio_window(clean_path)
         clean_sha256 = sha256_file(clean_path)
-        for noise_type in NOISE_TYPES:
-            for replicate in range(N_REPLICATES):
+        for noise_type in selected_types:
+            for replicate in selected_replicates:
                 # One independent draw per replicate; that draw is then rescaled across every SNR,
                 # so the SNR axis and the realization axis stay separable.
                 seed = window_seed(window_id, noise_type, fingerprint, replicate)
@@ -1048,7 +1085,19 @@ def generate(
             print(f"{made}/{total}", flush=True)
 
     provenance = pd.DataFrame(provenance_rows)
-    provenance_path = noisy_dir / NOISE_PROVENANCE_NAME
+    # A chunk's provenance is written under its OWN name. Writing it to NOISE_PROVENANCE_NAME
+    # would leave a file that looks canonical while covering one sixth of the grid, and the next
+    # chunk would silently overwrite it.
+    provenance_name = (
+        NOISE_PROVENANCE_NAME
+        if not is_partial
+        else "noise_provenance_"
+        + "_".join(selected_types)
+        + "_r"
+        + "".join(str(r) for r in selected_replicates)
+        + ".csv"
+    )
+    provenance_path = noisy_dir / provenance_name
     temporary_provenance = provenance_path.with_name(
         f".{provenance_path.name}.tmp"
     )
@@ -1059,8 +1108,17 @@ def generate(
         temporary_provenance.unlink(missing_ok=True)
     _assert_residual_dc_is_bounded(
         provenance,
-        provenance_name=NOISE_PROVENANCE_NAME,
+        provenance_name=provenance_name,
     )
+
+    if not write_completion:
+        print(
+            f"generated {made} files under {noisy_dir} "
+            f"(partial: types={selected_types}, replicates={selected_replicates})",
+            flush=True,
+        )
+        print(f"wrote {provenance_path}", flush=True)
+        return provenance_path
 
     manifest = {
         "manifest_version": NOISE_MANIFEST_VERSION,
@@ -1104,6 +1162,7 @@ def generate(
     _write_text_atomic(manifest_path, json.dumps(manifest, indent=2) + "\n")
     print(f"generated {made} files under {noisy_dir}")
     print(f"wrote {manifest_path}")
+    return provenance_path
 
 
 def validate_noise_manifest(
