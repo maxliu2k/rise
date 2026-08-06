@@ -111,35 +111,30 @@ EXTERNAL_WEIGHTS = {
         "scc_path": "/projectnb/rise-grid/models/97b1cdd2/panns_finetune.pt",
         "download_url": None,   # pending a release upload; see scc_path meanwhile
     },
-    # MERT FINE-TUNE, ALL THREE SEEDS. Pointers for the same reason AST and PANNs are: 361 MB
-    # each, and LFS storage cannot be reclaimed. All three are listed rather than the best,
-    # because the reported number is the 3-seed mean and a reader who can only fetch the
-    # best-scoring seed cannot reproduce it.
+    # MERT FINE-TUNE. A pointer for the same reason AST and PANNs are: 361 MB, and LFS storage
+    # cannot be reclaimed.
     #
-    # These live under /project, NOT /projectnb/rise-grid/models/97b1cdd2/ where the AST and
-    # PANNs checkpoints sit: /projectnb is at 97% of its 50 GB quota and 1.08 GB would leave no
-    # room to regenerate the noise corpus. Recording where they ACTUALLY are beats pointing at
-    # the tidier path and having the fetch fail.
-    **{
-        f"mert_finetune_s{seed}.pt": {
-            "model": "mert",
-            "role": (
-                f"fine-tuned MERT-v1-95M, seed {seed}; test macro-F1 {f1} on 1255 examples. "
-                f"3-seed mean 0.9725 +/- 0.0092, against 0.8931 for the frozen probe. Backbone "
-                f"3e-5 / head 5e-3, patience 10, selected on validation across 10 runs "
-                f"(artifacts/mert_ft/)."
-            ),
-            "sha256": digest,
-            "bytes": 377597435,
-            "dataset_fingerprint": "97b1cdd2936b81c8c4d8728ef5243f174267b7df800b7e5d01568d45ef9ce3cf",
-            "scc_path": f"/project/rise-grid/maxliu2k/mert_ft_s{seed}/best_finetune.pt",
-            "download_url": None,   # pending a release upload; see scc_path meanwhile
-        }
-        for seed, digest, f1 in (
-            (42, "ddd130ade18a35a0658752c25e3fc12f6a11ca24a1cc07be1461ad333d3bbd84", "0.9798"),
-            (43, "aeaf755e1fc2df7bc485606bc78c76ecada4835cb8cb1d07e6ac454366d3ed8e", "0.9622"),
-            (44, "67404068c2357af7877c2325dad484d554137718bd0666ef2ff746624aa03fda", "0.9756"),
-        )
+    # ONE SEED, matching every other model here except the CNN/CRNN ensembles. Seeds 43 and 44
+    # were trained while establishing that the fine-tune's margin over the frozen probe exceeds
+    # seed noise; they were removed on 2026-08-06 because a single model reporting three seeds
+    # alongside six reporting one read as an inconsistency rather than as extra evidence. Their
+    # metrics are in the git history if that question is ever reopened.
+    #
+    # This lives under /project, NOT /projectnb/rise-grid/models/97b1cdd2/ where the AST and
+    # PANNs checkpoints sit: /projectnb is at 97% of its 50 GB quota. Recording where the file
+    # ACTUALLY is beats pointing at the tidier path and having the fetch fail.
+    "mert_finetune.pt": {
+        "model": "mert",
+        "role": (
+            "reported fine-tuned model for the corrected frozen build; test macro-F1 0.9798 on "
+            "1255 examples, against 0.8931 for the frozen probe. Backbone 3e-5 / head 5e-3, "
+            "patience 10, seed 42, selected on validation across 10 runs (artifacts/mert_ft/)."
+        ),
+        "sha256": "ddd130ade18a35a0658752c25e3fc12f6a11ca24a1cc07be1461ad333d3bbd84",
+        "bytes": 377597435,
+        "dataset_fingerprint": "97b1cdd2936b81c8c4d8728ef5243f174267b7df800b7e5d01568d45ef9ce3cf",
+        "scc_path": "/project/rise-grid/maxliu2k/mert_ft_s42/best_finetune.pt",
+        "download_url": None,   # pending a release upload; see scc_path meanwhile
     },
 }
 
