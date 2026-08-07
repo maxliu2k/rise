@@ -47,7 +47,7 @@ MODELS: dict[str, str] = {
     "svm": "SVM",
     "cnn": "CNN",
     "crnn": "CRNN",
-    "mert": "MERT",
+    "mert_ft": "MERT",
     "panns": "PANNs",
     "ast": "AST",
 }
