@@ -26,8 +26,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 FA = ROOT / "artifacts" / "failure_analysis"
 FIGURES = ROOT / "docs" / "figures"
 
-MODELS = ["svm", "cnn", "crnn", "mert", "panns", "ast"]
-MODEL_LABEL = {"svm": "SVM", "cnn": "CNN", "crnn": "CRNN", "mert": "MERT",
+MODELS = ["svm", "cnn", "crnn", "mert_ft", "panns", "ast"]
+MODEL_LABEL = {"svm": "SVM", "cnn": "CNN", "crnn": "CRNN", "mert_ft": "MERT",
                "panns": "PANNs", "ast": "AST"}
 NOISE_ORDER = ["white", "audience", "studio"]
 NOISE_LABEL = {"white": "White Gaussian", "audience": "ESC-50\nhuman non-speech",

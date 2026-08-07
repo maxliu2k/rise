@@ -38,11 +38,20 @@ from instrument_robustness.noise_sweep import dataset_build_identity, sha256_fil
 from instrument_robustness.robustness_curve import benjamini_hochberg
 from instrument_robustness.svm_model import load_svm_feature_names, load_svm_split
 
+# Directory -> prediction-file prefix. The two are NOT the same string for every model: PANNs
+# reports its fine-tune (`panns_ft_test_`) and MERT now reports its fine-tune from a separate
+# directory, so a reader cannot infer one from the other.
+#
+# MERT IS THE FINE-TUNE HERE. The frozen probe made MERT the only pretrained model not
+# fine-tuned, so every MERT-vs-AST and MERT-vs-PANNs association in this analysis was confounded
+# by adaptation method rather than isolating architecture. Pointing at artifacts/mert_ft/ fixes
+# that; it also means these outputs must be regenerated, because the committed ones were
+# computed from the probe's predictions.
 MODEL_PREFIXES = {
     "svm": "svm_test_",
     "cnn": "cnn_test_",
     "crnn": "crnn_test_",
-    "mert": "mert_test_",
+    "mert_ft": "mert_ft_test_",
     "ast": "ast_test_",
     "panns": "panns_ft_test_",
 }
