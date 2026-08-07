@@ -349,7 +349,28 @@ def run_noise_evaluation(
     summary_rows: list[dict[str, object]] = []
     clean_macro_f1: float | None = None
 
-    for condition in noise_conditions():
+    conditions = noise_conditions()
+    if ensure_condition is not None:
+        # GROUP BY CHUNK BEFORE STREAMING. noise_conditions() runs replicate as its innermost
+        # loop -- white_50_r0, white_50_r1, white_40_r0, ... -- so a (noise_type, replicate)
+        # materializer sees the chunk key change on almost every condition and rebuilds 10,040
+        # files 48 times instead of 6. Measured on the first streamed run: ~6 hours instead of
+        # ~1.5, for identical output.
+        #
+        # Reordering is safe because each condition writes its own files and shares no state,
+        # except that clean must come first: it sets clean_macro_f1, which every retention
+        # figure in the summary is computed against.
+        conditions = sorted(
+            conditions,
+            key=lambda c: (
+                c.noise_type != "clean",
+                c.noise_type,
+                int(c.replicate or 0),
+                -(c.snr_db if c.snr_db is not None else 0),
+            ),
+        )
+
+    for condition in conditions:
         if ensure_condition is not None:
             ensure_condition(condition)
         paths = condition_paths(
