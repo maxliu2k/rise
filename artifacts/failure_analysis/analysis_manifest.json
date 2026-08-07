@@ -211,11 +211,11 @@
       "metrics_sha256": "d8bd8f034d5abca66317709f6ca6aa18e2cdd74698da1aec2e8fb90351ad347e",
       "summary_sha256": "9b25dadf016fb398edaf4aa1f3155cccb42e881496f3324172dfc2116d376ba0"
     },
-    "mert": {
-      "model_sha256": "252d329579aac867c06e8ed8a555e51e0b43a37d249a751355ba9a9ced5d0d31",
-      "predictions_sha256": "80b2341b3cd6825438acd6834279254cf5324b8954fb12f5791a871c828aa761",
-      "metrics_sha256": "8ff043db89a4389b4d907312f849d9227356a1dc12ba6db78ca3151c36ef7837",
-      "summary_sha256": "c8cfbd6a9eb013dd7b720dc289150be6c1cb8545798ebed93a287fd66946a41b"
+    "mert_ft": {
+      "model_sha256": "ddd130ade18a35a0658752c25e3fc12f6a11ca24a1cc07be1461ad333d3bbd84",
+      "predictions_sha256": "dd2cc1a0a01cb1380e83877e0655fe7f08ac54097dffdb8f019a712c4d4b085d",
+      "metrics_sha256": "dfc6745577949c91b9b669d9cd142bf3c5038d35794ed0d9f1794c0bbd661c51",
+      "summary_sha256": "cfd07dd4989cdcdabbf08f2893fe0dfbb6b4e066613454ad5dbf08885a3e29d2"
     },
     "ast": {
       "model_sha256": "a37bd70d51356ae32b24fd09b57e22572847c94c920a0db1ac7c3b369f1cc6b1",
@@ -231,9 +231,9 @@
     }
   },
   "training_inputs": {
-    "features": "/project/rise-grid/maxliu2k/all-samples/features/svm/train.npz",
+    "features": "/projectnb/rise-grid/maxliu2k/all-samples/features/svm/train.npz",
     "features_sha256": "928c8edf1f9157f4b987dd7875cc8422601b5b20256f71939e42ff0b01ec2a9d",
-    "statistics": "/project/rise-grid/maxliu2k/all-samples/pipeline/norm_stats.npz",
+    "statistics": "/projectnb/rise-grid/maxliu2k/all-samples/pipeline/norm_stats.npz",
     "statistics_sha256": "b8bc20cc503f511617b093da4615bc5b903ede670ceb5513823a3eae6984c40a"
   },
   "protocol": {
@@ -260,7 +260,7 @@
       "method": "benjamini_hochberg_fdr",
       "alpha": 0.05,
       "n_comparisons": 18,
-      "n_rejected": 5,
+      "n_rejected": 7,
       "results": [
         {
           "label": "ast:audience",
@@ -279,123 +279,123 @@
           "rejected": true
         },
         {
-          "label": "panns:audience",
-          "p_value": 0.004789952100478995,
+          "label": "mert_ft:white",
+          "p_value": 0.000919990800091999,
           "rank": 3,
           "critical_value": 0.008333333333333335,
-          "q_value": 0.02873971260287397,
+          "q_value": 0.005519944800551994,
+          "rejected": true
+        },
+        {
+          "label": "panns:audience",
+          "p_value": 0.004789952100478995,
+          "rank": 4,
+          "critical_value": 0.011111111111111112,
+          "q_value": 0.021554784452155477,
           "rejected": true
         },
         {
           "label": "svm:studio",
           "p_value": 0.011779882201177988,
-          "rank": 4,
-          "critical_value": 0.011111111111111112,
-          "q_value": 0.04604353956460436,
+          "rank": 5,
+          "critical_value": 0.013888888888888888,
+          "q_value": 0.03484250871776996,
           "rejected": true
         },
         {
           "label": "svm:audience",
           "p_value": 0.012789872101278988,
-          "rank": 5,
-          "critical_value": 0.013888888888888888,
-          "q_value": 0.04604353956460436,
+          "rank": 6,
+          "critical_value": 0.01666666666666667,
+          "q_value": 0.03484250871776996,
           "rejected": true
         },
         {
-          "label": "mert:audience",
-          "p_value": 0.016879831201687984,
-          "rank": 6,
-          "critical_value": 0.01666666666666667,
-          "q_value": 0.05063949360506395,
-          "rejected": false
+          "label": "mert_ft:audience",
+          "p_value": 0.013549864501354987,
+          "rank": 7,
+          "critical_value": 0.019444444444444445,
+          "q_value": 0.03484250871776996,
+          "rejected": true
         },
         {
           "label": "ast:white",
           "p_value": 0.03465965340346597,
-          "rank": 7,
-          "critical_value": 0.019444444444444445,
-          "q_value": 0.08912482303748392,
+          "rank": 8,
+          "critical_value": 0.022222222222222223,
+          "q_value": 0.07798422015779843,
           "rejected": false
         },
         {
           "label": "crnn:audience",
           "p_value": 0.04104958950410496,
-          "rank": 8,
-          "critical_value": 0.022222222222222223,
-          "q_value": 0.09236157638423616,
+          "rank": 9,
+          "critical_value": 0.025,
+          "q_value": 0.08209917900820991,
           "rejected": false
         },
         {
           "label": "panns:studio",
           "p_value": 0.04624953750462495,
-          "rank": 9,
-          "critical_value": 0.025,
-          "q_value": 0.0924990750092499,
+          "rank": 10,
+          "critical_value": 0.027777777777777776,
+          "q_value": 0.08324916750832492,
           "rejected": false
         },
         {
           "label": "cnn:white",
           "p_value": 0.07890921090789092,
-          "rank": 10,
-          "critical_value": 0.027777777777777776,
-          "q_value": 0.14203657963420366,
+          "rank": 11,
+          "critical_value": 0.030555555555555558,
+          "q_value": 0.1291241633038215,
           "rejected": false
         },
         {
           "label": "panns:white",
           "p_value": 0.09508904910950891,
-          "rank": 11,
-          "critical_value": 0.030555555555555558,
-          "q_value": 0.1556002621791964,
+          "rank": 12,
+          "critical_value": 0.03333333333333334,
+          "q_value": 0.14263357366426335,
           "rejected": false
         },
         {
           "label": "crnn:white",
           "p_value": 0.17975820241797583,
-          "rank": 12,
-          "critical_value": 0.03333333333333334,
-          "q_value": 0.26314352241092975,
+          "rank": 13,
+          "critical_value": 0.036111111111111115,
+          "q_value": 0.24434755652443477,
           "rejected": false
         },
         {
           "label": "cnn:audience",
           "p_value": 0.1900480995190048,
-          "rank": 13,
-          "critical_value": 0.036111111111111115,
-          "q_value": 0.26314352241092975,
+          "rank": 14,
+          "critical_value": 0.03888888888888889,
+          "q_value": 0.24434755652443477,
           "rejected": false
         },
         {
           "label": "crnn:studio",
           "p_value": 0.26007739922600775,
-          "rank": 14,
-          "critical_value": 0.03888888888888889,
-          "q_value": 0.3343852275762957,
+          "rank": 15,
+          "critical_value": 0.041666666666666664,
+          "q_value": 0.3120928790712093,
           "rejected": false
         },
         {
           "label": "cnn:studio",
           "p_value": 0.31656683433165667,
-          "rank": 15,
-          "critical_value": 0.041666666666666664,
-          "q_value": 0.379880201197988,
-          "rejected": false
-        },
-        {
-          "label": "mert:studio",
-          "p_value": 0.45897541024589755,
           "rank": 16,
           "critical_value": 0.044444444444444446,
-          "q_value": 0.5163473365266348,
+          "q_value": 0.3458930116581187,
           "rejected": false
         },
         {
-          "label": "mert:white",
-          "p_value": 0.6734032659673403,
+          "label": "mert_ft:studio",
+          "p_value": 0.32667673323266766,
           "rank": 17,
           "critical_value": 0.04722222222222223,
-          "q_value": 0.7130152227889486,
+          "q_value": 0.3458930116581187,
           "rejected": false
         },
         {
@@ -450,13 +450,13 @@
     "training_feature_centroids.csv": "0e42a80139fb9adbb3a0d09da1aad1c01bb5324a14ce21774d790df44628b37f",
     "training_acoustic_profiles.csv": "b1916fd5de82c17df261fb2cac1ec1d779e9f687f168f0389a1f962a3975d05e",
     "acoustic_distances.csv": "bc1413eddd5402f362adc30769716b47cddf0db4ebbb0438ac97dea49dd1ec96",
-    "instrument_recall_loss_by_condition.csv": "77b3ea15f3982089188e6ec2579fc89e3e90b68326c34e52753c09ef4c8420c7",
-    "instrument_recall_loss_auc_by_replicate.csv": "d3bf1cb559c6d977f7be5dbae2529a984772a4dc39a0fff3696e83fa83e123a3",
-    "instrument_recall_loss_summary.csv": "a9b133e3b71448cfc32ea30f75f4d9b162ec752ce1d65306fa2effcc9102877c",
-    "instrument_acoustic_associations_exploratory.csv": "81627e8885f9f4c4393827fc0fb337104a18869653fb38b1a7eb456bb715b241",
-    "pair_confusion_by_condition.csv": "fe8dbd21e3d311e623588b309dd529b7ce877cebe6a81253078d10c1b9a0bc9f",
-    "pair_confusion_auc_by_replicate.csv": "5801a290289cfb993e24b41170d1ac89e6f62c1bbc8874d272c1dc6368e7b812",
-    "pair_confusion_summary.csv": "eab636296a1166ea1d8a736a2db4c72c72819dfc39a2b0dd8ef4dd2da0ab3903",
-    "distance_confusion_tests.csv": "23bcbcc8445f26c286c58d60d422b9da2bd9ba88189770eb4eb4ab0a111b1097"
+    "instrument_recall_loss_by_condition.csv": "da5761e6b4ff2f4a74f1c03229d9e4614732a4a32003ccb268aba6eb950efe31",
+    "instrument_recall_loss_auc_by_replicate.csv": "ded3732f1b8be440e7146e6c656f13d6457dfbf4eaf0b921e42e1c779e03bf50",
+    "instrument_recall_loss_summary.csv": "3f12629572468dfc4b0b79a7b576b52162511d28c5e749107aaa6e3d74c38cd5",
+    "instrument_acoustic_associations_exploratory.csv": "3e9fb4f7eed131e0b832dc1fc50e324b3165a1366a8bf68b8240e5788e8209c2",
+    "pair_confusion_by_condition.csv": "a009284242d4402f6b1f5ef3ca854b2fe0775605b0f8e3b3519f61fbce600037",
+    "pair_confusion_auc_by_replicate.csv": "08ef89232288d15f481261fc75b1ddff779dc9f86967047adc9e44e671a0d0ab",
+    "pair_confusion_summary.csv": "69c8dbc039029a7a0f17d65c033c72508220e2b902a8b85c2471a6ab09c91f94",
+    "distance_confusion_tests.csv": "88affc4344a7e3a09a5b6dfb8bb0c0611d9bcae17f6b68aeabbd74c06b874be7"
   }
 }
