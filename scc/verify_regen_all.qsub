@@ -1,0 +1,51 @@
+#!/bin/bash -l
+
+#$ -P rise-grid
+#$ -N verify_regen
+#$ -j y
+#$ -pe omp 4
+#$ -l gpus=1
+#$ -l gpu_c=7.0
+#$ -l gpu_memory=16G
+#$ -l h_rt=3:00:00
+#$ -l mem_per_core=8G
+
+# Verify regeneration for EVERY noise type, not just audience.
+#
+# WHY. The streamed sweep's pairing with the six reported models rests on the claim that a
+# regenerated corpus is the same audio they were scored against. The sweep's own gate checked
+# ONE chunk (audience r0). Extending that claim to studio and white was inference -- same seed
+# scheme, same fingerprint, plus a synthetic-audio test that chunked generation equals monolithic
+# -- and inference is not what should be underneath a cross-model comparison, given
+# REPOSITORY_AUDIT.md records a real case of models being compared across different corpora.
+#
+# Each type regenerates one chunk, scores it with the FROZEN probe, and diffs against that
+# probe's committed per-window predictions. ~25 minutes total.
+
+set -euo pipefail
+
+v_repo="${NOISE_REPO:-$SGE_O_WORKDIR}"
+v_venv="${RISE_VENV:-$(dirname "$v_repo")/venv_mert}"
+v_data_root="${RISE_DATA_ROOT:?Submit with -v RISE_DATA_ROOT=...}"
+v_scratch="${RISE_NOISE_SCRATCH:-/project/rise-grid/$USER/verify_scratch}"
+
+if [ -n "${RISE_MODULES-python3/3.9.9}" ]; then
+    module load ${RISE_MODULES:-python3/3.9.9}
+fi
+. "$v_repo/scc/activate_venv.sh"
+rise_activate "$v_venv"
+cd "$v_repo"
+export RISE_DATA_ROOT="$v_data_root"
+export RISE_NOISE_ROOT="${RISE_NOISE_ROOT:-/projectnb/rise-grid/noise-sources}"
+export RISE_DEMAND_ROOT="${RISE_DEMAND_ROOT:-/project/rise-grid/maxliu2k/noise-sources/DEMAND}"
+
+rm -rf "$v_scratch"
+for noise_type in audience studio white; do
+    echo
+    echo "########## $noise_type ##########"
+    python -m instrument_robustness.verify_noise_regeneration \
+        --scratch "$v_scratch" --noise-type "$noise_type" --replicate 0
+done
+rm -rf "$v_scratch"
+echo
+echo "ALL NOISE TYPES VERIFIED"
