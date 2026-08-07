@@ -200,7 +200,7 @@ def figure_auc(plt, frames: dict[str, pd.DataFrame]) -> None:
 
 def markdown_tables(frames: dict[str, pd.DataFrame], missing: list[str]) -> None:
     """Print poster-ready tables. Missing models are stated, not omitted in silence."""
-    print("\n## Clean baseline and robustness AUC\n")
+    print("\n## Clean baseline and robustness AUC (dB-weighted mean retention)\n")
     print("| model | clean macro-F1 | " + " | ".join(
         f"AUC {t}" for t in NOISE_TYPES) + " |")
     print("|---" * (2 + len(NOISE_TYPES)) + "|")
