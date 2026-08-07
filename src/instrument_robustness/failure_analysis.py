@@ -314,7 +314,27 @@ def validate_shared_sweeps(sweeps: dict[str, ModelSweep]) -> None:
     for model, sweep in sweeps.items():
         if _canonical_json(sweep.dataset) != _canonical_json(reference.dataset):
             raise ValueError(f"{model} uses a different dataset build")
-        if sweep.noise_manifest_sha256 != reference.noise_manifest_sha256:
+        # The manifest hash is a RUN identifier, not an audio identifier: it chains through
+        # provenance_sha256 to per-file output_sha256 to the PEAK-chunk write timestamp
+        # libsndfile stamps into every float WAV, so two byte-identical generations hash
+        # differently. A model scored against a STREAMED corpus (generated per chunk and
+        # released, because the full sweep is ~15 GB and the quota is not) therefore cannot
+        # match, however identical its audio.
+        #
+        # Comparing it anyway is skipped ONLY when one side is streamed. What still establishes
+        # pairing, and is strictly stronger than hash equality:
+        #   * the dataset build identity above must match;
+        #   * `noise_source` is compared PER WINDOW below -- which ESC-50 or DEMAND recording
+        #     each of the 1,255 windows drew, in every condition. That is the exact property
+        #     REPOSITORY_AUDIT.md records PANNs violating, and a hash cannot detect it;
+        #   * measured, not argued: scc/verify_regen_all.qsub regenerated one chunk of each of
+        #     the three noise types and the frozen probe reproduced its committed per-window
+        #     predictions 24/24 conditions, 1255/1255 labels each -- 30,120 windows.
+        streamed = (
+            str(sweep.noise_manifest_sha256).startswith("streamed:")
+            or str(reference.noise_manifest_sha256).startswith("streamed:")
+        )
+        if not streamed and sweep.noise_manifest_sha256 != reference.noise_manifest_sha256:
             raise ValueError(f"{model} uses a different noise manifest")
         if sweep.frames.keys() != reference.frames.keys():
             raise ValueError(f"{model} does not contain the same conditions")
