@@ -227,8 +227,27 @@ def load_model_sweep(
         if not isinstance(current_dataset, dict):
             raise ValueError(f"{metric_path} is missing the dataset identity")
         current_dataset_json = _canonical_json(current_dataset)
-        current_manifest_sha = metrics.get("noise_manifest", {}).get("sha256")
+        current_manifest = metrics.get("noise_manifest", {}) or {}
+        current_manifest_sha = current_manifest.get("sha256")
         current_model_sha = metrics.get("model_sha256")
+        if current_manifest_sha is None and current_manifest.get("note"):
+            # STREAMED SWEEP. The corpus was generated one chunk at a time and released, so no
+            # single manifest exists and this check cannot be satisfied -- not because the audio
+            # differs, but because the hash is a RUN identifier: it chains through
+            # provenance_sha256 -> per-file output_sha256 -> the PEAK-chunk write timestamp that
+            # libsndfile stamps into every float WAV. Two byte-identical generations produce
+            # different manifest hashes, so this was always "one materialized corpus", never
+            # "the same audio".
+            #
+            # What stands in for it, and is strictly checkable: the dataset build identity below
+            # must still agree across every condition, tests/test_noise.py asserts a chunked grid
+            # is sample-identical to a monolithic one, and scc/mert_ft_noise.qsub gates the whole
+            # run on verify_noise_regeneration reproducing the frozen probe's committed
+            # predictions label-for-label before scoring anything.
+            #
+            # The sentinel is a distinct value rather than None so a model that MIXES streamed
+            # and materialized conditions still trips the consistency check below.
+            current_manifest_sha = f"streamed:{current_manifest['note']}"
         if not isinstance(current_manifest_sha, str) or not current_manifest_sha:
             raise ValueError(f"{metric_path} is missing the noise-manifest hash")
         if not isinstance(current_model_sha, str) or not current_model_sha:
