@@ -37,7 +37,7 @@ MODELS: dict[str, str] = {
     "svm": "SVM",
     "cnn": "CNN",
     "crnn": "CRNN",
-    "mert": "MERT",
+    "mert_ft": "MERT",
     "panns": "PANNs",
     "ast": "AST",
 }
@@ -75,11 +75,19 @@ def curve(frame: pd.DataFrame, noise_type: str, column: str) -> pd.DataFrame:
 
 
 def robustness_auc(snrs: np.ndarray, values: np.ndarray) -> float:
-    """dB-weighted mean of a curve, invariant to how densely the grid was sampled.
+    """dB-weighted mean of a RETENTION curve, invariant to how densely the grid was sampled.
+
+    Preconditions: `values` is retention (score / clean score), NOT absolute macro-F1. Callers
+    must pass the `macro_f1_retention` column.
 
     Uses the trapezoid rule over SNR and divides by the span, so adding levels where a model
-    happens to do well does not inflate the score. This mirrors robustness_curve.robustness_auc;
-    it is recomputed here only so the figure and the table cannot disagree about what was plotted.
+    happens to do well does not inflate the score.
+
+    THIS DOCSTRING USED TO LIE. It claimed to mirror robustness_curve.robustness_auc, which
+    divides by clean macro-F1 -- but every caller here passed the absolute `macro_f1` column, so
+    the tables and figures reported ABSOLUTE AUC while the equation and captions described
+    retention AUC. Two different quantities on different scales, under one name. Now retention
+    everywhere: a model with a high clean score no longer gets credit for it twice.
     """
     order = np.argsort(snrs)
     x, y = snrs[order], values[order]
@@ -169,7 +177,7 @@ def figure_auc(plt, frames: dict[str, pd.DataFrame]) -> None:
     for index, name in enumerate(names):
         heights = []
         for noise_type in NOISE_TYPES:
-            grouped = curve(frames[name], noise_type, "macro_f1")
+            grouped = curve(frames[name], noise_type, "macro_f1_retention")
             heights.append(
                 robustness_auc(grouped["snr_db"].to_numpy(), grouped["mean"].to_numpy())
                 if not grouped.empty else np.nan
@@ -177,7 +185,11 @@ def figure_auc(plt, frames: dict[str, pd.DataFrame]) -> None:
         axis.bar(positions + index * width - 0.4 + width / 2, heights, width * 0.92,
                  label=MODELS[name])
 
-    axis.axhline(CHANCE, color="0.4", ls=":", lw=1)
+    # NO CHANCE LINE HERE. CHANCE is a macro-F1 (1/12); these bars are RETENTION. Chance in
+    # retention terms is (1/12) / that model's clean macro-F1, which differs per model, so a
+    # single horizontal rule would be wrong for every bar but one. It stays on fig6's absolute
+    # row, where it means something.
+    axis.set_ylim(0, 1)
     axis.set_xticks(positions)
     axis.set_xticklabels([NOISE_LABEL.get(t, t) for t in NOISE_TYPES], fontsize=8)
     axis.set_ylabel("robustness AUC\n(dB-weighted mean macro-F1)")
@@ -196,7 +208,7 @@ def markdown_tables(frames: dict[str, pd.DataFrame], missing: list[str]) -> None
         clean = frame[~frame["noise_type"].isin(NOISE_TYPES)]["macro_f1"]
         cells = []
         for noise_type in NOISE_TYPES:
-            grouped = curve(frame, noise_type, "macro_f1")
+            grouped = curve(frame, noise_type, "macro_f1_retention")
             value = robustness_auc(grouped["snr_db"].to_numpy(), grouped["mean"].to_numpy())
             cells.append(f"{value:.4f}")
         baseline = f"{float(clean.iloc[0]):.4f}" if len(clean) else "?"

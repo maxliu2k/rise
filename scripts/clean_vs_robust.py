@@ -34,7 +34,7 @@ from instrument_robustness.config import TARGET_LABELS  # noqa: E402
 
 ARTIFACTS = ROOT / "artifacts"
 FIGURES = ROOT / "docs" / "figures"
-MODELS = ("svm", "cnn", "crnn", "mert", "panns", "ast")
+MODELS = ("svm", "cnn", "crnn", "mert_ft", "panns", "ast")
 
 
 def clean_errors_by_instrument() -> pd.Series:
