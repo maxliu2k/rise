@@ -157,7 +157,17 @@ def noise_source_lookup(
         return {}
     provenance_path = Path(noisy_dir) / NOISE_PROVENANCE_NAME
     if not provenance_path.is_file():
-        return {}
+        # A STREAMED sweep writes one provenance file per (noise_type, replicate) chunk under its
+        # own name, because a partial file must not be readable as canonical. Look there before
+        # giving up: returning {} would silently drop the noise_source column, and
+        # `noise_stats --cluster noise_source` would then degrade to the ungrouped case without
+        # anything saying so.
+        chunk_path = Path(noisy_dir) / (
+            f"noise_provenance_{condition.noise_type}_r{int(condition.replicate or 0)}.csv"
+        )
+        if not chunk_path.is_file():
+            return {}
+        provenance_path = chunk_path
     provenance = pd.read_csv(provenance_path)
     required = {"window_id", "noise_type", "snr_db", "noise_source"}
     if not required <= set(provenance.columns):
@@ -430,10 +440,22 @@ def run_noise_evaluation(
             "macro_f1": macro_f1,
             "config_fingerprint": config_fingerprint(),
             "dataset": manifest["dataset"],
-            "noise_manifest": {
-                "path": str((Path(noisy_dir) / NOISE_MANIFEST_NAME).resolve()),
-                "sha256": sha256_file(Path(noisy_dir) / NOISE_MANIFEST_NAME),
-            },
+            # A STREAMED sweep has no manifest by construction -- generate() refuses to write one
+            # for a partial run -- so record what actually identifies the corpus instead of
+            # crashing on a file that cannot exist. `dataset` above still carries the build
+            # identity, which is the property the manifest hash was standing in for.
+            "noise_manifest": (
+                {
+                    "path": str((Path(noisy_dir) / NOISE_MANIFEST_NAME).resolve()),
+                    "sha256": sha256_file(Path(noisy_dir) / NOISE_MANIFEST_NAME),
+                }
+                if require_complete_manifest
+                else {
+                    "path": None,
+                    "sha256": None,
+                    "note": "streamed sweep: corpus generated per chunk, no completion manifest",
+                }
+            ),
             "model_sha256": model_sha256,
             "score_type": score_type,
             # How concentrated the noise draw was: 1.0 means every window drew a distinct
