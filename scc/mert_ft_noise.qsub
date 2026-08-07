@@ -36,12 +36,23 @@ fi
 rise_activate "$ft_venv"
 cd "$ft_repo"
 export RISE_DATA_ROOT="$ft_data_root"
+# These MUST match launch_sweep.sh, which generated the corpus the six reported models were
+# scored against. DEMAND lives on /project with a capitalised name; guessing
+# /projectnb/.../demand cost a run that had already finished both audience chunks before the
+# studio chunk discovered the corpus was not there.
 export RISE_NOISE_ROOT="${RISE_NOISE_ROOT:-/projectnb/rise-grid/noise-sources}"
-export RISE_DEMAND_ROOT="${RISE_DEMAND_ROOT:-/projectnb/rise-grid/noise-sources/demand}"
+export RISE_DEMAND_ROOT="${RISE_DEMAND_ROOT:-/project/rise-grid/maxliu2k/noise-sources/DEMAND}"
 
 test -f "$RISE_DATA_ROOT/pipeline/windows.csv" || { echo "FATAL: no windows.csv" >&2; exit 1; }
 test -f "$ft_ckpt"     || { echo "FATAL: missing checkpoint $ft_ckpt" >&2; exit 1; }
 test -f "$ft_summary"  || { echo "FATAL: missing clean summary $ft_summary" >&2; exit 1; }
+# Both corpora, checked to a real file rather than a directory: the studio chunk is generated
+# LAST, so a missing DEMAND is otherwise discovered an hour into the run. Same probe
+# launch_sweep.sh uses.
+test -f "$RISE_NOISE_ROOT/ESC-50-master/meta/esc50.csv" \
+    || { echo "FATAL: no ESC-50 metadata under $RISE_NOISE_ROOT" >&2; exit 1; }
+test -f "$RISE_DEMAND_ROOT/DKITCHEN/ch01.wav" \
+    || { echo "FATAL: no DEMAND corpus at $RISE_DEMAND_ROOT (set RISE_DEMAND_ROOT)" >&2; exit 1; }
 
 echo "scratch    : $ft_scratch"
 echo "checkpoint : $ft_ckpt"
