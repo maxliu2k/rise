@@ -1,6 +1,19 @@
 # Changelog: `paper.tex` to `paper_revised.tex`
 
-`paper.tex` is the pasted LaTeX, verbatim and untouched. `paper_revised.tex` is that document
+> **STALE HEADER --- read this first.** `paper.tex` is no longer the original paste. On
+> 2026-08-09 it was replaced with a new canonical version authored from `paper_revised.tex`,
+> accepting some of the changes below, reverting others, and adding edits of its own. The
+> original paste survives only in git, at commit `f48924f`:
+> `git show f48924f:paper/paper.tex`.
+>
+> Sections 1--17 therefore describe how `paper_revised.tex` differs from a file that is no longer
+> on disk. They remain accurate as a record of that revision and as the rationale for each
+> change --- which is why the canonical version reverted some of them. Section 19 records what
+> the canonical version did.
+>
+> `paper_revised.tex` is now superseded and should probably be deleted.
+
+`paper.tex` was the pasted LaTeX, verbatim and untouched. `paper_revised.tex` is that document
 with the prose-draft improvements merged and the problems in `REVIEW.md` fixed.
 
 **Not compiled.** No TeX toolchain was available on this machine, so `paper_revised.tex` has not
@@ -15,6 +28,10 @@ diff -u paper/paper.tex paper/paper_revised.tex
 
 Legend: **[data]** verified against a committed artifact | **[prose]** taken from a pasted prose
 draft | **[fix]** corrects a defect in `REVIEW.md` | **[style]** no change in meaning.
+
+**Sections 1--17 are applied.** Section 18 is proposed and deliberately **not** applied --- it is
+kept here so the file records one state of `paper_revised.tex`, not a mixture of what is in it and
+what was suggested for it.
 
 ---
 
@@ -77,6 +94,25 @@ not the modeling), its "systems ... do not attribute" (the authors attribute), a
 | 5.4 | AST Input: "**Log-Mel**, 16 kHz" $\to$ "**Waveform**, 16 kHz; official extractor to log-Mel \textit{(pretrained on AudioSet)}" | [table image] The model receives audio and its own extractor produces log-Mel; the original conflated the two. |
 | 5.5 | PANNs Input: "Waveform, 32 kHz" $\to$ "Waveform, 32 kHz; CNN14 computes **64-band** log-Mel \textit{(pretrained on AudioSet)}" | [table image] **[data]** Verified: `pretrained_extractors.py:47-48`, `mel_bins=64, fmin=50, fmax=14000`. |
 
+### 5b. Table I, second pass --- layout
+
+The first pass (5.1--5.5) compiled badly: three Input cells wrapped to three lines each, so the
+pretrained rows rendered at roughly 3$\times$ the height of the scratch rows, and MERT's Training
+cell broke with "$5{\times}10^{-3}$ head" orphaned on a centered line of its own.
+
+| # | change | why |
+|---|---|---|
+| 5b.1 | **Sample rate promoted to its own column.** New `Rate` column, right-aligned: 22.05 / 22.05 / 22.05 / 24 / 16 / 32 kHz | The one field that varies simply was buried mid-sentence in the widest cell and forced the wrap. Pulling it out collapses every Input cell to one line, and makes the rate comparison scannable --- which matters, since `SR = 22050` is load-bearing (see 4.2). |
+| 5b.2 | Dropped the `\textit{(pretrained on ...)}` parentheticals added in 5.3--5.5 | Redundant three ways: the group header says "Pretrained backbones", and the Training column already reads "AudioSet init" / "CNN14, AudioSet init". Cost three lines for no information. MERT's distinct corpus is kept compactly as "MERT-v1-95M (music)", since music-vs-AudioSet is the contrast worth preserving. |
+| 5b.3 | All text columns left-aligned (`l`, `X`); `Rate` right-aligned (`r`) | Centered text in wrapped cells was most of the visual noise. |
+| 5b.4 | `\hline` $\to$ `booktabs` rules (`\toprule`, `\midrule`, `\bottomrule`, `\addlinespace`); added `\usepackage{booktabs}` | Standard for IEEE tables; the group headers now separate by space rather than by a doubled rule. |
+| 5b.5 | `\tabcolsep` 5pt $\to$ 4pt | Buys width for the new fifth column. |
+| 5b.6 | Sentence case in cells: "Scratch" $\to$ "scratch", "Fixed run" $\to$ "fixed run" | Consistency; these are fragments, not sentences. |
+
+Every row is now one line: six data rows plus two group headers, against roughly thirteen lines
+before. **Not verified by compilation** --- the column widths are estimates and the Training column
+is the one at risk, MERT's entry being the longest.
+
 **Verified unchanged:** MERT's loss is plain `nn.CrossEntropyLoss` (`train_mert_ft.py:154`), so
 Table I's "CE" for MERT against "weighted CE" for the others is correct, not an omission. **[data]**
 
@@ -116,7 +152,7 @@ Table I's "CE" for MERT against "weighted CE" for the others is correct, not an 
 |---|---|---|
 | 9.1 | Added an opening sentence: "Clean audio provided little separation among the systems." | **[prose]** |
 | 9.2 | "never differed by more than **0.002**" $\to$ "differed by no more than **0.0021**" | **[fix] P1-3.** The paper drew macro-F1 from the noise sweep's clean pass and accuracy from `test_summary.json`. Those disagree for SVM (0.9770 vs 0.9788) and PANNs (0.9868 vs 0.9885) --- three and two test windows flip between the two evaluation paths, same `model_sha256` on both sides. Retention denominators must come from the same path as the noisy scores, so the sweep is now the single source throughout. Under one source the largest gap is SVM's 0.00204. The prose's "0.0019" was true only of the other pairing. **[data]** |
-| 9.3 | Reordered the seed sentence to lead with the caveat: "Because SVM, AST, MERT, and PANNs were evaluated from single fitted runs, these small clean-score differences were not tested against training-seed variance; CNN and CRNN are five-seed soft-vote ensembles..." | **[prose]** The prose supplied the caveat the LaTeX stated the facts for but never drew. |
+| 9.3 | Cut the seed sentence to one clause: "Four of the six were evaluated from single fitted runs, so this ordering is not treated as an effect." 45 words $\to$ 18, and the $\pm$0.021 / $\pm$0.003 figures are dropped | [fix] The paper never ranks models on clean score --- its thesis is that clean performance does not predict robustness --- so a variance caveat defends against an inference it does not make. The facts are already in Table I ("5 seeds") and §II.C ("ensembled across 5 seeds (42--46)"), and "provided little separation" is functionally the caveat. Dropping $\pm$0.021 is a correctness gain, not just a cut: CNN's per-seed scores are [0.9251, 0.9731, 0.9727, 0.9700, 0.9693], so that spread is one outlier and the other four span 0.004. Published as-is it reads as instability that is not there. |
 
 **Verified unchanged:** 2.0-point span, 0.9708 (CNN) to 0.9908 (AST); AST accuracy 0.9912 (identical
 in both sources); CNN $0.962 \pm 0.021$; CRNN $0.973 \pm 0.003$. **[data]**
@@ -192,6 +228,7 @@ worst is french-horn); flute--oboe SVM white 0.342; AST/human $\rho = -0.6066$, 
 | # | change | why |
 |---|---|---|
 | 15.1 | "This issue was explored by evaluating model performance when learning repetition, but only achieved $\sim$20\% accuracy on clean audio. Given this finding, this confound seemed unlikely but its possibility could not be ruled out." $\to$ "This was probed directly: loop period alone predicts instrument at 0.184 balanced accuracy against a chance level of 0.083, and the energy envelope alone at 0.419, so the shortcut is available, but a trained model's misclassifications favour period-matched classes no more often than a five-seed baseline (0.4538 against 0.4592, range 0.3844--0.5254). The confound therefore appears unused rather than absent, and that test rests on 26 errors, so it rules out only a large effect." | **[fix] P1-8. [data]** Three problems. (a) The number is **0.184**, the test score; 0.20 was the *train* figure. (b) "only achieved" inverts the meaning --- chance is 0.083, so 0.184 is 2.2$\times$ chance and the period *does* carry class information. (c) The paper cited the weakest of three probes and omitted that the energy envelope alone reaches **0.419**. The reassurance actually rests on a probe the paper never mentioned. Sources: `outputs/probes/envelope_probe.json` and `period_error_probe.json`, both **restored from git history** (`3229b5f`, `c4c33d5`) --- they had been deleted from the working tree, so the claim had no live source. |
+| 15.1b | Compressed 15.1 from 99 words to 66: dropped the envelope probe's 0.419, dropped the baseline range 0.3844--0.5254, and replaced them with the metric's null value (0.5) so the two remaining scores are interpretable without it | [style] The claim is unchanged --- available, unused, underpowered --- and every surviving number is still sourced. `period_rank`'s docstring (`period_error_probe.py:89`) states 0.5 is the no-effect value, which "0.4538 against 0.4592" alone did not convey. **[data]** |
 | 15.2 | "Third, only two noise realizations were generated" $\to$ "Third, **because of time and compute constraints** only two noise realizations were generated" | **[prose]** Adds the reason. The prose's second half ("reliable information about variability or uncertainty is inadequate") was **not** taken --- garbled; the LaTeX's "giving a sensitivity check but not a reliable variance estimate" is kept. |
 | 15.3 | "making **reliable,** direct comparison of noise loudness unattainable" $\to$ "making direct comparison..." | [style] Redundant with "unattainable". |
 | 15.4 | Removed a double space after "could not be ruled out." | [style] |
@@ -231,11 +268,182 @@ untouched. Note that 3.1 makes this list order-independent for the first time.
 
 ---
 
+## 18. PROPOSED --- not applied to `paper_revised.tex`
+
+Everything in sections 1--17 is **in** the file. Everything below is **not**. Nothing here has
+been written to `paper_revised.tex`; the abstract there still reads as documented in section 2.
+
+### 18a. Abstract, second revision
+
+Four substantive proposals and three tightenings, raised against the compiled abstract.
+
+| # | change | why |
+|---|---|---|
+| 18a.1 | Add a gap statement: "...yet robustness is rarely compared across model families." | **Substantive.** The abstract never says why the work was needed. The earlier LaTeX draft carried this sentence and the full draft dropped it; it is what makes the paper a contribution rather than a measurement. $\approx$8 words. |
+| 18a.2 | Replace the six enumerated clean scores with a range: "Clean macro-F1 spanned only 0.971 to 0.991 across the six." | **Substantive.** The abstract spends $\approx$30 words listing AST 0.991 / PANNs 0.989 / MERT 0.980 / SVM 0.979 / CRNN 0.974 / CNN 0.971, then says in the next clause that all six fall within two points, and concludes that clean macro-F1 predicts nothing. Foregrounding numbers the paper declares uninformative works against its own thesis. Saves $\approx$25 words. |
+| 18a.3 | Add the aggregate result: "the models retained 26--64\% of their clean macro-F1 under white noise and 65--79\% under human non-speech; the ranges do not overlap, so no choice of model compensated for the change in noise category." | **Substantive. [data]** Currently the abstract's only evidence is one model at one SNR (SVM at 20 dB). The retention-AUC ranges are an integral over all eight SNRs and are the strongest quantitative claim in the paper. Verified: white 0.259--0.636, human 0.649--0.791, non-overlapping. $\approx$35 words. |
+| 18a.4 | Add: "AST was the most robust under all three categories and the only model to hold its rank across them." | **Substantive. [data]** A reader currently finishes the abstract knowing that clean scores do not predict robustness but not which model won. Both halves verified --- AST is highest in all three AUC columns, and rank-holding was checked for all six. $\approx$18 words. |
+| 18a.5 | "may **fail or lose** substantial accuracy" $\to$ "may lose substantial accuracy" | [style] Failing is losing accuracy; the pair is redundant. |
+| 18a.6 | "scored on identical mixtures, **regenerated from a fixed seed and verified by exact reproduction of committed per-window predictions**, enabling paired comparison" $\to$ "scored on identical mixtures, verified by exact reproduction of committed predictions, so every comparison is paired" | [style] 27 words $\to$ 18 for a mechanism that now lives in §II.D (change 7.3). The claim is unchanged; only the abstract's share of the explanation shrinks. |
+| 18a.7 | "model ranking **inverted**" $\to$ "reordered" | [fix] One model moving fourth to sixth is a reorder. "Inverted" overstates it, and the sentence that follows describes exactly one model's move. |
+
+Net effect is close to word-neutral: 18a.2 and 18a.6 pay for 18a.1, 18a.3, and 18a.4.
+
+Full proposed text:
+
+> Instrument classification underpins Music Information Retrieval (MIR) infrastructure and
+> supports applications including musicology, audio editing, and transcription. Deep learning
+> models that perform well on clean recordings may lose substantial accuracy under artificial and
+> real-world noise, yet robustness is rarely compared across model families. This work benchmarks
+> six instrument classification models---three trained from scratch (SVM, CNN, CRNN) and three
+> pretrained (AST, MERT, and PANNs)---on 12 orchestral instruments from the Philharmonia Orchestra
+> Sound Samples dataset, under white (Gaussian), human non-speech (ESC-50), and environmental
+> (DEMAND) noise at SNRs from 50 dB to $-$10 dB. All six were scored on identical mixtures,
+> verified by exact reproduction of committed predictions, so every comparison is paired.
+>
+> Clean macro-F1 spanned only 0.971 to 0.991 across the six, but robustness diverged sharply.
+> Averaged over the SNR range, the models retained 26--64\% of their clean macro-F1 under white
+> noise and 65--79\% under human non-speech; the ranges do not overlap, so no choice of model
+> compensated for the change in noise category. At 20 dB the SVM retained 10.4\% under white noise
+> against 68.0\% under human non-speech, falling from fourth on clean audio to last. AST was the
+> most robust under all three categories and the only model to hold its rank across them. Clean
+> macro-F1 is therefore not indicative of noise robustness, and degradation depends on noise
+> category, not severity alone.
+
+### 18b. Limitations, tiling paragraph --- readability alternative
+
+Change 15.1b compressed this to 66 words and the compressed form proved hard to read: "period-matched
+errors score 0.4538" carries no meaning to a reader who does not already know what the probe was.
+The alternative spends words on the mechanism instead of the numbers, at $\approx$78 words:
+
+> 97.3\% of recordings were under three seconds and were tiled to fill the window, so the loop rate
+> encodes note length, which itself correlates with instrument. That cue is real: a classifier given
+> only the loop period reaches 0.184 balanced accuracy against 0.083 for chance. The models do not
+> appear to use it, however --- a CRNN that can read timing confuses similar-length instruments no
+> more often than a CNN that cannot. The check rests on 26 errors, so it rules out only a large
+> effect.
+
+Recommended over the 66-word form. Costs $\approx$12 words against what is in the file now, and the
+50 dB observation (10.4) and the bitrate paragraph (4.2) are both easier places to find them.
+
+---
+
+## 19. AUDIT --- which of sections 1--17 survive in the canonical `paper.tex`
+
+Checked by marker string against `paper/paper.tex` as of 2026-08-09. Method: 56 of the numbered
+changes carry a distinctive phrase that can be searched for; those were checked mechanically. The
+remainder are §17 bibliography style items (quotes, dashes, terminal periods), confirmed present by
+inspection. **41 survived, 15 were reverted.**
+
+### Reverted --- these entries describe `paper_revised.tex` only
+
+| # | change | note |
+|---|---|---|
+| 1.1 | header comment block | Canonical starts at `\documentclass`. |
+| 3.2 | "It is therefore pertinent to establish..." | The prose draft's motivating sentence for contribution (iii); dropped again. |
+| 5b.1--5b.6 | **entire Table I layout redesign** | Rate column, booktabs, left alignment, sentence case --- all reverted to the `\hline` + centered + `\newline` form. The wrapping and row-height problem this fixed is back. Possibly an unintended paste from an older state rather than a decision. |
+| 6.1 | "An RBF kernel was selected by validation macro-F1." | Lost with the per-model paragraph (19.2 below). |
+| 6.2 | PANNs 64-band **in prose** | Still present in Table I (5.5 survived). |
+| 6.3 | CNN "Standardized 128-band log-Mel" | Lost with the per-model paragraph. |
+| 8.2 | `Benjamini--Hochberg` en dash | The added space survived; the dash reverted to a hyphen. |
+| 9.1 | "Clean audio provided little separation among the systems" | |
+| 10.1 | white-noise AUC ordering (0.636 / 0.573 / 0.259) | |
+| 10.2 | 20 dB human and environmental numbers | |
+| 10.4 | 50 dB observation | Was flagged as optional. |
+| 11.1 | "every window was verified to have been scored against the same noise realization" | |
+| 11.4 | sign tests reported in Results | Removed from Methods too, so the paper stays internally consistent --- see 19.4. |
+| 15.1c | "That test rests on 26 errors, so it rules out only a large effect." | **The one revert with a cost.** Limitations now asserts the tiling shortcut "appears unused" with no acknowledgement that the test is underpowered. Recommend restoring. |
+
+### Survived
+
+1.2--1.7, 2.1--2.4, 3.1, 3.3, 4.1--4.4, 5.1--5.5, 6.4, 7.1--7.4, 8.1, 8.3, 9.2, 9.3, 10.3,
+10.5, 11.2, 11.3, 12.1--12.5, 13.1, 13.2, 14.1--14.7, 15.1, 15.1b, 15.2--15.4, 16.1--16.7,
+17.1--17.5.
+
+Every **[fix]** tagged as correcting a wrong claim survived: byte-identical (2.2), the frozen
+confound (3.3), the 3.6-point scoping (10.5), the 0.0021 gap (9.2), 17-of-18 (12.3, 16.5),
+"degraded fastest" (16.3), and the Fig. 1 caption (13.1).
+
+### 19b. Changes the canonical version made that sections 1--17 do not cover
+
+| # | change | note |
+|---|---|---|
+| 19.1 | **Reference b11 (Gonzales) deleted**, with the sentence "Elsewhere, comparisons similarly span only a single model family". b12--b17 renumbered to b11--b16 | Renumbering verified consistent: 16 `\cite` keys, 16 `\bibitem`s, all resolve. "Model span is narrow" now rests on Deng et al. alone. |
+| 19.2 | **Per-model paragraph replaced** by three summary sentences | Drops CNN $\approx$111k / CRNN $\approx$294k parameters, GRU width, the 2048-d PANNs embedding, MERT's learned layer weighting, and the AST checkpoint ID. Nothing in the paper now states the scratch models' size or which AST checkpoint was used. |
+| 19.3 | Intro paragraphs 1--2 merged and compressed | |
+| 19.4 | Sign tests and the exploratory acoustic-summaries analysis removed from Methods; "No multiplicity correction was applied to the bootstrap intervals" added; equation (6) deleted | Internally consistent --- both are now absent from Methods *and* Results. The added sentence is an honest replacement. |
+| 19.5 | **Table II restructured** with a stacked `\multicolumn{3}{c}{Retention AUC}` header and `\cline{3-5}`, and moved into §III.A | Better than the flat header it replaced. |
+| 19.6 | §III.C reports "only two of four intervals excluded zero" (recorded noise) instead of "four of the six" (all) | **[data]** Verified correct: human r0 yes, r1 no; environmental r0 yes, r1 no. |
+| 19.7 | Figure captions rewritten; `fig:recall_loss` scaled to `0.93\columnwidth`; `\FloatBarrier` removed; `\ref{fig:distance_confusion}` split into A and B | |
+| 19.8 | "pre-registered test" $\to$ "pre-defined test" | Arguably more accurate. |
+
+### 19c. Defects introduced by the canonical version --- not yet fixed
+
+1. **Duplicated sentence, §II.C:** "CNN and CRNN predictions were ensembled across five seeds."
+   then "...across 5 seeds (42--46)." Same paragraph.
+2. **Duplicated claim, §II.E2:** the Spearman correlation is described twice.
+3. **"Spearmean"** --- typo.
+4. **"The difficulties of real-world recordings was also acknowledged"** --- should be *were*;
+   also a missing space in `time\cite{b5}`.
+5. **"($\sim$Early 2000s)"** renders as "~Early 2000s", and `b3` is dated 1999.
+6. **"these mean vectors"** --- antecedent is now "centroid".
+7. **"Table I summarizes"** --- hardcoded; everything else uses `\ref{tab:model_configs}`.
+8. Double space before "Statistical significance"; curly apostrophe in "model's"; literal em
+   dashes in Limitations.
+
+---
+
+## 20. Edits to the canonical `paper.tex` after it became canonical
+
+| # | change | why |
+|---|---|---|
+| 20.1 | Author block: dropped the `1\textsuperscript{st}` / `2\textsuperscript{nd}` ordinals; added `\textsuperscript{*}` to **Allan Luo Yu and Max Liu only**; added `\thanks{\textsuperscript{*}These authors contributed equally to this work.}` | Resolves the open question flagged in 1.7 and in "Deliberately NOT changed". The ordinals are IEEE **template placeholders** --- the conference template ships author blocks reading "1st Given Name Surname" --- not authorship notation, so two authors marked "1st" reads as a typo rather than as co-first authorship. Equal contribution is conventionally marked with a shared symbol and a footnote; IEEE has no dedicated markup for it. `\thanks` is usable in conference mode here because `\IEEEoverridecommandlockouts` is already set (the line whose explanatory comment 1.4 removed). Gavin Hu is unmarked, per the authors. |
+
+| 20.2 | Affiliation lines: "Boulder, USA" $\to$ "Boulder, CO, USA"; "Sugar Land, USA" $\to$ "Sugar Land, TX, USA"; "Southborough, USA" $\to$ "Southborough, MA, USA". Also "St. Marks School" $\to$ "St. Mark's School" | The IEEE template placeholder reads "City, Country", which is where the original form came from, but published IEEE papers conventionally give City, State, Country for US affiliations. Southborough is the case that needs it --- there is a Southborough in Massachusetts and one in Kent, England. **States inferred from the school names and not confirmed by the authors:** Fairview High School (Boulder, Colorado), Clements High School (Sugar Land, Texas), St. Mark's School (Southborough, Massachusetts). Applied to both `paper.tex` and `paper_revised.tex`. |
+
+**Unverified:** `\thanks` inside a three-block `\author` has not been compiled. If it renders in the
+wrong place, the fallback is a manual `\footnotetext` after `\maketitle`. Also worth confirming
+against URTC's own author-formatting instructions, which override general IEEE convention.
+
+---
+
+## 21. `paper_revised.tex` rebuilt from canonical, with all proposed changes applied
+
+`paper_revised.tex` was overwritten with a byte-identical copy of the canonical `paper.tex`
+(including 20.1), then every outstanding proposal in this file was applied to it. It is once
+again a *candidate* revision of the canonical paper, not a stale ancestor of it.
+
+**Applied:**
+
+| source | what |
+|---|---|
+| **18a.1--18a.7** | Abstract, second revision --- gap statement added; six enumerated clean scores replaced by the 0.971--0.991 range; the non-overlapping 26--64\% / 65--79\% retention ranges added; AST named as most robust and sole rank-holder; "fail or lose" tightened; the verification clause shortened; "inverted" $\to$ "falling". |
+| **18b** | Limitations tiling paragraph replaced with the 78-word mechanism-first version, which also restores the 26-errors caveat lost at 19a/15.1c. |
+| **19c.1--19c.8** | All eight defects: the duplicated ensemble sentence, the duplicated Spearman description, "Spearmean", "difficulties\ldots was" $\to$ "were" plus the missing space before `\cite{b5}`, "($\sim$Early 2000s)" $\to$ "(from the late 1990s)" (b3 is dated 1999), the dangling "these mean vectors", hardcoded "Table I" $\to$ `\ref{tab:model_configs}`, and the stray double space, curly apostrophe, and literal em dashes. |
+| **5b.1--5b.6** | Table I layout redesign restored --- `Rate` column, booktabs rules, left alignment, sentence case, `\tabcolsep` 4pt --- plus `\usepackage{booktabs}`. Restored because 19a flagged the revert as probably an unintended paste rather than a decision, and because the wrapping it fixes is what prompted the request in the first place. |
+| **8.2** | `Benjamini--Hochberg` en dash, folded into the §II.E2 rewrite. |
+
+**Verified after applying:** 16 citations, 16 `\bibitem`s, none uncited and none undefined; no
+dangling or broken `\ref`; none of the eight defect markers still present. Body length 3158 $\to$
+**3153 words**, a net change of $-5$.
+
+**Deliberately not restored** --- these were length decisions, not defects: 3.2 (the "It is
+therefore pertinent" sentence), 9.1 ("provided little separation"), 10.1 (white AUC ordering),
+10.2 (20 dB human and environmental numbers), 10.4 (the 50 dB observation), 11.1 (the
+noise-realization verification clause), 11.4 (sign tests), and 6.1--6.3, which cannot return
+without also restoring the per-model paragraph deleted at 19.2.
+
+**Still not compiled.** Table I is the risk: the new fifth column plus MERT's long Training cell
+is the combination most likely to overrun `\textwidth`. `\thanks` inside a three-block `\author`
+(20.1) is also unverified.
+
+---
+
 ## Deliberately NOT changed
 
 | item | why |
 |---|---|
-| Two authors both numbered "1st" | Could be intended co-first authorship. Flagged with a TeX comment (1.7); only the authors can decide. |
+| ~~Two authors both numbered "1st"~~ | **Resolved --- see 20.1.** Confirmed as co-first authorship for the first two authors and re-marked with the conventional symbol-plus-footnote. |
 | `\begin{table}[H]` and `\begin{figure}[H]` | `[H]` cannot break across columns in a two-column layout and will overfull rather than move. Changing it reflows the whole document, and I cannot compile to check. Still pinned in `REVIEW.md`. |
 | "double bass" in §II.A prose vs `double-bass` as the class label | The prose spelling is correct English; the hyphen is a label convention. Left alone. |
 | Limitations gains no training-seed sentence | The five-seed ensembles are the intended design, disclosed in Table I and §III.A. P2-1 was withdrawn. |
