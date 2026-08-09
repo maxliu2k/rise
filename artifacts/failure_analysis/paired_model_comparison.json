@@ -1,0 +1,174 @@
+{
+  "state": "complete",
+  "comparison": "cnn minus crnn",
+  "sign_convention": "positive favours cnn",
+  "snr_db": 20,
+  "cluster_unit": "pitch_group",
+  "n_boot": 2000,
+  "seed": 0,
+  "declared_family": [
+    "white_20_r0",
+    "white_20_r1",
+    "audience_20_r0",
+    "audience_20_r1",
+    "studio_20_r0",
+    "studio_20_r1"
+  ],
+  "n_intervals_excluding_zero": 4,
+  "n_sign_tests_rejected_after_bh": 0,
+  "benjamini_hochberg": {
+    "family": "cnn vs crnn exact cluster sign tests at 20 dB, 3 noise categories x 2 replicates",
+    "method": "benjamini_hochberg_fdr",
+    "alpha": 0.05,
+    "n_comparisons": 6,
+    "n_rejected": 0,
+    "results": [
+      {
+        "label": "studio_20_r1",
+        "p_value": 0.12991792302255253,
+        "rank": 1,
+        "critical_value": 0.008333333333333333,
+        "q_value": 0.4650057120097818,
+        "rejected": false
+      },
+      {
+        "label": "studio_20_r0",
+        "p_value": 0.1550019040032606,
+        "rank": 2,
+        "critical_value": 0.016666666666666666,
+        "q_value": 0.4650057120097818,
+        "rejected": false
+      },
+      {
+        "label": "audience_20_r0",
+        "p_value": 0.2892437471090205,
+        "rank": 3,
+        "critical_value": 0.025000000000000005,
+        "q_value": 0.578487494218041,
+        "rejected": false
+      },
+      {
+        "label": "white_20_r0",
+        "p_value": 0.5600646295802106,
+        "rank": 4,
+        "critical_value": 0.03333333333333333,
+        "q_value": 0.8400969443703159,
+        "rejected": false
+      },
+      {
+        "label": "audience_20_r1",
+        "p_value": 0.7877061896700431,
+        "rank": 5,
+        "critical_value": 0.041666666666666664,
+        "q_value": 0.887724827340783,
+        "rejected": false
+      },
+      {
+        "label": "white_20_r1",
+        "p_value": 0.887724827340783,
+        "rank": 6,
+        "critical_value": 0.05000000000000001,
+        "q_value": 0.887724827340783,
+        "rejected": false
+      }
+    ]
+  },
+  "dataset": {
+    "config_fingerprint": {
+      "archive_base": "https://archive.org/download/philharmonicorchestrasamples",
+      "articulations": {
+        "bassoon": [
+          "normal"
+        ],
+        "cello": [
+          "arco-normal"
+        ],
+        "clarinet": [
+          "normal"
+        ],
+        "double-bass": [
+          "arco-normal"
+        ],
+        "flute": [
+          "normal"
+        ],
+        "french-horn": [
+          "normal"
+        ],
+        "oboe": [
+          "normal"
+        ],
+        "trombone": [
+          "normal"
+        ],
+        "trumpet": [
+          "normal"
+        ],
+        "tuba": [
+          "normal"
+        ],
+        "viola": [
+          "arco-normal"
+        ],
+        "violin": [
+          "arco-normal"
+        ]
+      },
+      "excluded_conflicting_label_paths": [
+        "cello/Ds5/cello_Ds5_05_forte_arco-normal.mp3",
+        "french-horn/E2/french-horn_E2_1_fortissimo_normal.mp3",
+        "oboe/E6/oboe_E6_15_mezzo-forte_normal.mp3",
+        "viola/G6/viola_G6_05_fortissimo_arco-normal.mp3"
+      ],
+      "fingerprint_version": 2,
+      "hop_length": 512,
+      "hop_s": 3.0,
+      "labels": [
+        "bassoon",
+        "cello",
+        "clarinet",
+        "double-bass",
+        "flute",
+        "french-horn",
+        "oboe",
+        "trombone",
+        "trumpet",
+        "tuba",
+        "viola",
+        "violin"
+      ],
+      "logmel_standardization": "per_mel_bin_train",
+      "logmel_top_db": null,
+      "max_windows_per_source": 1,
+      "min_trim_s": 0.1,
+      "min_window_content_s": 0.5,
+      "n_fft": 2048,
+      "n_frames": 130,
+      "n_mels": 128,
+      "n_mfcc": 20,
+      "short_window_policy": "tile",
+      "split_fracs": [
+        0.7,
+        0.15,
+        0.15
+      ],
+      "split_group_fields": [
+        "label",
+        "note"
+      ],
+      "split_policy": "label_note_pitch_group",
+      "split_seed": 0,
+      "sr": 22050,
+      "stft_pad_mode": "reflect",
+      "svm_standardization": "per_feature_train",
+      "target_rms": 0.1,
+      "trim_top_db": 30,
+      "waveform_subtype": "PCM_16",
+      "window_s": 3.0
+    },
+    "dataset_fingerprint": "97b1cdd2936b81c8c4d8728ef5243f174267b7df800b7e5d01568d45ef9ce3cf",
+    "manifest_sha256": "83b0025c250f1c295a835e4c37e3e3deb0cc07a93020c0723202a374308a08b5",
+    "windows_audio_inventory_sha256": "105707181137f7a6124af67eaca0658f8b26e192910909524a8c9f7148cb3b2a",
+    "windows_csv_sha256": "7574909e419c753b3c38add9c61958660163bbf1c08b2dd1fa067a498e0ecfb1"
+  }
+}
