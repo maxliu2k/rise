@@ -13,6 +13,50 @@ Nothing here is fixed yet.
 
 ## P1 --- wrong or contradicted by the data
 
+### P1-10 --- the Discussion's PANNs claim is contradicted by Table II
+> §V: "AST and MERT may have benefited from representations learned through large-scale audio
+> pretraining, but **PANNs' weaker white-noise performance shows that pretraining alone does not
+> guarantee robustness**."
+
+Retention AUC, grouped:
+
+| | white | human | environ. |
+|---|---|---|---|
+| SVM (scratch) | 0.259 | 0.649 | 0.578 |
+| CRNN (scratch) | 0.330 | 0.655 | 0.515 |
+| CNN (scratch) | 0.357 | 0.653 | 0.505 |
+| **PANNs** (pretrained) | **0.404** | 0.778 | 0.726 |
+| MERT (pretrained) | 0.573 | 0.755 | 0.686 |
+| AST (pretrained) | 0.636 | 0.791 | 0.753 |
+
+**In all three noise categories the three pretrained models occupy ranks 1--3, and the three
+scratch-trained models ranks 4--6.** The margin never closes: white 0.404 vs 0.357, human 0.755 vs
+0.655, environmental 0.686 vs 0.578.
+
+| | rank 1 | 2 | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|---|---|
+| white | AST .636 | MERT .573 | PANNs .404 | CNN .357 | CRNN .330 | SVM .259 |
+| human | AST .791 | PANNs .778 | MERT .755 | CRNN .655 | CNN .653 | SVM .649 |
+| environ. | AST .753 | PANNs .726 | MERT .686 | SVM .578 | CRNN .515 | CNN .505 |
+
+PANNs is **third** under white noise --- last among the pretrained models, but ahead of every model
+that was not pretrained. Its "weakness" is relative to AST and MERT --- two *other* pretrained
+models --- so it is evidence about *which* pretraining corpus and architecture help, not about
+whether pretraining helps at all.
+
+As written the sentence asserts the opposite of what the paper's own table shows, in the section a
+reviewer reads for judgment. It also undercuts a clean result the paper never states: **the
+pretrained/scratch split is perfect across all three categories.**
+
+Proposed: "...but PANNs trailed both under white noise, so the size of the benefit depends on the
+pretraining corpus and architecture rather than on pretraining alone. The split was nonetheless
+consistent: every pretrained model retained more than every model trained from scratch, in all
+three noise categories."
+
+Note this does not contradict Deng et al.\ --- they found pretraining does not *automatically*
+confer robustness against effects such as filtering and reverberation, which is a different
+perturbation class, as the Introduction already says.
+
 ### P1-1 --- "byte-identical mixtures" is false
 > Abstract: "All six models were scored on byte-identical mixtures, enabling paired comparison."
 
