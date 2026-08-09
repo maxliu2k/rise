@@ -1,0 +1,44 @@
+{
+  "fingerprint": {
+    "sr": 22050,
+    "clip_seconds": 3.0,
+    "max_chunks_per_file": 1,
+    "trim_top_db": 30,
+    "n_mels": 128,
+    "n_fft": 2048,
+    "hop_length": 512,
+    "classes": [
+      "bassoon",
+      "cello",
+      "clarinet",
+      "double-bass",
+      "flute",
+      "french-horn",
+      "oboe",
+      "trombone",
+      "trumpet",
+      "tuba",
+      "viola",
+      "violin"
+    ]
+  },
+  "chance": 0.08333333333333333,
+  "n_train": 5788,
+  "n_test": 1284,
+  "period_vs_source_length_r": 0.9142246308620293,
+  "source_length_ceiling_train": 0.19769815991934794,
+  "results": {
+    "envelope": {
+      "test": 0.4192113607280525,
+      "train": 0.47884604902607736
+    },
+    "autocorr": {
+      "test": 0.37814054225875077,
+      "train": 0.4331223416923102
+    },
+    "period_only": {
+      "test": 0.1841870529860672,
+      "train": 0.20169226297479367
+    }
+  }
+}
