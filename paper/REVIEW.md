@@ -7,21 +7,30 @@ Checked against the repo at `b519fde`: `artifacts/<model>/noise/noise_sweep_summ
 Severity: **P1** = wrong, or contradicted by our own artifacts. **P2** = unsupported as
 phrased, internally inconsistent, or unreproducible. **P3** = cosmetic.
 
-Nothing here is fixed yet.
+Four findings are now resolved --- **P1-3**, **P1-4**, **P1-8**, **P1-9**. Each is retitled in
+place with the resolution first and the original reasoning kept beneath it, so nothing is lost and
+no closed item reads as open. Everything else is still open.
 
 ---
 
 ## PENDING --- before anyone follows the repo link
 
-The paper now carries `https://github.com/maxliu2k/rise` in a first-page `\thanks`. Three things
-were knowingly deferred rather than resolved, and all three are cheap:
+The paper now carries `https://github.com/maxliu2k/rise` in a first-page `\thanks`.
 
-1. **Confirm URTC is not double-blind.** The URL contains the author's name. If the venue blinds
-   submissions, this deanonymizes; use an anonymized mirror or hold the link for camera-ready.
+1. ~~**Confirm URTC is not double-blind.**~~ **CHECKED --- no anonymization requirement.** The
+   full text of `urtc.mit.edu/paper_submission_2025.pdf` and the IEEE Boston call for submissions
+   were extracted and searched: the strings "blind" and "anonymous" do not appear in either. The
+   review process is described only as "All papers will be peer-reviewed by faculty, graduate
+   students, and industry professionals." Formatting instructions cover length (5 pages), font
+   (10 pt minimum), figures and captions, and plagiarism screening --- nothing about removing
+   author identification. *Caveat: absence of an instruction is not the same as a stated policy,
+   and CMT can be configured for blind review independently of the guidelines. But the
+   authoritative document does not ask for anonymization, and past URTC proceedings on IEEE
+   Xplore carry author names.*
 2. **Confirm the repository is public.** A dead link is worse than none.
 3. **Tidy what the link lands on.** Sixteen markdown files are exposed, several of them internal
-   critique --- `paper/REVIEW.md` ("Pinned problems in the paper", P1-1 through P1-10, fixes not
-   marked resolved), `paper/CHANGELOG.md` §19c ("Defects introduced by the canonical version"),
+   critique --- `paper/REVIEW.md` ("Pinned problems in the paper", P1-1 through P1-10, four marked
+   resolved and the rest open), `paper/CHANGELOG.md` §19c ("Defects introduced by the canonical version"),
    `docs/POSTER_REVIEW.md`, `docs/REPOSITORY_AUDIT.md` (HIGH-flagged validity risks), and
    `docs/AUDIT_CHECKLIST.md` (open 🟡 items). None of it is dishonest and the transparency is a
    genuine strength, but a reviewer skimming finds a list of the paper's weaknesses without the
@@ -117,7 +126,41 @@ Measured over all 144 model x category x SNR conditions:
 points, was small relative to the 61.9-point maximum separation between models." Scoping it to
 20 dB makes the number correct. Take the prose sentence.
 
-### P1-3 --- Table II's clean column and the models' own test evaluations disagree for SVM and PANNs
+### P1-3 --- RESOLVED. Known platform variance, already bounded by a runtime guard
+**Never a bug, and never undocumented.** The repo already names this exact phenomenon:
+`src/instrument_robustness/noise_eval_common.py` defines `CLEAN_PARITY_TOLERANCE = 2e-3` with the
+comment
+
+> "Handcrafted spectral features can move a borderline SVM prediction across platforms even when
+> package versions and the feature path match. This still rejects material drift while allowing
+> the measured macOS-to-SCC clean difference (0.001020 macro-F1)."
+
+`assert_clean_parity` enforces that tolerance on **every** sweep, comparing the sweep's clean pass
+against the model's official one-time evaluation, and it fails closed: a missing official macro-F1
+or a missing example count raises rather than skipping the gate, and the example counts must match
+before the scores are even compared. Measured, from each model's `test_summary.json` against its
+`noise/metrics_clean.json`:
+
+| model | official | sweep | diff | within 2e-3 |
+|---|---|---|---|---|
+| SVM | 0.97703 | 0.97883 | 0.00180 | yes |
+| CNN | 0.97076 | 0.97076 | 0.00000 | yes |
+| CRNN | 0.97380 | 0.97380 | 0.00000 | yes |
+| MERT | 0.97978 | 0.97978 | 0.00000 | yes |
+| PANNs | 0.98680 | 0.98853 | 0.00173 | yes |
+| AST | 0.99083 | 0.99083 | 0.00000 | yes |
+
+Both non-zero differences are inside the tolerance, so the gate passed. Four models match exactly
+--- those are the ones whose official evaluation ran on the same platform as the sweep.
+
+**Conclusion: this is platform-level floating-point variation in the feature path, bounded and
+guarded --- not a stale artifact and not a scoring error.** The paper's decision to cite one
+source (the sweep) throughout therefore remains correct, and needs no further defence. Nothing to
+fix; recorded so the question is not reopened.
+
+*Original finding, for the record:*
+
+### P1-3 (superseded above) --- Table II's clean column and the models' own test evaluations disagree for SVM and PANNs
 Two independent clean evaluations exist per model, and the paper quotes both in one paragraph.
 
 | model | `test_summary.json` macro-F1 | sweep `metrics_clean.json` | paper Table II | correct windows: official vs sweep |
@@ -270,7 +313,33 @@ under noise, which is exactly where the shortcut might matter."
 
 Same class as **P1-4**: a number in the paper with no artifact behind it.
 
-### P1-9 --- Figure 1 has no generator in the repository
+### P1-9 --- RESOLVED. Figure 1 now regenerates
+`scripts/fig6b_retention_row.py` gained a `VARIANTS` table and produces all three retention
+layouts, including the one the paper includes:
+
+```bash
+python scripts/fig6b_retention_row.py --variant compact
+```
+
+`fig6b_retention_row` (9.23 x 3.07 in, spread bands), `fig6c_retention_col` (3.42 x 4.76 in,
+stacked), `fig6d_retention_compact` (7.12 x 2.23 in, no bands). Geometry was read off the
+committed binaries so the regenerated files drop in place. The compact variant draws **no spread
+band**, matching the paper's caption ("Each point is the mean of the two noise realizations") ---
+at a median between-draw range of 0.5 percentage points the band is thinner than the line.
+X-ticks are pinned to the sampled SNR grid; left to matplotlib the compact variant chose 0/20/40
+and hid where the grid starts and ends.
+
+Regenerated output was checked against the data by eye and matches: the red MERT curve sits at
+$\approx$0.63 at 20 dB white, against fine-tuned MERT's measured 0.6271, and all six curves land on
+their Table II values.
+
+The regenerated PNG is **2124 x 716** px where the committed binary was **2136 x 669**. That
+difference is font metrics --- the local matplotlib lays out tick and legend text at a slightly
+different size, which moves the `bbox_inches="tight"` crop --- not a difference in the data or the
+figure geometry, which is set in inches by `VARIANTS` and unchanged. The curves themselves are
+identical.
+
+### P1-9 (original finding, superseded above) --- Figure 1 has no generator in the repository
 `fig6d_retention_compact.png` is committed as a binary (`a2c7c9e`, whose message says "committing
 it so it can be uploaded to Overleaf") but **nothing in the tree produces it**.
 `scripts/fig6b_retention_row.py` writes only `fig6b_retention_row`; there is no `fig6c` or `fig6d`
