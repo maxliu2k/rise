@@ -11,6 +11,30 @@ Nothing here is fixed yet.
 
 ---
 
+## PENDING --- before anyone follows the repo link
+
+The paper now carries `https://github.com/maxliu2k/rise` in a first-page `\thanks`. Three things
+were knowingly deferred rather than resolved, and all three are cheap:
+
+1. **Confirm URTC is not double-blind.** The URL contains the author's name. If the venue blinds
+   submissions, this deanonymizes; use an anonymized mirror or hold the link for camera-ready.
+2. **Confirm the repository is public.** A dead link is worse than none.
+3. **Tidy what the link lands on.** Sixteen markdown files are exposed, several of them internal
+   critique --- `paper/REVIEW.md` ("Pinned problems in the paper", P1-1 through P1-10, fixes not
+   marked resolved), `paper/CHANGELOG.md` §19c ("Defects introduced by the canonical version"),
+   `docs/POSTER_REVIEW.md`, `docs/REPOSITORY_AUDIT.md` (HIGH-flagged validity risks), and
+   `docs/AUDIT_CHECKLIST.md` (open 🟡 items). None of it is dishonest and the transparency is a
+   genuine strength, but a reviewer skimming finds a list of the paper's weaknesses without the
+   context that most were caught and fixed. Either move these under `internal/` or add a README
+   section that orients a visitor.
+
+Also unverified: the paper claims the corpus "regenerates exactly from its seeding scheme". That
+is proven for the **noise** layer (24/24 conditions reproduce committed predictions), but the full
+path from a clean checkout --- `download_data.py`, then the pipeline, then scoring --- has not been
+exercised end to end. Run it once before the claim is load-bearing.
+
+---
+
 ## P1 --- wrong or contradicted by the data
 
 ### P1-10 --- the Discussion's PANNs claim is contradicted by Table II

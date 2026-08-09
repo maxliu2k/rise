@@ -41,33 +41,42 @@
 % mode because \IEEEoverridecommandlockouts is set in the preamble.
 \author{
 \IEEEauthorblockN{Allan Luo Yu\textsuperscript{*}}
-\IEEEauthorblockA{\textit{Fairview High School} \\
+\IEEEauthorblockA{\textit{Boston University RISE} \\
+\textit{Fairview High School} \\
 Boulder, USA \\
-0009-0001-1403-2316}
+ORCID: 0009-0001-1403-2316}
 \and
 \IEEEauthorblockN{Max Liu\textsuperscript{*}}
-\IEEEauthorblockA{\textit{Clements High School} \\
+\IEEEauthorblockA{\textit{Boston University RISE} \\
+\textit{Clements High School} \\
 Sugar Land, USA \\
 maxliu2k@gmail.com}
 \and
 \IEEEauthorblockN{Gavin Hu}
-\IEEEauthorblockA{\textit{St. Mark's School} \\
+\IEEEauthorblockA{\textit{Boston University RISE} \\
+\textit{St. Mark's School} \\
 Southborough, USA \\
 gavinhu42@gmail.com}
 \and
 \IEEEauthorblockN{Tariq Hossain}
-\IEEEauthorblockA{\textit{Seven Lakes High School} \\
+\IEEEauthorblockA{\textit{Boston University RISE} \\
+\textit{Seven Lakes High School} \\
 Katy, USA \\
 tariqhsn08@gmail.com}
+% Order matters here. The starred note goes LAST: with it first, the two unmarked
+% notes below it read as continuation lines of the same footnote, so the asterisk
+% appears to cover all three. Unmarked general notes first, marked note last.
+\thanks{This research was conducted through the Research in Science \&
+Engineering (RISE) Program at Boston University. Generation code, configuration,
+and per-window predictions for every model and condition are available at
+https://github.com/maxliu2k/rise.}
 \thanks{\textsuperscript{*}These authors contributed equally to this work.}
 }
 
 \maketitle
 
 \begin{abstract}
-Instrument classification underpins Music Information Retrieval (MIR) infrastructure and supports applications including musicology, audio editing, and transcription. Deep learning models that perform well on clean recordings may lose substantial accuracy under artificial and real-world noise, yet robustness is rarely compared across model families. This work benchmarks six instrument classification models---three trained from scratch (SVM, CNN, CRNN) and three pretrained (AST, MERT, and PANNs)---on 12 orchestral instruments from the Philharmonia Orchestra Sound Samples dataset, under white (Gaussian), human non-speech (ESC-50), and environmental (DEMAND) noise at SNRs from 50 dB to $-$10 dB. All six were scored on identical mixtures, verified by exact reproduction of committed predictions, so every comparison is paired.
-
-Clean macro-F1 spanned only 0.971 to 0.991 across the six, but robustness diverged sharply. Averaged over the SNR range, the models retained 26--64\% of their clean macro-F1 under white noise and 65--79\% under human non-speech; the ranges do not overlap, so no choice of model compensated for the change in noise category. At 20 dB the SVM retained 10.4\% under white noise against 68.0\% under human non-speech, falling from fourth on clean audio to last. AST was the most robust under all three categories and the only model to hold its rank across them. Clean macro-F1 is therefore not indicative of noise robustness, and degradation depends on noise category, not severity alone.
+Instrument classification underpins Music Information Retrieval (MIR) infrastructure and supports applications including musicology, audio editing, and transcription. Deep learning models that perform well on clean recordings may lose substantial accuracy under artificial and real-world noise, yet robustness is rarely compared across model families. We construct a reproducible noise-robustness benchmark for instrument classification---12 orchestral instruments from the Philharmonia Orchestra Sound Samples dataset, perturbed by white (Gaussian), human non-speech (ESC-50), and environmental (DEMAND) noise at SNRs from 50 dB to $-$10 dB---and evaluate six systems on it, three trained from scratch (SVM, CNN, CRNN) and three pretrained (AST, MERT, and PANNs). Every mixture is generated from a fixed seed and regenerates exactly, so all six are scored on identical audio and every comparison is paired. Clean macro-F1 spanned only 0.971 to 0.991 across the six, but robustness diverged sharply. Averaged over the SNR range, the models retained 26--64\% of their clean macro-F1 under white noise and 65--79\% under human non-speech; the ranges do not overlap, so no choice of model compensated for the change in noise category. AST was the most robust under all three categories and the only model to hold its rank across them. Clean macro-F1 is therefore not indicative of noise robustness, and degradation depends on noise category at the same nominal full-band SNR, not severity alone.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -77,9 +86,9 @@ Audio Classification, Environmental Noise, Robustness, Music Information Retriev
 \section{Introduction}
 Musical instruments are integral to the production and characterization of music, and their distinct timbral properties are intertwined with music composition, performance, and perception \cite{b1}. Consequently, automatically classifying instruments has become an active area of research, with applications in music transcription, source separation, post-production and automatic mixing, and music recommendation \cite{b2}. Early systems (from the late 1990s) relied on statistical classifiers \cite{b3}, and performance was later improved with high-quality feature representations \cite{b4}. The difficulties of real-world recordings were also acknowledged during this period \cite{b5}. From around 2015, convolutional neural networks (CNNs) pushed accuracy and precision past 95\% on clean, isolated-note datasets \cite{b6,b7,b8}.
 
-High accuracy on clean instrument audio reveals little about performance under perturbation; controlled degradation probes that relationship directly. Other instrument classification research shifts towards realism, such as polyphonic recognition \cite{b9}, whereas noise-robust classification is much less explored. Where robustness analysis has been done, model span is narrow. Deng et al. \cite{b10} studied the pretrained models OpenL3, PANNs, and CLAP under parameterized audio effects (gain, low-pass filtering, reverberation, and bitcrushing), finding that pretraining does not automatically confer robustness; additive noise, the perturbation class studied here, was not covered. No prior instrument classification study was identified that spans handcrafted features, models trained from scratch, and pretrained backbones. This breadth is deliberate but carries a trade-off: pretraining corpora, input representation, sample rate, and architecture all differ, so family-level differences cannot be attributed to a single factor. Complete classification systems are therefore compared, and performance differences are not attributed to architecture alone.
+High accuracy on clean instrument audio reveals little about performance under perturbation; controlled degradation probes that relationship directly. Other instrument classification research shifts towards realism, such as polyphonic recognition \cite{b9}, whereas noise-robust classification is much less explored. Where robustness analysis has been done, model span is narrow. Deng et al. \cite{b10} showed that pretrained OpenL3, PANNs, and CLAP embeddings remained sensitive to parameterized audio effects---gain, low-pass filtering, reverberation, and bitcrushing---but additive noise, the perturbation class studied here, was not evaluated. No prior instrument classification study was identified that spans handcrafted features, models trained from scratch, and pretrained backbones. This breadth is deliberate but carries a trade-off: pretraining corpora, input representation, sample rate, and architecture all differ, so family-level differences cannot be attributed to a single factor. Complete classification systems are therefore compared, and performance differences are not attributed to architecture alone.
 
-The research question is: how do instrument classification systems differ in their ability to retain classification performance under white, human, and environmental additive noise across a range of signal-to-noise ratios? The contributions are: (i) a matched robustness benchmark of six model families spanning handcrafted, scratch-trained, and pretrained approaches; (ii) an evaluation protocol in which every model is scored on the same generated noisy mixtures, enabling paired comparison; and (iii) per-instrument and per-noise degradation analysis, including a pre-defined test of whether acoustically similar instruments are confused more heavily under noise.
+The research question is: how do instrument classification systems differ in their ability to retain classification performance under white, human, and environmental additive noise across a range of signal-to-noise ratios? The contributions are: (i) a reproducible noise-robustness benchmark for instrument classification---60,240 deterministically seeded mixtures spanning three noise categories and eight SNRs, regenerable exactly from the scheme in Section~\ref{sec:noise}; (ii) an evaluation of six systems on that benchmark, spanning handcrafted, scratch-trained, and pretrained approaches, every one scored on identical mixtures so that all comparisons are paired; and (iii) per-instrument and per-noise degradation analysis, including a pre-defined test of whether acoustically similar instruments are confused more heavily under noise.
 
 
 \section{Methodology}
@@ -147,12 +156,13 @@ CNN14, AudioSet init; weighted CE; AdamW $10^{-4}$ & B16; E25; ES10; 1 seed \\
 \end{tabularx}
 \end{table*}
 
-Six models spanning a range of learning methods are compared. Because architectures differ substantially, each was trained with its native recipe (Table~\ref{tab:model_configs}). Weights were fitted on the training split; hyperparameters and checkpoints were selected on validation only.
+Because architectures differ substantially, each was trained with its native recipe (Table~\ref{tab:model_configs}). Weights were fitted on the training split; hyperparameters and checkpoints were selected on validation only.
 
-Table~\ref{tab:model_configs} summarizes each model's input and training configuration. The SVM used standardized 88-dimensional acoustic summaries. CNN and CRNN learned from log-Mel spectrograms, with CRNN adding bidirectional recurrent processing. MERT \cite{b14}, AST \cite{b15}, and PANNs \cite{b16} were fine-tuned from pretrained backbones with new 12-class heads. Neural model training used validation-based checkpoint selection, early stopping, dropout, weight decay, and pretrained initialization where applicable. CNN and CRNN predictions were ensembled across 5 seeds (42--46).
+The SVM used standardized 88-dimensional acoustic summaries. CNN and CRNN learned from log-Mel spectrograms, with CRNN adding bidirectional recurrent processing. MERT \cite{b14}, AST \cite{b15}, and PANNs \cite{b16} were fine-tuned from pretrained backbones with new 12-class heads. Neural model training used validation-based checkpoint selection, early stopping, dropout, weight decay, and pretrained initialization where applicable. CNN and CRNN predictions were ensembled across 5 seeds (42--46).
 
 
 \subsection{Noise Construction}
+\label{sec:noise}
 All models were evaluated on the same mixtures. Three noise categories were used: white (Gaussian, spectrally flat), human non-speech, and environmental. Human non-speech noises were drawn from ESC-50 targets 20--29. Environmental noise was drawn from all 18 DEMAND environments, spanning domestic, nature, office, public, street, and transportation settings. For each ESC-50 and DEMAND realization, one source clip or environment was drawn at random and one random three-second segment extracted, rejecting near-silent extracts, then resampled to 22.05 kHz.
 
 Let $x$ denote a clean waveform and $n$ a selected noise waveform, each containing $N$ samples, and let $P(z)=\frac{1}{N}\sum_{i=1}^{N}z_i^{2}$ denote mean-squared waveform power. The noise waveform was first centered by subtracting its mean:
@@ -216,7 +226,7 @@ A_{m,n}
 }{2}.
 \label{eq:retention_auc}
 \end{equation}
-An AUC of $1$ indicates that clean macro-F1 was retained across the complete SNR range. Paired model comparisons were matched by test window, noise category, SNR, and realization, and reported as macro-F1 of model $A$ minus model $B$.
+Paired model comparisons were matched by test window, noise category, SNR, and realization, and reported as macro-F1 of model $A$ minus model $B$.
 
 
 \subsubsection{Secondary Failure Analysis}
@@ -258,7 +268,7 @@ AST   & \textbf{0.9908} & \textbf{0.636} &
 \end{table}
 
 \subsection{Noise Robustness}
-AST had the highest retention AUC under all three noise categories (Fig.~\ref{fig:curves}, Table~\ref{tab:auc}). Under 20 dB white noise, AST retained 72.3\% of its clean macro-F1 and SVM 10.4\%, a 61.9-point difference and the largest observed between any two models at a shared condition. Recorded noise showed less degradation at the same nominal SNR. SVM had the lowest human non-speech AUC, whereas CNN had the lowest environmental AUC (Fig.~\ref{fig:curves}, Table~\ref{tab:auc}). AST remained first in all noise categories, while other rankings varied. At 20 dB, changing the noise realization altered retention by at most 3.6 points, compared with a 61.9-point maximum difference between models.
+AST had the highest retention AUC under all three noise categories (Fig.~\ref{fig:curves}, Table~\ref{tab:auc}). Under 20 dB white noise, AST retained 72.3\% of its clean macro-F1 and SVM 10.4\%, a 61.9-point difference and the largest observed between any two models at a shared condition. Other rankings varied. At 20 dB, changing the noise realization altered retention by at most 3.6 points, compared with a 61.9-point maximum difference between models.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Floats declared HERE, inside Results. A figure* cannot be placed
@@ -304,22 +314,23 @@ correction. (B) AST under human non-speech noise had the strongest association. 
 \end{figure}
 
 \section{Discussion}
-Results show that clean accuracy is not indicative of noise robustness. While the six models scored closely on clean audio, their performances were very different under noise, exposing differences in retention up to 61.9 percentage points at a shared noisy condition. Model ranking also changed across noise types and noise levels. Despite pretrained models generally performing better at clean accuracy and robustness, there is not substantial evidence to make claims towards Deng et al.'s \cite{b10} work regarding whether pretraining confers robustness, because this study's broad scope compares complete systems and does not isolate the effect of pretraining (other confounding factors include pretraining corpus, architecture, input representation, and sample rate). For example, AST and MERT may have benefited from representations learned through large-scale audio pretraining, but PANNs trailed both under white noise, so the size of the benefit appears to depend on the pretraining corpus and architecture rather than on pretraining alone. The split was nonetheless consistent: in every noise category the three pretrained models ranked ahead of all three trained from scratch.
+Results show that clean accuracy is not indicative of noise robustness. While the six models scored closely on clean audio, their performances were very different under noise, exposing differences in retention up to 61.9 percentage points at a shared noisy condition. Model ranking also changed across noise types and noise levels. Despite pretrained models having the highest retention AUCs under all noise categories, the study cannot establish that pretraining confers robustness because complete systems differed in pretraining corpus, architecture, input representation, and sample rate. For example, AST and MERT may have benefited from representations learned through large-scale audio pretraining, but PANNs trailed both under white noise, so the size of the benefit appears to depend on the pretraining corpus and architecture rather than on pretraining alone. The split was nonetheless consistent: in every noise category the three pretrained models ranked ahead of all three trained from scratch.
 
-Human non-speech and environmental noise appeared less damaging than white noise, but this result could reflect limitations regarding the use of nominal SNR (see Section~\ref{sec:limitations}). The only architectural comparison was between the CNN and CRNN, where results suggest that temporal sequence modeling was not uniformly beneficial, with CNN leading under white noise and supported by its confidence intervals, and CRNN leading under recorded noise and only sometimes supported by its confidence intervals. This nuance suggests that the value of temporal information depends on noise structure, but still cannot be solely attributed to recurrence given that CRNN had more parameters ($\sim$294{,}000 against $\sim$111{,}000) and greater temporal resolution.
+Human non-speech and environmental noise appeared less damaging than white noise, but this result could reflect limitations regarding the use of nominal SNR (see Section~\ref{sec:limitations}). The only architectural comparison was between the CNN and CRNN, where results suggest that temporal sequence modeling was not uniformly beneficial: CNN led under white noise, with both confidence intervals excluding zero, while CRNN led under recorded noise, though only two of its four intervals excluded zero. This nuance suggests that the value of temporal information depends on noise structure, but still cannot be solely attributed to recurrence given that CRNN had more parameters and greater temporal resolution.
 
 Robustness varied by instrument: tuba showed the greatest overall recall loss, whereas violin showed the least. However, the most vulnerable instrument still varied across models and noise categories, suggesting instrument failure depends on a combination of instrument-specific properties, noise, and model representation. Acoustic distance offered a partial answer: closer pairs were associated with more noise-induced confusion in 17 of the 18 model-noise tests, which could explain the interdependency between noise and instrument properties, as noise could mask distinguishing cues. The direction was therefore near-unanimous, but only seven relationships reached significance, so acoustic similarity does not explain failures consistently across all models and noise categories.
 
 
+
 \subsection{Limitations}
 \label{sec:limitations}
-First, the Philharmonia dataset contains only single-instrument, single-note recordings. 97.3\% of recordings were under three seconds and were tiled to fill the window, so the loop rate encodes note length, which itself correlates with instrument. That cue is real: a classifier given only the loop period reaches 0.184 balanced accuracy against 0.083 for chance. The models do not appear to use it, however, since a CRNN that can read timing confuses similar-length instruments no more often than a CNN that cannot. Second, the noise corpus does not cover recording or studio effects such as reverberation or codec artifacts, which must be explored further. Third, because of time and compute constraints only two noise realizations were generated, giving a sensitivity check but not a reliable variance estimate. Fourth, nominal SNR is full-band, and the categories concentrate energy differently across frequency, so they may mask instruments unequally, making direct comparison of noise loudness unattainable. Lastly, models were trained on clean data only, so this study measures robustness without any noise adaptation.
+First, the Philharmonia dataset contains only single-instrument, single-note recordings. 97.3\% of recordings were under three seconds and were tiled to fill the window, so the loop rate encodes note length, which itself correlates with instrument. This correlation has noticeable effects, as a classifier given only the loop period reaches 0.184 balanced accuracy against 0.083 for chance. The models do not appear to use it, however, since the order-sensitive CRNN confused similar-length instruments no more often than the CNN. Second, the noise corpus does not cover recording or studio effects such as reverberation or codec artifacts, which must be explored further. Third, because of time and compute constraints only two noise realizations were generated, giving a sensitivity check but not a reliable variance estimate. Fourth, nominal SNR is full-band, and the categories concentrate energy differently across frequency, so they may mask instruments unequally; comparisons between noise categories at a matched nominal SNR therefore bound what can be claimed about the noise itself, though comparisons between models are unaffected because every model was scored on identical mixtures. Lastly, models were trained on clean data only, so this study measures robustness without any noise adaptation.
 
 \section{Conclusion}
-This research compares and ranks six musical-instrument classification systems under controlled white, human non-speech, and environmental noise degradation. Despite similar performance on clean recordings, AST retained the most clean macro-F1 across the tested conditions, while SVM degraded fastest under white noise and CNN under environmental. Failures were also uneven across instruments: tuba, oboe, and trumpet showed the greatest recall loss, and acoustically similar instrument pairs tended to be confused more heavily under noise---the association was negative in 17 of 18 model-by-noise tests and significant in seven after correction, six of them under recorded noise. These findings demonstrate that clean performance alone is insufficient for selecting an instrument classifier for noisy conditions; robustness must also be evaluated across multiple noise categories and severities. Future work should extend this benchmark to multiple datasets, polyphonic music, independently recorded environmental noise, additional noise realizations, and noise-aware training.
+This research contributes a reproducible noise-robustness benchmark for instrument classification and uses it to compare and rank six systems under controlled white, human non-speech, and environmental noise degradation. Despite similar performance on clean recordings, AST retained the most clean macro-F1 across the tested conditions, while SVM degraded fastest under white noise and CNN under environmental. Failures were also uneven across instruments: tuba, oboe, and trumpet showed the greatest recall loss, and acoustically similar instrument pairs tended to be confused more heavily under noise---the association was negative in 17 of 18 model-by-noise tests and significant in seven after correction, six of them under recorded noise. These findings demonstrate that clean performance alone is insufficient for selecting an instrument classifier for noisy conditions; robustness must also be evaluated across multiple noise categories and severities. Because the corpus regenerates exactly from its seeding scheme, further systems can be added and compared against these results directly. Future work should extend the benchmark to multiple datasets, polyphonic music, independently recorded environmental noise, additional noise realizations, and noise-aware training.
 
 \section*{Acknowledgments}
-This work was created at and outside Boston University's RISE program. We are grateful to Boston University for this opportunity as well as our instructors Dr. Eugene Pinsky and Dr. Indrajit Kalita for their dedication and hard work.
+We are grateful to Boston University for this opportunity as well as our RISE instructors Dr. Eugene Pinsky and Dr. Indrajit Kalita for their dedication and hard work.
 
 \begin{thebibliography}{00}
 \bibitem{b1} S. McAdams, ``Perspectives on the contribution of timbre to musical structure,'' Computer Music Journal, vol. 23, no. 3, pp. 85--102, 1999.
