@@ -547,8 +547,9 @@ ACK = ("This work was created in affiliation with the Boston University RISE pro
 CAP_FIG5 = ("<b>Figure 5.</b> Clean baseline and normalized robustness AUC \u2014 area under the "
             "retention-vs-SNR curve, dB-weighted (1.0 = no degradation across SNR). "
             "Bold marks the best value per column; model colours match Figure 6.")
-CAP_FIG6 = ("<b>Figure 6.</b> Retention relative to clean macro-F1 versus SNR for all six "
-            "models and three noise categories. Each point averages two noise realizations.")
+CAP_FIG6 = ("<b>Figure 6.</b> Macro-F1 (top) and retention relative to clean macro-F1 "
+            "(bottom) versus SNR for all six models and three noise categories. Each point "
+            "averages two noise realizations; shading shows their standard deviation.")
 CAP_FIG7 = ("<b>Figure 7.</b> Clean-audio confusion for all six models, row-normalised: the "
             "diagonal is per-class recall, off-diagonal cells are the share of a true "
             "instrument sent elsewhere, on one colour scale across panels. Panel titles give "
@@ -709,7 +710,7 @@ def build() -> None:
     y = section_bar(c, "Results", x, y, w) + 20
     y = draw_results_table(c, x, y, w) + 10
     y = draw_para(c, CAP_FIG5, st["caption"], x, y, w) + 20
-    y = draw_image(c, FIGURES / "fig6d_retention_compact.png", x, y,
+    y = draw_image(c, FIGURES / "fig6_robustness_curves.png", x, y,
                    w * 0.98, center_in=w) + 8
     y = draw_para(c, CAP_FIG6, st["caption"], x, y, w) + 20
     y = draw_image(c, FIGURES / "fig8_confusion_grid.png", x, y, w * 0.96,

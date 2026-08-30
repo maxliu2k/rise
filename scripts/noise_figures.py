@@ -43,8 +43,8 @@ MODELS: dict[str, str] = {
 }
 NOISE_LABEL = {
     "white": "white (synthetic)",
-    "audience": "audience (ESC-50 human)",
-    "studio": "studio (DEMAND room tone)",
+    "audience": "ESC-50 human non-speech",
+    "studio": "DEMAND environmental ambience",
 }
 CHANCE = 1.0 / 12.0
 
