@@ -392,8 +392,8 @@ def model_table(c: canvas.Canvas, st: dict, x: float, y: float, w: float,
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [ROW_TINT, white]),
         ("GRID", (0, 1), (-1, -1), 0.7, HexColor("#c4d2e0")),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("TOPPADDING", (0, 0), (-1, -1), 8),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
     ]))
     _, h = t.wrapOn(c, w, PAGE_H)
     t.drawOn(c, x, PAGE_H - y - h)
@@ -600,25 +600,31 @@ def dataset_box(c: canvas.Canvas, st: dict, x: float, y: float, w: float) -> flo
     c.roundRect(x, PAGE_H - y - box_h, w, box_h, 12, stroke=1, fill=1)
     c.setFillColor(NAVY)
     c.setFont("TNR-Bold", 22)
-    c.drawCentredString(x + w / 2, PAGE_H - y - inner - 20,
-                        "Figure 3. Dataset & Split")
+    c.drawCentredString(x + w / 2, PAGE_H - y - inner - 20, "Dataset & Split")
     grid.drawOn(c, x + inner, PAGE_H - (y + inner + head_h) - gh)
     note.drawOn(c, x + inner, PAGE_H - (y + inner + head_h + gh + 10) - nh)
     return y + box_h
 
 
 def result_highlights_box(c: canvas.Canvas, st: dict, x: float, y: float,
-                          w: float, h: float) -> float:
-    """Compact text box matching the previous poster's results-summary treatment."""
+                          w: float) -> float:
+    """Full-width results summary with height determined by its wrapped text."""
+    box_style = ParagraphStyle("result_box", parent=st["bullet"], fontSize=17,
+                               leading=21.5, leftIndent=15, firstLineIndent=-10)
+    paras = []
+    for item in RESULT_HIGHLIGHTS:
+        para = Paragraph(f'•&nbsp;&nbsp;{item}', box_style)
+        _, ph = para.wrapOn(c, w - 40, PAGE_H)
+        paras.append((para, ph))
+    h = 26 + sum(ph + 8 for _, ph in paras)
     c.setFillColor(HexColor("#f3f6fa"))
     c.setStrokeColor(CARD_EDGE)
     c.setLineWidth(1.2)
     c.roundRect(x, PAGE_H - y - h, w, h, 12, stroke=1, fill=1)
-    box_style = ParagraphStyle("result_box", parent=st["bullet"], fontSize=15.5,
-                               leading=19.5, leftIndent=15, firstLineIndent=-10)
-    yy = y + 18
-    for item in RESULT_HIGHLIGHTS:
-        yy = draw_para(c, f'•&nbsp;&nbsp;{item}', box_style, x + 16, yy, w - 32) + 10
+    yy = y + 14
+    for para, ph in paras:
+        para.drawOn(c, x + 20, PAGE_H - yy - ph)
+        yy += ph + 8
     return y + h
 
 
@@ -674,21 +680,27 @@ def build() -> None:
     y = pipeline_chart(c, x, y, w) + 6
     y = draw_para(c, "<b>Fig.2</b> Methods pipeline", st["caption_l"], x, y, w) + 14
     y = bullets(c, METHODS, st["bullet"], x, y, w) + 16
-    y = dataset_box(c, st, x, y, w) + 16
-    y = model_table(c, st, x, y, w, "Figure 4a. Trained from scratch",
-                    "No external pretraining", SCRATCH_ROWS) + 14
-    y = model_table(c, st, x, y, w, "Figure 4b. Pretrained backbones",
-                    "Pretraining corpus listed beneath each model", PRETRAINED_ROWS) + 10
+    y = dataset_box(c, st, x, y, w) + 6
+    y = draw_para(c, "<b>Fig.3</b> Dataset and grouped split", st["caption_l"],
+                  x, y, w) + 8
+    y = model_table(c, st, x, y, w, "Trained from scratch",
+                    "No external pretraining", SCRATCH_ROWS) + 6
+    y = draw_para(c, "<b>Fig.4a</b> Models trained from scratch", st["caption_l"],
+                  x, y, w) + 8
+    y = model_table(c, st, x, y, w, "Pretrained backbones",
+                    "Pretraining corpus listed beneath each model", PRETRAINED_ROWS) + 6
+    y = draw_para(c, "<b>Fig.4b</b> Models using pretrained backbones", st["caption_l"],
+                  x, y, w) + 6
 
     y = draw_para(c, "Noise Construction", st["subhead"], x, y, w) + 10
     y = bullets(c, NOISE_CONSTRUCTION, st["bullet"], x, y, w) + 12
-    y = draw_image(c, ASSETS / "eq_block.png", x, y, w * 0.96, center_in=w) + 16
+    y = draw_image(c, ASSETS / "eq_block.png", x, y, w * 0.92, center_in=w) + 14
     tag = ParagraphStyle("tag", parent=st["bullet"], fontSize=17, leading=21.5)
     for name, desc in NOISE_SOURCES:
         y = draw_para(c, f'●&nbsp;&nbsp;<b><font color="#CC0000">{name}</font></b> '
-                         f'— {desc}', tag, x, y, w) + 7
+                         f'— {desc}', tag, x, y, w) + 5
     y = draw_para(c, SEED_NOTE, ParagraphStyle("seed", parent=st["caption_l"], fontSize=14.5,
-                                               leading=18), x, y + 5, w)
+                                               leading=18), x, y, w)
     left_end = y
 
     # ================= MIDDLE =================
@@ -698,23 +710,18 @@ def build() -> None:
     y = draw_results_table(c, x, y, w) + 10
     y = draw_para(c, CAP_FIG5, st["caption"], x, y, w) + 20
     y = draw_image(c, FIGURES / "fig6d_retention_compact.png", x, y,
-                   w * 0.95, center_in=w) + 8
+                   w * 0.98, center_in=w) + 8
     y = draw_para(c, CAP_FIG6, st["caption"], x, y, w) + 20
-    y = draw_image(c, FIGURES / "fig8_confusion_grid.png", x, y, w * 0.90, center_in=w) + 8
+    y = draw_image(c, FIGURES / "fig8_confusion_grid.png", x, y, w * 0.96,
+                   center_in=w) + 8
     y = draw_para(c, CAP_FIG7, st["caption"], x, y, w) + 20
     y = draw_image(c, FIGURES / "fig9_rank_slope.png", x, y,
-                   w * 0.93, center_in=w) + 8
+                   w * 0.98, center_in=w) + 8
     y = draw_para(c, CAP_FIG8, st["caption"], x, y, w) + 20
-    row_y = y
-    row_gap = 24.0
-    summary_w = w * 0.34
-    figure_w = w - summary_w - row_gap
-    figure_x = x + summary_w + row_gap
-    figure_end = draw_image(c, FIGURES / "fig_distance_confusion.png", figure_x, row_y,
-                            figure_w, center_in=figure_w) + 8
-    caption_end = draw_para(c, CAP_FIG9, st["caption"], figure_x, figure_end, figure_w)
-    summary_end = result_highlights_box(c, st, x, row_y, summary_w, caption_end - row_y)
-    mid_end = max(summary_end, caption_end)
+    y = result_highlights_box(c, st, x, y, w) + 20
+    y = draw_image(c, FIGURES / "fig_distance_confusion.png", x, y,
+                   w * 0.96, center_in=w) + 8
+    mid_end = draw_para(c, CAP_FIG9, st["caption"], x, y, w)
 
     # ================= RIGHT =================
     x, w = x_r + pad, w_side - 2 * pad
