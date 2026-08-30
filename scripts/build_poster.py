@@ -527,12 +527,15 @@ REPRO = [
     "(scripts/*.py) against those files",
     "The noise corpus rebuilds bit-identically from the sealed dataset fingerprint",
 ]
-GLANCE = [
-    ("10% vs 68%", "SVM keeps 10% of its clean score under white noise at 20 dB, but 68% "
-     "under human non-speech noise at the same nominal SNR"),
-    ("0 errors, greatest loss", "tuba: perfect on clean audio for all six models, but the "
-     "greatest mean recall-loss AUC overall"),
-    ("7 / 18", "distance\u2013confusion tests significant after Benjamini\u2013Hochberg"),
+RESULT_HIGHLIGHTS = [
+    "<b>Noise category mattered:</b> at 20 dB, SVM retained 10% under white noise and 68% "
+    "under human non-speech noise.",
+    "<b>Clean accuracy hid fragility:</b> tuba had no clean errors across the six models but "
+    "the greatest mean recall-loss AUC under noise.",
+    "<b>Failures were structured:</b> 7 of 18 distance-confusion tests remained significant "
+    "after BH correction.",
+    "<b>At 20 dB white noise,</b> CNN exceeded CRNN by 0.1126 macro-F1; both "
+    "realization-specific bootstrap intervals excluded zero.",
 ]
 ACK = ("This work was created in affiliation with the Boston University RISE program. We are "
        "grateful to Boston University for this opportunity, and to our instructors Dr. Eugene "
@@ -550,8 +553,10 @@ CAP_FIG7 = ("<b>Figure 7.</b> Clean-audio confusion for all six models, row-norm
             "diagonal is per-class recall, off-diagonal cells are the share of a true "
             "instrument sent elsewhere, on one colour scale across panels. Panel titles give "
             "clean macro-F1 and total misclassified windows.")
-CAP_FIG8 = ("<b>Figure 8.</b> Instrument recall-loss AUC across SNR. Rows are ordered by mean "
-            "loss; all panels share one colour scale.")
+CAP_FIG8 = ("<b>Figure 8.</b> Instruments ranked by clean errors (left) and mean recall-loss "
+            "AUC under noise (right), best at top. The rankings were unrelated "
+            "(Spearman \u03c1 = \u22120.18, p = 0.59). Tuba had no clean errors but the greatest "
+            "recall loss (0.60); violin had 22 clean errors but the smallest loss (0.21).")
 CAP_FIG9 = ("<b>Figure 9.</b> Acoustic distance and noise-induced confusion. Seven of 18 "
             "model-noise tests were significant after BH correction; AST under human "
             "non-speech noise had the strongest association.")
@@ -595,33 +600,26 @@ def dataset_box(c: canvas.Canvas, st: dict, x: float, y: float, w: float) -> flo
     c.roundRect(x, PAGE_H - y - box_h, w, box_h, 12, stroke=1, fill=1)
     c.setFillColor(NAVY)
     c.setFont("TNR-Bold", 22)
-    c.drawCentredString(x + w / 2, PAGE_H - y - inner - 20, "Dataset & Split")
+    c.drawCentredString(x + w / 2, PAGE_H - y - inner - 20,
+                        "Figure 3. Dataset & Split")
     grid.drawOn(c, x + inner, PAGE_H - (y + inner + head_h) - gh)
     note.drawOn(c, x + inner, PAGE_H - (y + inner + head_h + gh + 10) - nh)
     return y + box_h
 
 
-def glance_strip(c: canvas.Canvas, st: dict, x: float, y: float, w: float) -> float:
-    """Three headline numbers the poster already argues, restated at walk-past size."""
-    gap = 22.0
-    card_w = (w - 2 * gap) / 3
-    paras = []
-    for value, label in GLANCE:
-        p = Paragraph(
-            f'<para alignment="center"><font name="TNR-Bold" size="30" color="#CC0000">'
-            f'{value}</font><br/><font size="14.5" color="#444444">{label}</font></para>',
-            st["body"])
-        _, ph = p.wrapOn(c, card_w - 24, PAGE_H)
-        paras.append((p, ph))
-    card_h = max(ph for _, ph in paras) + 30
-    for i, (p, ph) in enumerate(paras):
-        cx = x + i * (card_w + gap)
-        c.setFillColor(HexColor("#fdf5f5"))
-        c.setStrokeColor(HexColor("#e3b8b8"))
-        c.setLineWidth(1.2)
-        c.roundRect(cx, PAGE_H - y - card_h, card_w, card_h, 12, stroke=1, fill=1)
-        p.drawOn(c, cx + 12, PAGE_H - y - (card_h - ph) / 2 - ph)
-    return y + card_h
+def result_highlights_box(c: canvas.Canvas, st: dict, x: float, y: float,
+                          w: float, h: float) -> float:
+    """Compact text box matching the previous poster's results-summary treatment."""
+    c.setFillColor(HexColor("#f3f6fa"))
+    c.setStrokeColor(CARD_EDGE)
+    c.setLineWidth(1.2)
+    c.roundRect(x, PAGE_H - y - h, w, h, 12, stroke=1, fill=1)
+    box_style = ParagraphStyle("result_box", parent=st["bullet"], fontSize=15.5,
+                               leading=19.5, leftIndent=15, firstLineIndent=-10)
+    yy = y + 18
+    for item in RESULT_HIGHLIGHTS:
+        yy = draw_para(c, f'•&nbsp;&nbsp;{item}', box_style, x + 16, yy, w - 32) + 10
+    return y + h
 
 
 # ---- assembly --------------------------------------------------------------------------------
@@ -677,9 +675,9 @@ def build() -> None:
     y = draw_para(c, "<b>Fig.2</b> Methods pipeline", st["caption_l"], x, y, w) + 14
     y = bullets(c, METHODS, st["bullet"], x, y, w) + 16
     y = dataset_box(c, st, x, y, w) + 16
-    y = model_table(c, st, x, y, w, "Trained from scratch", "No external pretraining",
-                    SCRATCH_ROWS) + 14
-    y = model_table(c, st, x, y, w, "Pretrained backbones",
+    y = model_table(c, st, x, y, w, "Figure 4a. Trained from scratch",
+                    "No external pretraining", SCRATCH_ROWS) + 14
+    y = model_table(c, st, x, y, w, "Figure 4b. Pretrained backbones",
                     "Pretraining corpus listed beneath each model", PRETRAINED_ROWS) + 10
 
     y = draw_para(c, "Noise Construction", st["subhead"], x, y, w) + 10
@@ -704,13 +702,19 @@ def build() -> None:
     y = draw_para(c, CAP_FIG6, st["caption"], x, y, w) + 20
     y = draw_image(c, FIGURES / "fig8_confusion_grid.png", x, y, w * 0.90, center_in=w) + 8
     y = draw_para(c, CAP_FIG7, st["caption"], x, y, w) + 20
-    y = draw_image(c, FIGURES / "fig_recall_loss_heat.png", x, y,
+    y = draw_image(c, FIGURES / "fig9_rank_slope.png", x, y,
                    w * 0.93, center_in=w) + 8
     y = draw_para(c, CAP_FIG8, st["caption"], x, y, w) + 20
-    y = draw_image(c, FIGURES / "fig_distance_confusion.png", x, y,
-                   w * 0.93, center_in=w) + 8
-    y = draw_para(c, CAP_FIG9, st["caption"], x, y, w) + 20
-    mid_end = glance_strip(c, st, x, y, w)
+    row_y = y
+    row_gap = 24.0
+    summary_w = w * 0.34
+    figure_w = w - summary_w - row_gap
+    figure_x = x + summary_w + row_gap
+    figure_end = draw_image(c, FIGURES / "fig_distance_confusion.png", figure_x, row_y,
+                            figure_w, center_in=figure_w) + 8
+    caption_end = draw_para(c, CAP_FIG9, st["caption"], figure_x, figure_end, figure_w)
+    summary_end = result_highlights_box(c, st, x, row_y, summary_w, caption_end - row_y)
+    mid_end = max(summary_end, caption_end)
 
     # ================= RIGHT =================
     x, w = x_r + pad, w_side - 2 * pad
