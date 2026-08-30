@@ -707,22 +707,22 @@ def build() -> None:
     # ================= MIDDLE =================
     x, w = x_m + pad, w_mid - 2 * pad
     y = top + pad
-    y = section_bar(c, "Results", x, y, w) + 20
-    y = draw_results_table(c, x, y, w) + 10
-    y = draw_para(c, CAP_FIG5, st["caption"], x, y, w) + 20
+    y = section_bar(c, "Results", x, y, w) + 22
+    y = draw_results_table(c, x, y, w) + 12
+    y = draw_para(c, CAP_FIG5, st["caption"], x, y, w) + 32
     y = draw_image(c, FIGURES / "fig6_robustness_curves.png", x, y,
-                   w * 0.98, center_in=w) + 8
-    y = draw_para(c, CAP_FIG6, st["caption"], x, y, w) + 20
+                   w * 0.98, center_in=w) + 10
+    y = draw_para(c, CAP_FIG6, st["caption"], x, y, w) + 32
     y = draw_image(c, FIGURES / "fig8_confusion_grid.png", x, y, w * 0.96,
-                   center_in=w) + 8
-    y = draw_para(c, CAP_FIG7, st["caption"], x, y, w) + 20
+                   center_in=w) + 10
+    y = draw_para(c, CAP_FIG7, st["caption"], x, y, w) + 32
     y = draw_image(c, FIGURES / "fig9_rank_slope.png", x, y,
-                   w * 0.98, center_in=w) + 8
-    y = draw_para(c, CAP_FIG8, st["caption"], x, y, w) + 20
-    y = result_highlights_box(c, st, x, y, w) + 20
+                   w * 0.98, center_in=w) + 10
+    y = draw_para(c, CAP_FIG8, st["caption"], x, y, w) + 32
     y = draw_image(c, FIGURES / "fig_distance_confusion.png", x, y,
-                   w * 0.96, center_in=w) + 8
-    mid_end = draw_para(c, CAP_FIG9, st["caption"], x, y, w)
+                   w * 0.96, center_in=w) + 10
+    y = draw_para(c, CAP_FIG9, st["caption"], x, y, w) + 24
+    mid_end = result_highlights_box(c, st, x, y, w)
 
     # ================= RIGHT =================
     x, w = x_r + pad, w_side - 2 * pad
