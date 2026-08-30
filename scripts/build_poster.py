@@ -2,7 +2,7 @@
 
     python scripts/build_poster.py
 
-Writes docs/poster_rebuild.pdf. Read-only with respect to results.
+Writes output/pdf/poster_rebuild_revised_v3.pdf. Read-only with respect to results.
 
 WHAT THIS IS. A ground-up reportlab reconstruction of the team's PowerPoint poster, keeping its
 content and three-column structure while making every text element on the board Times New Roman
@@ -15,8 +15,8 @@ data or text is available:
   * Fig.2 pipeline chart    -- redrawn natively (was a DejaVu Sans image)
   * Fig.3 / Fig.4 tables    -- native reportlab tables (were images)
   * Fig.1 labels            -- the baked title/label rows are cropped off and re-set in Times
-  * Figures 9a / 9b         -- rebuilt from artifacts/failure_analysis/ CSVs by
-                               fig9_pair_figures.py; statistics are read, never recomputed
+  * Figures 8 / 9           -- generated from the canonical failure-analysis artifacts;
+                               statistics are read, never recomputed
   * Eq.7-10                 -- typeset with STIX mathtext (Times-compatible); the originals
                                carried heavy black/blue borders. Eq.1-6 remain one crop of the
                                original page: math is exempt from the face standardisation.
@@ -57,7 +57,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 ASSETS = ROOT / "docs" / "poster_assets"
 FIGURES = ROOT / "docs" / "figures"
-OUT = ROOT / "docs" / "poster_rebuild.pdf"
+OUT = ROOT / "output" / "pdf" / "poster_rebuild_revised_v3.pdf"
 
 PAGE_W, PAGE_H = 2592.0, 3456.0          # 36 x 48 in at 72 pt/in
 
@@ -86,11 +86,26 @@ def register_fonts() -> None:
     coverage (rho, arrows, and the not-equals sign in the Discussion are outside the core
     font's Latin-1), and so the embedded face is byte-identical to what PowerPoint used.
     """
-    fonts = "C:/Windows/Fonts"
-    pdfmetrics.registerFont(TTFont("TNR", f"{fonts}/times.ttf"))
-    pdfmetrics.registerFont(TTFont("TNR-Bold", f"{fonts}/timesbd.ttf"))
-    pdfmetrics.registerFont(TTFont("TNR-Italic", f"{fonts}/timesi.ttf"))
-    pdfmetrics.registerFont(TTFont("TNR-BoldItalic", f"{fonts}/timesbi.ttf"))
+    windows = Path("C:/Windows/Fonts")
+    macos = Path("/System/Library/Fonts/Supplemental")
+    if windows.is_dir():
+        paths = {
+            "TNR": windows / "times.ttf",
+            "TNR-Bold": windows / "timesbd.ttf",
+            "TNR-Italic": windows / "timesi.ttf",
+            "TNR-BoldItalic": windows / "timesbi.ttf",
+        }
+    elif macos.is_dir():
+        paths = {
+            "TNR": macos / "Times New Roman.ttf",
+            "TNR-Bold": macos / "Times New Roman Bold.ttf",
+            "TNR-Italic": macos / "Times New Roman Italic.ttf",
+            "TNR-BoldItalic": macos / "Times New Roman Bold Italic.ttf",
+        }
+    else:
+        raise FileNotFoundError("Times New Roman fonts were not found")
+    for name, path in paths.items():
+        pdfmetrics.registerFont(TTFont(name, str(path)))
     registerFontFamily(
         "TNR", normal="TNR", bold="TNR-Bold", italic="TNR-Italic", boldItalic="TNR-BoldItalic"
     )
@@ -170,7 +185,7 @@ def results_table_data() -> list[list[str]]:
     """Clean macro-F1 and per-noise AUC from the committed summaries -- the same loader and AUC
     as scripts/noise_figures.py, so this table cannot drift from Figure 6."""
     import noise_figures as nf
-    rows = [["Model", "Clean macro-F1", "AUC white", "AUC audience", "AUC studio"]]
+    rows = [["Model", "Clean macro-F1", "AUC white", "AUC human", "AUC environ."]]
     for key, label in nf.MODELS.items():
         frame = nf.load_model(key)
         if frame is None:
@@ -178,7 +193,7 @@ def results_table_data() -> list[list[str]]:
         clean = float(frame[~frame["noise_type"].isin(nf.NOISE_TYPES)]["macro_f1"].iloc[0])
         row = [label, f"{clean:.4f}"]
         for noise in nf.NOISE_TYPES:
-            grouped = nf.curve(frame, noise, "macro_f1")
+            grouped = nf.curve(frame, noise, "macro_f1_retention")
             row.append(f"{nf.robustness_auc(grouped['snr_db'].to_numpy(), grouped['mean'].to_numpy()):.4f}")
         rows.append(row)
     return rows
@@ -251,7 +266,8 @@ PIPELINE = [
     ("Evaluate / Score Models",
      "Identical noisy mixtures\nper model\nMacro-F1 retention across SNR"),
     ("Construct Noisy Test Set",
-     "White (Gaussian)\nAudience (ESC-50)\nStudio (DEMAND)\n8 SNRs \u00d7 2 independent draws"),
+     "White (Gaussian)\nHuman non-speech (ESC-50)\nEnvironmental (DEMAND)\n"
+     "8 SNRs \u00d7 2 independent draws"),
     ("Train Models",
      "Trained: SVM \u00b7 CNN \u00b7 CRNN\nFine-tuned: MERT \u00b7 AST \u00b7 PANNs"),
 ]
@@ -339,7 +355,7 @@ SCRATCH_ROWS = [
 ]
 PRETRAINED_ROWS = [
     ("MERT", "Music audio", "24 kHz waveform", "13 time-averaged layer outputs",
-     "Layer weights + linear head", "Backbone stays frozen"),
+     "Fine-tuned backbone", "Plus 12-class head"),
     ("AST", "AudioSet", "16 kHz waveform", "Official extractor to log-Mel",
      "Transformer backbone", "Plus 12-class head"),
     ("PANNs", "AudioSet", "32 kHz waveform", "CNN14 computes 64-band log-Mel",
@@ -411,11 +427,12 @@ OBJECTIVES = [
     "We run a controlled, head-to-head robustness comparison of six model families: "
     "handcrafted SVM; custom CNN and CRNN; and fine-tuned, pretrained MERT, AST, and PANNs.",
     "Trained on the same 12-instrument dataset, we hold the split and noise corpus "
-    "identical across all models and add white (synthetic), audience (human sounds \u2014 "
-    "ESC-50), and studio (real-world ambience from all 18 DEMAND environments) noise across an "
+    "identical across all models and add white (synthetic), human non-speech (ESC-50), and "
+    "environmental (all 18 DEMAND environments) noise across an "
     "8-level SNR sweep, measuring the change in classification performance.",
     "<b>Research Question:</b> How do instrument classification systems differ in their ability "
-    "to retain classification performance under white, audience, and studio additive noise "
+    "to retain classification performance under white, human non-speech, and environmental "
+    "additive noise "
     "across a range of signal-to-noise ratios?",
 ]
 METHODS = [
@@ -448,32 +465,30 @@ MID_STATS = [
     "by an average 0.1126 Macro-F1 over both realizations (0 &amp; 1: 0.1122, 0.1130) under "
     "white noise at 20 dB SNR; 95% pitch-group bootstrap intervals r<sub>0</sub> = [0.0560, "
     "0.1625] and r<sub>1</sub> = [0.0589, 0.1601] excluded zero",
-    "Acoustically closer instrument pairs showed greater confusion; 5 of 18 model-noise tests "
+    "Acoustically closer instrument pairs showed greater confusion; 7 of 18 model-noise tests "
     "are significant after Benjamini\u2013Hochberg; strongest for AST under human non-speech "
     "(Spearman \u03c1 = \u22120.607, permutation p = 0.000010, adjusted q = 0.000180 &lt; 0.05).",
 ]
 TAKEAWAYS = [
-    "<b>Clean Macro-F1 \u2260 robustness.</b> 5/6 models sat within 2 points on clean audio, "
-    "but under white noise SVM fell from 3rd to last (AUC 0.25) and MERT rose from last to 2nd "
-    "(0.43).",
-    "<b>AST was the most robust model</b> under all 3 noise types (AUC 0.63 / 0.78 / 0.75), "
-    "while the weakest model under each varied: SVM under white, MERT under audience, CNN under "
-    "studio.",
-    "<b>Pretrained Model \u2260 robustness.</b> AST led each noise type, but MERT swung from "
-    "2nd under white to last under audience, and PANNs fell to 3rd under white.",
-    "<b>Noise character:</b> audience and studio far less damaging than white. At 20 dB, "
-    "retention under white vs audience: AST 72% vs 85%, SVM 10% vs 68%.",
-    "<b>Instruments:</b> failures were uneven on both clean and noisy sweeps; tuba degraded "
-    "most; acoustic distance analysis supports the \u201csimilar instruments confuse more\u201d "
-    "association, which is only correlational",
+    "<b>Clean macro-F1 did not predict robustness.</b> All six clean scores spanned only 2.0 "
+    "points, but white-noise retention AUC ranged from 0.259 (SVM) to 0.636 (AST).",
+    "<b>AST had the highest observed robustness</b> under all 3 noise types "
+    "(AUC 0.636 / 0.791 / 0.753). The weakest model varied: SVM under white and human "
+    "non-speech, CNN under environmental noise.",
+    "<b>Pretrained systems occupied the top three positions</b> under every noise type, but "
+    "the study does not isolate pretraining from architecture, input, or sample rate.",
+    "<b>Noise category mattered:</b> recorded noise was less damaging than white at matched "
+    "nominal SNR. At 20 dB, AST retained 72.3% vs 85.3%; SVM retained 10.4% vs 68.0%.",
+    "<b>Instrument failures were uneven:</b> tuba had the greatest overall recall-loss AUC. "
+    "Acoustic distance was associated with confusion in 7 of 18 corrected tests, but the "
+    "relationship is correlational.",
 ]
 CONCLUSION = [
-    "<b>Universal benchmark</b> for instrument classification models, tested on six frontier "
-    "architectures",
+    "<b>Reproducible benchmark</b> spanning six instrument-classification systems",
     "<b>Evaluating robustness necessary</b>; clean accuracy alone is insufficient",
-    "Noise type equally important as noise strength (SNR ratio)",
+    "Noise category changes degradation at matched nominal SNR",
     "<b>Failures are structured.</b> Degradation concentrates in tuba, oboe, and trumpet. "
-    "Confusion is predicted by acoustic distance in 5 of 18 model/noise tests, most strongly "
+    "Confusion is associated with acoustic distance in 7 of 18 model/noise tests, most strongly "
     "for AST.",
     "<b>Shared, seed-reproducible noise</b> makes model comparison possible.",
 ]
@@ -484,8 +499,8 @@ LIMITATIONS = [
     "at once",
     "Most audio clips were tiled to fill the 3-second standard, which confounds content "
     "with repetition",
-    "Nominal SNR and different frequencies of noise may cause instruments to be masked "
-    "unequally",
+    "Nominal full-band SNR and model-specific frontends can change effective masking; "
+    "cross-model differences describe complete systems",
     "SVM, AST, MERT and PANNs are single-seed runs, while CNN and CRNN are multi-seed "
     "spread, so small differences are not treated as effects",
 ]
@@ -497,9 +512,9 @@ FUTURE = [
 ]
 NOISE_SOURCES = [
     ("white", "generated Gaussian noise — synthetic broadband control"),
-    ("audience", "ESC-50 human non-speech (targets 20–29): 400 clips, 10 classes — "
+    ("human", "ESC-50 human non-speech (targets 20–29): 400 clips, 10 classes — "
      "clapping, coughing, laughing, footsteps …"),
-    ("studio", "DEMAND: 18 real environments (domestic, nature, office, public, street, "
+    ("environmental", "DEMAND: 18 real environments (domestic, nature, office, public, street, "
      "transport), one microphone per array"),
 ]
 SEED_NOTE = ("Every mixture is seeded by sha256(dataset fingerprint | window | noise type | "
@@ -510,15 +525,14 @@ REPRO = [
     "committed to the repository",
     "Every figure and table on this poster regenerates from one script each "
     "(scripts/*.py) against those files",
-    "The noise corpus rebuilds bit-identically from the sealed dataset fingerprint "
-    "— scan the GitHub QR below",
+    "The noise corpus rebuilds bit-identically from the sealed dataset fingerprint",
 ]
 GLANCE = [
     ("10% vs 68%", "SVM keeps 10% of its clean score under white noise at 20 dB, but 68% "
-     "under audience noise at the same loudness"),
-    ("0 errors, worst loss", "tuba: perfect on clean audio for all six models, largest recall "
-     "loss under every noise type"),
-    ("5 / 18", "distance\u2013confusion tests significant after Benjamini\u2013Hochberg"),
+     "under human non-speech noise at the same nominal SNR"),
+    ("0 errors, greatest loss", "tuba: perfect on clean audio for all six models, but the "
+     "greatest mean recall-loss AUC overall"),
+    ("7 / 18", "distance\u2013confusion tests significant after Benjamini\u2013Hochberg"),
 ]
 ACK = ("This work was created in affiliation with the Boston University RISE program. We are "
        "grateful to Boston University for this opportunity, and to our instructors Dr. Eugene "
@@ -527,32 +541,26 @@ ACK = ("This work was created in affiliation with the Boston University RISE pro
        "formatting. All generated material was reviewed and verified by the authors, who take "
        "full responsibility for the final work.")
 
-CAP_FIG5 = ("<b>Figure 5.</b> Clean baseline and robustness AUC \u2014 area under the "
-            "macro-F1-vs-SNR curve, dB-weighted (1.0 = perfect classification at every SNR). "
+CAP_FIG5 = ("<b>Figure 5.</b> Clean baseline and normalized robustness AUC \u2014 area under the "
+            "retention-vs-SNR curve, dB-weighted (1.0 = no degradation across SNR). "
             "Bold marks the best value per column; model colours match Figure 6.")
-CAP_FIG6 = ("<b>Figure 6.</b> Robustness curves for all 6 models across 3 noise types "
-            "(columns): macro-F1 (top row) and retention relative to clean score (bottom row), "
-            "versus SNR from 50 to \u221210 dB. Shaded band is the spread across two noise "
-            "draws; dotted line is 12-class chance (0.083).")
+CAP_FIG6 = ("<b>Figure 6.</b> Retention relative to clean macro-F1 versus SNR for all six "
+            "models and three noise categories. Each point averages two noise realizations.")
 CAP_FIG7 = ("<b>Figure 7.</b> Clean-audio confusion for all six models, row-normalised: the "
             "diagonal is per-class recall, off-diagonal cells are the share of a true "
             "instrument sent elsewhere, on one colour scale across panels. Panel titles give "
             "clean macro-F1 and total misclassified windows.")
-CAP_FIG8 = ("<b>Figure 8.</b> Instruments ranked by clean accuracy (left) and noise robustness "
-            "(right), best at top. The rankings are unrelated (Spearman \u03c1 = \u22120.16, "
-            "p = 0.62). Tuba is classified perfectly by all six models but loses the most "
-            "recall under noise (0.62); violin is 43 clean errors yet the most robust "
-            "(0.19 lost).")
-CAP_FIG9A = ("<b>Figure 9a.</b> Acoustic distance vs confusion associations across model and "
-             "noise types")
-CAP_FIG9B = ("<b>Figure 9b.</b> Illustrative AST \u00d7 ESC-50 human non-speech relationship "
-             "across 66 instrument pairs")
+CAP_FIG8 = ("<b>Figure 8.</b> Instrument recall-loss AUC across SNR. Rows are ordered by mean "
+            "loss; all panels share one colour scale.")
+CAP_FIG9 = ("<b>Figure 9.</b> Acoustic distance and noise-induced confusion. Seven of 18 "
+            "model-noise tests were significant after BH correction; AST under human "
+            "non-speech noise had the strongest association.")
 
 EQ_CAPTIONS = [
     ("eq7.png", "Eq.7 Macro-F1 — primary evaluation metric; 12-instrument average"),
     ("eq8.png", "Eq.8 Retention — standardized measure of robustness; how much clean "
      "score was retained after noise added"),
-    ("eq9.png", "Eq.9 Area Under Robustness Curve — dB-weighted average macro-F1 under "
+    ("eq9.png", "Eq.9 Area Under Robustness Curve — dB-weighted average retention across "
      "all eight noise levels"),
     ("eq10.png", "Eq.10 Accuracy — plain model correctness rate"),
 ]
@@ -620,6 +628,7 @@ def glance_strip(c: canvas.Canvas, st: dict, x: float, y: float, w: float) -> fl
 def build() -> None:
     register_fonts()
     st = styles()
+    OUT.parent.mkdir(parents=True, exist_ok=True)
     c = canvas.Canvas(str(OUT), pagesize=(PAGE_W, PAGE_H))
     c.setTitle("Evaluation of Noise-Robustness in Classical Instrument Classification")
 
@@ -671,7 +680,7 @@ def build() -> None:
     y = model_table(c, st, x, y, w, "Trained from scratch", "No external pretraining",
                     SCRATCH_ROWS) + 14
     y = model_table(c, st, x, y, w, "Pretrained backbones",
-                    "Pretraining corpus listed beneath each model", PRETRAINED_ROWS) + 18
+                    "Pretraining corpus listed beneath each model", PRETRAINED_ROWS) + 10
 
     y = draw_para(c, "Noise Construction", st["subhead"], x, y, w) + 10
     y = bullets(c, NOISE_CONSTRUCTION, st["bullet"], x, y, w) + 12
@@ -690,20 +699,17 @@ def build() -> None:
     y = section_bar(c, "Results", x, y, w) + 20
     y = draw_results_table(c, x, y, w) + 10
     y = draw_para(c, CAP_FIG5, st["caption"], x, y, w) + 20
-    y = draw_image(c, FIGURES / "fig6_robustness_curves.png", x, y, w * 0.95, center_in=w) + 8
+    y = draw_image(c, FIGURES / "fig6d_retention_compact.png", x, y,
+                   w * 0.95, center_in=w) + 8
     y = draw_para(c, CAP_FIG6, st["caption"], x, y, w) + 20
     y = draw_image(c, FIGURES / "fig8_confusion_grid.png", x, y, w * 0.90, center_in=w) + 8
     y = draw_para(c, CAP_FIG7, st["caption"], x, y, w) + 20
-    y = draw_image(c, FIGURES / "fig9_rank_slope.png", x, y, w * 0.93, center_in=w) + 8
+    y = draw_image(c, FIGURES / "fig_recall_loss_heat.png", x, y,
+                   w * 0.93, center_in=w) + 8
     y = draw_para(c, CAP_FIG8, st["caption"], x, y, w) + 20
-
-    pair_w = (w - 28) / 2
-    ya = draw_image(c, FIGURES / "fig9a_distance_heatmap.png", x, y, pair_w)
-    yb = draw_image(c, FIGURES / "fig9b_ast_scatter.png", x + pair_w + 28, y, pair_w)
-    yy = max(ya, yb) + 8
-    ya = draw_para(c, CAP_FIG9A, st["caption"], x, yy, pair_w)
-    yb = draw_para(c, CAP_FIG9B, st["caption"], x + pair_w + 28, yy, pair_w)
-    y = max(ya, yb) + 20
+    y = draw_image(c, FIGURES / "fig_distance_confusion.png", x, y,
+                   w * 0.93, center_in=w) + 8
+    y = draw_para(c, CAP_FIG9, st["caption"], x, y, w) + 20
     mid_end = glance_strip(c, st, x, y, w)
 
     # ================= RIGHT =================
@@ -722,17 +728,23 @@ def build() -> None:
         with PILImage.open(ASSETS / fname) as im:
             dims[fname] = im.size
     k = min((eq_w * 0.92) / iw for iw, _ih in dims.values())
-    col_ys = [y, y]
-    for i, (fname, cap) in enumerate(EQ_CAPTIONS):
-        col = i % 2
-        ex = x + col * (eq_w + 26)
-        yy = col_ys[col]
-        iw, _ih = dims[fname]
-        yy = draw_image(c, ASSETS / fname, ex, yy, iw * k, center_in=eq_w) + 6
-        yy = draw_para(c, cap, ParagraphStyle("eqcap", parent=st["caption_l"], fontSize=13.5,
-                                              leading=16.5, alignment=1), ex, yy, eq_w) + 14
-        col_ys[col] = yy
-    y = max(col_ys) + 24
+    eq_caption = ParagraphStyle("eqcap", parent=st["caption_l"], fontSize=13.5,
+                                leading=16.5, alignment=1)
+    for row in range(2):
+        row_items = EQ_CAPTIONS[row * 2:(row + 1) * 2]
+        heights = [dims[fname][1] * k for fname, _cap in row_items]
+        row_height = max(heights)
+        caption_ends = []
+        for col, ((fname, cap), image_height) in enumerate(zip(row_items, heights)):
+            ex = x + col * (eq_w + 26)
+            # Bottom-align equations within each row. Equations 8 and 10 are shorter images,
+            # so this intentionally moves them downward to line up with Equations 7 and 9.
+            image_top = y + row_height - image_height
+            iw, _ih = dims[fname]
+            draw_image(c, ASSETS / fname, ex, image_top, iw * k, center_in=eq_w)
+            caption_ends.append(draw_para(c, cap, eq_caption, ex, y + row_height + 6, eq_w))
+        y = max(caption_ends) + 14
+    y += 24
     y = draw_para(c, "Statistical Analysis", st["subhead"], x, y, w) + 10
     small = ParagraphStyle("stat", parent=st["bullet"], fontSize=18.5, leading=24)
     y = bullets(c, STATS + MID_STATS, small, x, y, w) + 26
@@ -760,13 +772,11 @@ def build() -> None:
     y = bottom_limit - ack_block - ref_block - 14
     anchor_start = y
     y = section_bar(c, "References", x, y, w) + 16
-    qx = x + (w - 2 * qr_w - 60) / 2
-    draw_image(c, ASSETS / "qr_works_cited.jpeg", qx, y, qr_w)
-    y2 = draw_image(c, ASSETS / "qr_github.jpeg", qx + qr_w + 60, y, qr_w)
+    qx = x + (w - qr_w) / 2
+    y2 = draw_image(c, ASSETS / "qr_works_cited.jpeg", qx, y, qr_w)
     c.setFont("TNR-Bold", 18)
     c.setFillColor(INK)
-    c.drawCentredString(qx + qr_w / 2, PAGE_H - y2 - 24, "Works Cited")
-    c.drawCentredString(qx + qr_w + 60 + qr_w / 2, PAGE_H - y2 - 24, "GitHub")
+    c.drawCentredString(x + w / 2, PAGE_H - y2 - 24, "Works Cited")
     y = y2 + 40
     y = section_bar(c, "Acknowledgments", x, y, w) + 14
     y = draw_para(c, ACK, ack_style, x, y, w)
