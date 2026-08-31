@@ -60,7 +60,7 @@ The cluster checkout at `/projectnb/rise-grid/maxliu2k/instrument-robustness` wa
 **MODEL-002 was fixed independently by PaperTP.** `train_ast` now uses
 `score = val_metrics["macro_f1"]` and no longer builds a test loader. My own uncommitted fix for
 the same issue was redundant and was dropped rather than merged. My documentation corrections
-(`plan.md`, `docs/AUDIT_CHECKLIST.md`) were kept, because they record the retraction and one gap
+(`internal/plan.md`, `internal/AUDIT_CHECKLIST.md`) were kept, because they record the retraction and one gap
 that is still open — see §6.
 
 ---
@@ -197,8 +197,8 @@ enforce the base checkpoint's hash, so which copy gets used is currently unrecor
 
 **`-hold_jid` releases on completion, not success.** When the first pipeline attempt failed after
 one second, SGE released the three training jobs held behind it and they began scheduling against
-the *previous* build. This is exactly the silent-wrong-result failure mode `CLAUDE.md` is written
-about, and nothing in the repo would have caught it. `scc/rise_cpu_train.qsub` now opens with a
+the *previous* build. This is exactly the silent-wrong-result failure mode this repo's provenance rules exist to
+prevent, and nothing in the repo would have caught it. `scc/rise_cpu_train.qsub` now opens with a
 gate that reads `dataset_freeze.json`, compares its `dataset_fingerprint` against a freshly
 computed `dataset_build_identity()`, and refuses to train on mismatch or absence. If it fires, the
 bug it has found is "the pipeline did not actually rebuild the data this run".
@@ -236,8 +236,8 @@ Left in the working tree, not committed or pushed:
 
 | file | change |
 |---|---|
-| `plan.md` | AST status → MUST BE RETRAINED; "all six" claim corrected; `summarize_results` gap recorded |
-| `docs/AUDIT_CHECKLIST.md` | #10 retraction + the gap in §6 |
+| `internal/plan.md` | AST status → MUST BE RETRAINED; "all six" claim corrected; `summarize_results` gap recorded |
+| `internal/AUDIT_CHECKLIST.md` | #10 retraction + the gap in §6 |
 | `README.md` | `Tariq.txt` protection notice; `configs/` layout line |
 | `configs/data/irmas.yaml` | deleted (0 bytes, no consumer) |
 

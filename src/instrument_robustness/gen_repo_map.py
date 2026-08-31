@@ -31,15 +31,16 @@ TOP_LEVEL = {
     "model_bundle/": "All six models' training/eval code copied into one folder for hand-off; drift from src/ is a build failure (bundle_models.py).",
     "models/": "All six trained weight files in one flat folder with self-describing names (assembled by bundle_weights.py).",
     "scc/": "BU SCC (SGE) qsub job scripts and their README.",
-    "docs/": "Design and protocol docs: NOISE_PLAN, DATA_PIPELINE_AND_NOISE, RESULTS, REPO_MAP, AUDIT_CHECKLIST.",
-    "tests/": "Unit tests: preprocessing, noise mixer/metrics, adapters, robustness curve.",
+    "docs/": "Design and protocol docs, including the frozen noise and failure-analysis plans.",
+    "tests/": "Unit tests: preprocessing, models, noise, robustness curves, and failure analysis.",
     "legacy/": "Retired code and 9-class-era artifacts, kept for provenance. Not on the active path.",
     "configs/": "Configuration inputs consumed by the pipeline.",
     "data/": "Small tracked data inputs.",
     "pyproject.toml": "Package + dependency definition; extras like [pretrained] pull torch/transformers/panns.",
     "download_data.py": "RETIRED Google-Drive fetch. prep_data.py is the only supported dataset acquisition.",
     "README.md": "Project overview and how to run the pipeline.",
-    "CLAUDE.md": "Working notes / agent context ported from the cnn-ensemble branch.",
+    "internal/": "Working notes, planning docs, and internal review/audit records. Not part of the "
+                 "published method; kept for provenance.",
 }
 
 # Module descriptions, grouped. A module not listed here still appears under its group as
@@ -81,10 +82,10 @@ GROUPS = {
         "train_mert": "Train the MERT probe.",
         "train_ast": "Fine-tune AST.",
         "train_panns": "PANNs CNN14 probe or fine-tune.",
-        "finalize_svm": "Refit SVM on train+val and evaluate test once.",
+        "finalize_svm": "Refit SVM on train only and evaluate test once.",
         "finalize_cnn": "Finalize CNN and evaluate test once.",
         "finalize_crnn": "Finalize CRNN and evaluate test once.",
-        "finalize_mert": "Refit MERT on train+val, evaluate test once, write a guard record.",
+        "finalize_mert": "Refit MERT on train only, evaluate test once, write a guard record.",
         "extract_mert": "Extract MERT embeddings to .npz.",
         "eval_panns_probe": "Evaluate the PANNs linear probe.",
     },
@@ -101,6 +102,7 @@ GROUPS = {
         "noise_stats": "Paired cluster bootstrap + exact cluster sign test.",
         "snr_pilot": "Validation-only SNR grid selection; writes no audio. NOT a benchmark.",
         "robustness_curve": "Retention-vs-SNR curve and normalized AUC.",
+        "failure_analysis": "Post-rerun instrument recall-loss and acoustic-distance/confusion analyses.",
     },
     "Cross-dataset, ensemble & tooling": {
         "build_tinysol_manifest": "Emit a Philharmonia-schema manifest from TinySOL audio (tinysol-12class branch).",

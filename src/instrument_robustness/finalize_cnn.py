@@ -141,7 +141,7 @@ def run_finalize(model_cls, output_dir: Path, device: str) -> dict:
     # macro-F1 is the metric the combiner was SELECTED on (see train_cnn's standardisation across
     # all six models) and the quantity noise_eval_common's clean-parity gate compares against, so
     # a summary without it could not enter the noise sweep at all. Balanced accuracy and MCC are
-    # kept alongside in full -- CLAUDE.md's own rule is that they are the right metric under class
+    # kept alongside in full -- the standing argument is that they are the right metric under class
     # imbalance, and this project standardised on macro-F1 for cross-model comparability, not
     # because macro-F1 won that argument.
     macro_f1 = float(f1_score(yte, preds, labels=labels, average="macro", zero_division=0))
