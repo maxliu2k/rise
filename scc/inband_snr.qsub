@@ -1,0 +1,55 @@
+#!/bin/bash -l
+
+#$ -P rise-grid
+#$ -N inband_snr
+#$ -j y
+#$ -pe omp 4
+#$ -l h_rt=6:00:00
+#$ -l mem_per_core=8G
+#
+# CPU-only, like svm_noise, so the scheduler will happily put it on the ivybridge `pi` nodes
+# where that job repeatedly died. The fault there was never root-caused, so this job inherits
+# the same avoidance rather than rediscovering it. See scc/svm_noise.qsub for the history.
+#$ -l cpu_arch=broadwell
+
+set -euo pipefail
+trap 'rc=$?; echo "RISE_INBAND_EXIT=$rc job=inband_snr end $(date)"; trap - EXIT; exit "$rc"' EXIT
+
+noise_repo="${NOISE_REPO:-$SGE_O_WORKDIR}"
+noise_data_root="${RISE_DATA_ROOT:?Submit with -v RISE_DATA_ROOT=/projectnb/...}"
+noise_venv="${RISE_VENV:-${NOISE_VENV:-$(dirname "$noise_repo")/venv}}"
+
+if [ -n "${RISE_MODULES-python3/3.9.9}" ]; then
+    module load ${RISE_MODULES:-python3/3.9.9}
+fi
+. "$noise_repo/scc/activate_venv.sh"
+rise_activate "$noise_venv"
+cd "$noise_repo"
+
+export PYTHONPATH="$noise_repo/src${PYTHONPATH:+:$PYTHONPATH}"
+export RISE_DATA_ROOT="$noise_data_root"
+export OMP_NUM_THREADS="${NSLOTS:-4}"
+export MKL_NUM_THREADS="${NSLOTS:-4}"
+export OPENBLAS_NUM_THREADS=1
+export OPENBLAS_CORETYPE="${OPENBLAS_CORETYPE:-SANDYBRIDGE}"
+export NUMEXPR_NUM_THREADS=1
+export NUMBA_NUM_THREADS=1
+export PYTHONUNBUFFERED=1
+
+# Windows per condition. 250 x 48 conditions = 12,000 mixtures read, which is minutes, not
+# hours, and gives a standard error on each condition's mean in-band SNR well under 0.1 dB.
+# Set RISE_INBAND_SAMPLE=0 to measure all 1,255 windows per condition (60,240 reads).
+inband_sample="${RISE_INBAND_SAMPLE:-250}"
+
+# Fail before the analysis rather than halfway through it. The sweep must be COMPLETE: a
+# condition averaged over whatever files happen to exist is not a measurement.
+test -f "$RISE_DATA_ROOT/work/windows_noisy/noise_manifest.json"
+test -f "$RISE_DATA_ROOT/pipeline/windows.csv"
+for model in svm cnn crnn mert_ft panns ast; do
+    test -f "$noise_repo/artifacts/$model/noise/metrics_clean.json"
+done
+
+python -m instrument_robustness.noise_sweep --check-generated
+python -m instrument_robustness.inband_snr --sample "$inband_sample"
+
+echo "results in $noise_repo/artifacts/inband_snr/"
