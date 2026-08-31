@@ -265,3 +265,6 @@ all-samples/features/panns/*
 !all-samples/features/ast/EXTRACTION_PLAN.md
 !all-samples/features/mert/EXTRACTION_PLAN.md
 !all-samples/features/panns/EXTRACTION_PLAN.md
+
+# Local agent/editor config — never part of the published repo
+.claude/

@@ -36,9 +36,10 @@ SELECTION METRIC IS macro-F1, not balanced accuracy, as of the standardisation a
 models. SVM and MERT already selected on macro-F1; noise_eval_common's clean-parity gate and
 every noise metric compare on macro-F1; a CNN/CRNN result selected on something else could not
 honestly be placed beside them. Balanced accuracy and MCC are still recorded in full for every
-seed and every combiner -- CLAUDE.md's own rule is that they, not macro-F1, are the right metric
+seed and every combiner -- the standing argument in this repo is that they, not macro-F1, are the
+right metric
 under class imbalance, and this file does not resolve that tension, it standardises on the metric
-the rest of the project already committed to. See docs/AUDIT_CHECKLIST.md #10.
+the rest of the project already committed to. See internal/AUDIT_CHECKLIST.md #10.
 """
 from __future__ import annotations
 
@@ -107,7 +108,7 @@ def iterate(X: np.ndarray, y: np.ndarray, batch_size: int, shuffle: bool, rng: r
 
 def _stats(values: list[float]) -> dict:
     """mean/std/min/max over a per-seed metric. std is 0.0 for a single seed, not NaN or undefined
-    -- an n=1 std has no meaning, and CLAUDE.md's own rule is never to quote it as if it did, but
+    -- an n=1 std has no meaning, and the reporting rule here is never to quote it as if it did, but
     the field must still exist for --seeds with one entry not to crash the caller."""
     return {"mean": float(np.mean(values)),
             "std": float(np.std(values, ddof=1)) if len(values) > 1 else 0.0,
@@ -225,7 +226,7 @@ def train_one_seed(seed, Xtr, ytr, Xva, yva, device, weights, out_dir, model_cls
         "best_epoch": best_epoch,
         "best_val_loss": float(best_loss),
         # macro_f1 is the SELECTION metric (see run_training); balanced_accuracy and mcc are kept
-        # alongside per CLAUDE.md's own reporting rule (they do not reward a collapsed classifier
+        # alongside per the project's reporting rule (they do not reward a collapsed classifier
         # under imbalance the way macro-F1 can) -- recording them costs nothing and lets a reader
         # who distrusts the standardisation check it themselves.
         "val_macro_f1": float(f1_score(yva, preds, labels=labels, average="macro",
