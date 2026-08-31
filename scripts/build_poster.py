@@ -46,7 +46,7 @@ from PIL import Image as PILImage
 from reportlab.lib.colors import HexColor, white
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.pdfmetrics import registerFontFamily
+from reportlab.pdfbase.pdfmetrics import registerFontFamily, stringWidth
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph, Table, TableStyle
@@ -60,6 +60,11 @@ FIGURES = ROOT / "docs" / "figures"
 OUT = ROOT / "output" / "pdf" / "poster_rebuild_revised_v3.pdf"
 
 PAGE_W, PAGE_H = 2592.0, 3456.0          # 36 x 48 in at 72 pt/in
+
+# BU logo width. Sized against the TITLE, not chosen for its own sake: the title is centred on the
+# page, so the logo and the title font size compete for the same horizontal space (~40pt of logo
+# per 2pt of title). Raising this without dropping the title size trips the assert in main().
+LOGO_W = 185.0                           # 2.6 in
 
 # ---- palette ---------------------------------------------------------------------------------
 BU_RED = HexColor("#CC0000")
@@ -115,7 +120,15 @@ def register_fonts() -> None:
 def styles() -> dict[str, ParagraphStyle]:
     base = dict(fontName="TNR", textColor=INK, spaceBefore=0, spaceAfter=0)
     return {
-        "title": ParagraphStyle("title", fontName="TNR-Bold", fontSize=60, leading=70,
+        # 50/60 rather than 60/70. The title is 91 characters, and at 60pt it wraps to a second
+        # line -- which costs 70pt off every column's height against a layout that ships with 3pt
+        # of slack (see the overflow check in main). So it has to fit on one line.
+        #
+        # One line means the text must clear the logo, and the two trade directly: the title is
+        # page-centred, so every 2pt of title size costs ~40pt of logo width. 50pt is the largest
+        # size that leaves the logo legible (LOGO_W below, 2.6in) with a ~49pt gap, and it is
+        # still 1.67x the 30pt author line. Changing either number requires re-checking the other.
+        "title": ParagraphStyle("title", fontName="TNR-Bold", fontSize=50, leading=60,
                                 alignment=1, textColor=INK),
         "authors": ParagraphStyle("authors", fontName="TNR-Bold", fontSize=30, leading=38,
                                   alignment=1, textColor=INK),
@@ -401,7 +414,7 @@ def model_table(c: canvas.Canvas, st: dict, x: float, y: float, w: float,
 
 
 # ---- content ---------------------------------------------------------------------------------
-TITLE = "Evaluation of Noise-Robustness in Classical Instrument Classification"
+TITLE = "Characterizing Robustness of Musical Instrument Classification Under Acoustic Perturbations"
 SUP = '<super><font size="17">{}</font></super>'
 AUTHORS = (f"Max Liu{SUP.format('1,5')}, Allan Yu{SUP.format('2,5')}, "
            f"Gavin Hu{SUP.format('3,5')}, Tariq Hossain{SUP.format('4,5')}, "
@@ -635,15 +648,21 @@ def build() -> None:
     st = styles()
     OUT.parent.mkdir(parents=True, exist_ok=True)
     c = canvas.Canvas(str(OUT), pagesize=(PAGE_W, PAGE_H))
-    c.setTitle("Evaluation of Noise-Robustness in Classical Instrument Classification")
+    c.setTitle(TITLE)
 
     c.setFillColor(PAGE_BG)
     c.rect(0, 0, PAGE_W, PAGE_H, stroke=0, fill=1)
 
     # ---- header ----
     margin = 45.0
-    draw_image(c, ASSETS / "bu_logo.jpeg", margin + 6, 52, 300)
-    y = draw_para(c, TITLE, st["title"], margin + 310, 64, PAGE_W - 2 * (margin + 310)) + 20
+    draw_image(c, ASSETS / "bu_logo.jpeg", margin + 6, 52, LOGO_W)
+    # Full-width box, so the title centres on the PAGE and lines up with the authors and
+    # affiliations beneath it. It clears the logo by ~49pt only because LOGO_W was cut to suit
+    # the 50pt title -- see the note on the title style. Asserted rather than trusted:
+    title_w = stringWidth(TITLE, "TNR-Bold", st["title"].fontSize)
+    assert (PAGE_W - title_w) / 2 - (margin + 6 + LOGO_W) > 30, (
+        "the centred title collides with the BU logo: shrink LOGO_W or the title font size")
+    y = draw_para(c, TITLE, st["title"], margin, 64, PAGE_W - 2 * margin) + 20
     y = draw_para(c, AUTHORS, st["authors"], margin, y, PAGE_W - 2 * margin) + 12
     y = draw_para(c, AFFIL, st["affil"], margin, y, PAGE_W - 2 * margin) + 22
     c.setStrokeColor(BU_RED)
