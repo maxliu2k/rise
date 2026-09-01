@@ -57,23 +57,17 @@ maxliu2k@gmail.com}
 \textit{St. Mark's School} \\
 Southborough, USA \\
 gavinhu42@gmail.com}
-% Do NOT add a manual \\ row break here. IEEEtran already wraps the author list
-% on its own (four blocks fit one conference row, so five wrap as 4 + 1 with the
-% last block centred beneath). A manual break fights that wrap and displaces a
-% block: with \\ before Tariq, the compiled byline read Allan, Max, Gavin,
-% Pinsky / Tariq -- swapping the last two authors. Plain \and gives source order.
+% Do NOT add a manual \\ row break here. IEEEtran wraps the author list on its
+% own -- four blocks fit one conference row, and a fifth wraps beneath. A manual
+% break fights that wrap and displaces a block: with \\ before Tariq, a
+% five-author build came out Allan, Max, Gavin, Pinsky / Tariq, swapping the last
+% two authors. Plain \and gives source order.
 \and
 \IEEEauthorblockN{Tariq Hossain}
 \IEEEauthorblockA{\textit{Boston University RISE} \\
 \textit{Seven Lakes High School} \\
 Katy, USA \\
 tariqhsn08@gmail.com}
-\and
-\IEEEauthorblockN{Eugene Pinsky}
-\IEEEauthorblockA{\textit{Department of Computer Science} \\
-\textit{Metropolitan College, Boston University} \\
-Boston, MA, USA \\
-epinsky@bu.edu}
 % Order matters here. The starred note goes LAST: with it first, the two unmarked
 % notes below it read as continuation lines of the same footnote, so the asterisk
 % appears to cover all three. Unmarked general notes first, marked note last.
@@ -347,7 +341,7 @@ First, the Philharmonia dataset contains only single-instrument, single-note rec
 This research contributes a reproducible noise-robustness benchmark for instrument classification and uses it to characterize how six systems fail under controlled white, human non-speech, and environmental noise degradation. Those failures proved to be structured rather than diffuse: acoustically similar instrument pairs were confused more heavily as noise rose---the association was negative in 17 of 18 predeclared model-by-noise tests and significant in seven after correction, six of them under recorded noise---so noise appears to collapse first the distinctions that were already narrowest, with tuba, oboe, and trumpet losing the most recall overall. Against that pattern, clean and noisy rankings diverged: despite similar performance on clean recordings, AST retained the most clean macro-F1 across the tested conditions, while SVM degraded fastest under white noise and CNN under environmental. These findings demonstrate that clean performance alone is insufficient for selecting an instrument classifier for noisy conditions; robustness must also be evaluated across multiple noise categories and severities. Because the corpus regenerates exactly from its seeding scheme, further systems can be added and compared against these results directly. Future work should extend the benchmark to multiple datasets, polyphonic music, independently recorded environmental noise, additional noise realizations, and noise-aware training.
 
 \section*{Acknowledgments}
-We are grateful to Boston University for this opportunity, and to our RISE instructor Dr. Indrajit Kalita together with the program's teaching fellows and staff, for their dedication and hard work.
+We are grateful to Boston University for this opportunity, and to our RISE instructors Dr. Eugene Pinsky and Dr. Indrajit Kalita together with the program's teaching fellows and staff, for their dedication and hard work.
 
 \begin{thebibliography}{00}
 \bibitem{b1} S. McAdams, ``Perspectives on the contribution of timbre to musical structure,'' Computer Music Journal, vol. 23, no. 3, pp. 85--102, 1999.
