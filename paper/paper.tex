@@ -57,12 +57,12 @@ maxliu2k@gmail.com}
 \textit{St. Mark's School} \\
 Southborough, USA \\
 gavinhu42@gmail.com}
-% Five author blocks do not fit one IEEEtran conference row, so the list breaks
-% 3 + 2 here. UNVERIFIED -- this file has never been compiled on this machine.
-% If the row break misbehaves, the fallback is the single-block form: one
-% \IEEEauthorblockN listing all five names with \IEEEauthorrefmark superscripts
-% and the affiliations beneath.
-\\
+% Do NOT add a manual \\ row break here. IEEEtran already wraps the author list
+% on its own (four blocks fit one conference row, so five wrap as 4 + 1 with the
+% last block centred beneath). A manual break fights that wrap and displaces a
+% block: with \\ before Tariq, the compiled byline read Allan, Max, Gavin,
+% Pinsky / Tariq -- swapping the last two authors. Plain \and gives source order.
+\and
 \IEEEauthorblockN{Tariq Hossain}
 \IEEEauthorblockA{\textit{Boston University RISE} \\
 \textit{Seven Lakes High School} \\
@@ -87,7 +87,7 @@ https://github.com/maxliu2k/rise.}
 \maketitle
 
 \begin{abstract}
-Instrument classification underpins Music Information Retrieval (MIR) infrastructure and supports applications including musicology, audio editing, and transcription. Deep learning models that perform well on clean recordings may lose substantial accuracy under artificial and real-world noise, yet robustness is rarely compared across model families. We construct a reproducible noise-robustness benchmark for instrument classification---12 orchestral instruments from the Philharmonia Orchestra Sound Samples dataset, perturbed by white (Gaussian), human non-speech (ESC-50), and environmental (DEMAND) noise at SNRs from 50 dB to $-$10 dB---and evaluate six systems on it, three trained from scratch (SVM, CNN, CRNN) and three pretrained (AST, MERT, and PANNs). Every mixture is generated from a fixed seed and regenerates exactly, so all six are scored on identical audio and every comparison is paired. Clean macro-F1 spanned only 0.971 to 0.991 across the six, but robustness diverged sharply. Averaged over the SNR range, the models retained 26--64\% of their clean macro-F1 under white noise and 65--79\% under human non-speech; the ranges do not overlap, so no choice of model compensated for the change in noise category. Models retained 51--75\% of their clean macro-F1 under environmental noise. AST was the most robust under all three categories and the only model to hold its rank across them. Clean macro-F1 is therefore not indicative of noise robustness, and degradation depends on noise category rather than severity alone---a dependence that survives measuring each category's power in the instrument band, where human non-speech noise places more of its energy than white noise does and still damages less. The resulting failures were structured rather than diffuse: instrument pairs lying closer together in an 88-dimensional acoustic feature space were confused more heavily as noise rose, an association that held in 17 of 18 predeclared model-by-noise tests and reached significance in seven, consistent with noise degrading classification by masking the cues that separate acoustically similar instruments.
+Instrument classification underpins Music Information Retrieval (MIR) and supports musicology, audio editing, and transcription. Models that perform well on clean recordings may lose substantial accuracy under noise, yet robustness is rarely compared across model families. We construct a reproducible noise-robustness benchmark for instrument classification---12 orchestral instruments from the Philharmonia Orchestra Sound Samples dataset, perturbed by white (Gaussian), human non-speech (ESC-50), and environmental (DEMAND) noise at SNRs from 50 dB to $-$10 dB---and evaluate six systems on it, three trained from scratch (SVM, CNN, CRNN) and three pretrained (AST, MERT, and PANNs). Every mixture regenerates exactly from a fixed seed, so all six are scored on identical audio and every comparison is paired. Clean macro-F1 spanned only 0.971 to 0.991, but robustness diverged sharply. Averaged over the SNR range, models retained 26--64\% of their clean macro-F1 under white noise, 65--79\% under human non-speech, and 51--75\% under environmental noise; the first two ranges do not overlap, so no choice of model compensated for the change in noise category. AST was the most robust under all three categories and the only model to hold its rank. Clean macro-F1 is therefore not indicative of noise robustness, and degradation depends on noise category rather than severity alone---a dependence that survives measuring each category's power in the instrument band, where human non-speech noise places more of its energy than white noise does and still damages less. Failures were structured rather than diffuse: instrument pairs closer together in an 88-dimensional feature space were confused more heavily as noise rose, an association holding in 17 of 18 predeclared model-by-noise tests and significant in seven, consistent with noise masking the cues that separate acoustically similar instruments.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -302,20 +302,6 @@ At 20 dB white noise, CNN exceeded CRNN by 0.1122 and 0.1130 macro-F1 across the
 intervals $[0.0560, 0.1625]$ and $[0.0589, 0.1601]$ excluded zero. CRNN led under recorded noise, but only two of four
 intervals excluded zero.
 
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.93\columnwidth]
-{fig_recall_loss_heat_column.pdf}
-\caption{Instrument recall-loss AUC across SNR. Rows are ordered by mean loss, and all panels share one color scale. Human denotes human non-speech.}
-\label{fig:recall_loss}
-\end{figure}
-
-\subsection{What Fails: Acoustic Similarity Predicts Confusion}
-Noise did not degrade classification uniformly across the label space; it concentrated on pairs of instruments that were already acoustically close. Pairs separated by a smaller distance between their training-set feature centroids showed greater noise-induced confusion (Fig.~\ref{fig:distance_confusion}A): the association was negative in 17 of the 18 predeclared model-by-noise tests, and seven were significant after BH correction, most strongly for AST (Fig.~\ref{fig:distance_confusion}B) under human
-non-speech noise ($\rho = -0.607$, permutation $p = 1.0 \times 10^{-5}$, adjusted $q = 1.8 \times 10^{-4}$). Six of the seven significant tests involved recorded rather than synthetic noise, so the effect was clearest for the categories that resemble deployment conditions. The direction was near-unanimous, but fewer than half the tests reached significance, so acoustic proximity organizes the failures without fully accounting for them.
-
-The per-instrument pattern has the same shape. Averaged across models and noise categories, tuba lost the most recall (Fig.~\ref{fig:recall_loss}, AUC 0.599) and violin the least (0.215), and the largest single pairwise increase was flute-oboe for the SVM under white noise (0.342). The ordering was nonetheless partly model-specific: tuba was the most vulnerable instrument for five of six models under human non-speech noise, but the leading failure class differed under white and environmental noise, so which instrument fails first reflects the model's representation as well as the instrument's acoustics.
-
 \begin{figure}[!t]
 \centering
 \includegraphics[width=\columnwidth]
@@ -327,12 +313,30 @@ correction. (B) AST under human non-speech noise had the strongest association. 
 \label{fig:distance_confusion}
 \end{figure}
 
+\subsection{What Fails: Acoustic Similarity Predicts Confusion}
+Noise did not degrade classification uniformly across the label space; it concentrated on pairs of instruments that were already acoustically close. Pairs separated by a smaller distance between their training-set feature centroids showed greater noise-induced confusion (Fig.~\ref{fig:distance_confusion}A): the association was negative in 17 of the 18 predeclared model-by-noise tests, and seven were significant after BH correction, most strongly for AST (Fig.~\ref{fig:distance_confusion}B) under human
+non-speech noise ($\rho = -0.607$, permutation $p = 1.0 \times 10^{-5}$, adjusted $q = 1.8 \times 10^{-4}$). Six of the seven significant tests involved recorded rather than synthetic noise, so the effect was clearest for the categories that resemble deployment conditions. The direction was near-unanimous, but fewer than half the tests reached significance, so acoustic proximity organizes the failures without fully accounting for them.
+
+The per-instrument pattern has the same shape. Averaged across models and noise categories, tuba lost the most recall (Fig.~\ref{fig:recall_loss}, AUC 0.599) and violin the least (0.215), and the largest single pairwise increase was flute-oboe for the SVM under white noise (0.342). The ordering was nonetheless partly model-specific: tuba was the most vulnerable instrument for five of six models under human non-speech noise, but the leading failure class differed under white and environmental noise, so which instrument fails first reflects the model's representation as well as the instrument's acoustics.
+
+% Figures are numbered in the order their environments appear in the source, not
+% the order they are cited. This one must stay AFTER the distance-confusion
+% figure: Fig.~\ref{fig:distance_confusion} is cited first (III-D, first
+% paragraph) and this one second, so the reverse order numbered them 3 then 2.
+\begin{figure}[!t]
+\centering
+\includegraphics[width=0.93\columnwidth]
+{fig_recall_loss_heat_column.pdf}
+\caption{Instrument recall-loss AUC across SNR. Rows are ordered by mean loss, and all panels share one color scale. Human denotes human non-speech.}
+\label{fig:recall_loss}
+\end{figure}
+
 \section{Discussion}
 The clearest structure in these results is where the failures land. Noise did not spread errors evenly across the twelve instruments: acoustically similar pairs absorbed disproportionately more of them, and the association was negative in 17 of the 18 predeclared model-by-noise tests. The reading this supports is that additive noise erodes the fine spectral detail separating neighbouring timbres before it erodes anything else, so the classes that were already closest together on clean audio are the first to merge. The same mechanism accounts for why instrument-level vulnerability is only partly stable across the study: tuba showed the greatest overall recall loss and violin the least, but the most vulnerable instrument varied by model and by noise category, because which cues survive depends jointly on the model's representation and on where the noise places its energy. Seven of the eighteen relationships reached significance, so acoustic proximity organizes the failures rather than fully explaining them---it describes where errors concentrate, not why each system breaks.
 
 Against that structure, the model comparison shows that clean accuracy is not indicative of noise robustness. While the six models scored closely on clean audio, their performances were very different under noise, exposing differences in retention up to 61.9 percentage points at a shared noisy condition. Model ranking also changed across noise types and noise levels. Despite pretrained models having the highest retention AUCs under all noise categories, the study cannot establish that pretraining confers robustness because complete systems differed in pretraining corpus, architecture, input representation, and sample rate. For example, AST and MERT may have benefited from representations learned through large-scale audio pretraining, but PANNs trailed both under white noise, so the size of the benefit appears to depend on the pretraining corpus and architecture rather than on pretraining alone. The split was nonetheless consistent: in every noise category the three pretrained models ranked ahead of all three trained from scratch.
 
-Human non-speech and environmental noise appeared less damaging than white noise, but this result could reflect limitations regarding the use of nominal SNR (see Section~\ref{sec:limitations}). The only architectural comparison was between the CNN and CRNN, where results suggest that temporal sequence modeling was not uniformly beneficial: CNN led under white noise, with both confidence intervals excluding zero, while CRNN led under recorded noise, though only two of its four intervals excluded zero. This nuance suggests that the value of temporal information depends on noise structure, but still cannot be solely attributed to recurrence given that CRNN had more parameters and greater temporal resolution.
+Human non-speech and environmental noise were less damaging than white noise, and the in-band control shows this is not an artifact of measuring severity on a full-band axis: human non-speech places more of its power inside the instrument band than white noise does and still damages less. Environmental noise is the partial exception, since roughly a quarter of its apparent mildness follows from placing two thirds of its power outside that band (see Section~\ref{sec:limitations}). The only architectural comparison was between the CNN and CRNN, where results suggest that temporal sequence modeling was not uniformly beneficial: CNN led under white noise, with both confidence intervals excluding zero, while CRNN led under recorded noise, though only two of its four intervals excluded zero. This nuance suggests that the value of temporal information depends on noise structure, but still cannot be solely attributed to recurrence given that CRNN had more parameters and greater temporal resolution.
 
 
 \subsection{Limitations}
