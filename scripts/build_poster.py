@@ -163,12 +163,20 @@ def bullets(c: canvas.Canvas, items: list[str], style: ParagraphStyle,
     return y - gap
 
 
+def image_height(path: Path, width: float) -> float:
+    """Rendered height of an image scaled to `width`, without drawing it.
+
+    Needed when a block's height has to be reserved before anything is placed in it.
+    """
+    with PILImage.open(path) as im:
+        iw, ih = im.size
+    return width * ih / iw
+
+
 def draw_image(c: canvas.Canvas, path: Path, x: float, y_top: float, width: float,
                center_in: float | None = None) -> float:
     """Place an image scaled to `width`, top at y_top. Returns new y_top."""
-    with PILImage.open(path) as im:
-        iw, ih = im.size
-    h = width * ih / iw
+    h = image_height(path, width)
     if center_in is not None:
         x = x + (center_in - width) / 2
     c.drawImage(str(path), x, PAGE_H - y_top - h, width, h,
@@ -766,11 +774,13 @@ def build() -> None:
         heights = [dims[fname][1] * k for fname, _cap in row_items]
         row_height = max(heights)
         caption_ends = []
-        for col, ((fname, cap), image_height) in enumerate(zip(row_items, heights)):
+        # `eq_height`, not `image_height` -- that is the name of a module-level helper, and
+        # binding it here shadowed the function for the rest of main().
+        for col, ((fname, cap), eq_height) in enumerate(zip(row_items, heights)):
             ex = x + col * (eq_w + 26)
             # Bottom-align equations within each row. Equations 8 and 10 are shorter images,
             # so this intentionally moves them downward to line up with Equations 7 and 9.
-            image_top = y + row_height - image_height
+            image_top = y + row_height - eq_height
             iw, _ih = dims[fname]
             draw_image(c, ASSETS / fname, ex, image_top, iw * k, center_in=eq_w)
             caption_ends.append(draw_para(c, cap, eq_caption, ex, y + row_height + 6, eq_w))
@@ -797,18 +807,35 @@ def build() -> None:
     ack_p = Paragraph(ACK, ack_style)
     _, ack_h = ack_p.wrapOn(c, w, PAGE_H)
     bottom_limit = top + col_h - pad
+    # Two QR codes side by side: the works-cited list and the code/data repository. The
+    # repository one earns its place -- the paper's first contribution is a reproducible
+    # benchmark, so a reader should be able to reach the artifact from the board.
+    #
+    # Height is measured, not assumed to equal qr_w. The two source images are not quite
+    # square and not quite the same shape (aspect 0.988 vs 1.007), so at 215pt they render
+    # 212.4pt and 216.5pt tall. Reserving qr_w would under-reserve the block by 1.5pt, and
+    # captioning each at its own bottom edge would leave the two labels 4pt out of line.
     qr_w = 215.0
-    ref_block = 58 + 16 + qr_w + 34 + 26
+    qr_gap = 40.0
+    QR_CODES = (("qr_works_cited.jpeg", "Works Cited"), ("qr_github.jpeg", "Code & Data"))
+    qr_h = max(image_height(ASSETS / name, qr_w) for name, _ in QR_CODES)
+    ref_block = 58 + 16 + qr_h + 34 + 26
     ack_block = 58 + 14 + ack_h
     y = bottom_limit - ack_block - ref_block - 14
     anchor_start = y
     y = section_bar(c, "References", x, y, w) + 16
-    qx = x + (w - qr_w) / 2
-    y2 = draw_image(c, ASSETS / "qr_works_cited.jpeg", qx, y, qr_w)
-    c.setFont("TNR-Bold", 18)
-    c.setFillColor(INK)
-    c.drawCentredString(x + w / 2, PAGE_H - y2 - 24, "Works Cited")
-    y = y2 + 40
+    pair_w = 2 * qr_w + qr_gap
+    assert pair_w <= w, (
+        f"the two QR codes need {pair_w:.0f}pt but the column is {w:.0f}pt wide")
+    qx = x + (w - pair_w) / 2
+    caption_baseline = PAGE_H - (y + qr_h) - 24
+    for index, (name, caption) in enumerate(QR_CODES):
+        code_x = qx + index * (qr_w + qr_gap)
+        draw_image(c, ASSETS / name, code_x, y, qr_w)
+        c.setFont("TNR-Bold", 18)
+        c.setFillColor(INK)
+        c.drawCentredString(code_x + qr_w / 2, caption_baseline, caption)
+    y = y + qr_h + 40
     y = section_bar(c, "Acknowledgments", x, y, w) + 14
     y = draw_para(c, ACK, ack_style, x, y, w)
 
