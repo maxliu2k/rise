@@ -15,7 +15,15 @@
 set -euo pipefail
 trap 'rc=$?; echo "RISE_INBAND_EXIT=$rc job=inband_snr end $(date)"; trap - EXIT; exit "$rc"' EXIT
 
-noise_repo="${NOISE_REPO:-$SGE_O_WORKDIR}"
+# RISE_REPO is what scc/README.md tells you to export and what every other noise job is
+# submitted with, even though those jobs actually resolve the repo from the submit directory.
+# Accept it here so submitting from anywhere but the checkout does not silently pick the
+# wrong tree.
+noise_repo="${NOISE_REPO:-${RISE_REPO:-$SGE_O_WORKDIR}}"
+test -f "$noise_repo/src/instrument_robustness/inband_snr.py" || {
+    echo "no checkout at $noise_repo -- pass -v RISE_REPO=/projectnb/rise-grid/\$USER/instrument-robustness" >&2
+    exit 2
+}
 noise_data_root="${RISE_DATA_ROOT:?Submit with -v RISE_DATA_ROOT=/projectnb/...}"
 noise_venv="${RISE_VENV:-${NOISE_VENV:-$(dirname "$noise_repo")/venv}}"
 
