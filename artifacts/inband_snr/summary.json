@@ -1,0 +1,8 @@
+{
+  "inband_range_low_db": -5.091873549153889,
+  "inband_range_high_db": 50.438248420683834,
+  "gap_nominal_white_vs_human": 0.2868783096780641,
+  "gap_inband_white_vs_human": 0.30063702896913674,
+  "verdict": "STANDS: more than half the nominal category gap survives on the in-band axis",
+  "sample_windows": 250
+}
