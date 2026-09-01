@@ -498,8 +498,10 @@ TAKEAWAYS = [
     "non-speech, CNN under environmental noise.",
     "<b>Pretrained systems occupied the top three positions</b> under every noise type, but "
     "the study does not isolate pretraining from architecture, input, or sample rate.",
-    "<b>Noise category mattered:</b> recorded noise was less damaging than white at matched "
-    "nominal SNR. At 20 dB, AST retained 72.3% vs 85.3%; SVM retained 10.4% vs 68.0%.",
+    "<b>Noise category mattered:</b> at 20 dB under white vs human noise, AST retained "
+    "72.3% vs 85.3% and SVM 10.4% vs 68.0%. Not an axis artifact: human noise puts "
+    "<i>more</i> power in the 25 Hz–8 kHz instrument band than white (90% vs 72%) and "
+    "still damages far less.",
     "<b>Instrument failures were uneven:</b> tuba had the greatest overall recall-loss AUC. "
     "Acoustic distance was associated with confusion in 7 of 18 corrected tests, but the "
     "relationship is correlational.",
@@ -507,7 +509,7 @@ TAKEAWAYS = [
 CONCLUSION = [
     "<b>Reproducible benchmark</b> spanning six instrument-classification systems",
     "<b>Evaluating robustness necessary</b>; clean accuracy alone is insufficient",
-    "Noise category changes degradation at matched nominal SNR",
+    "<b>Category, not just severity</b> — the gap survives equalizing in-band power",
     "<b>Failures are structured.</b> Degradation concentrates in tuba, oboe, and trumpet. "
     "Confusion is associated with acoustic distance in 7 of 18 model/noise tests, most strongly "
     "for AST.",
@@ -520,8 +522,9 @@ LIMITATIONS = [
     "at once",
     "Most audio clips were tiled to fill the 3-second standard, which confounds content "
     "with repetition",
-    "Nominal full-band SNR and model-specific frontends can change effective masking; "
-    "cross-model differences describe complete systems",
+    "Nominal SNR is full-band. Measured in-band, environmental noise loses about a quarter of "
+    "its apparent mildness (two thirds of its power sits outside the band). Model "
+    "comparisons unaffected: all six saw identical mixtures",
     "SVM, AST, MERT and PANNs are single-seed runs, while CNN and CRNN are multi-seed "
     "spread, so small differences are not treated as effects",
 ]
